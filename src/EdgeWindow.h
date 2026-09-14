@@ -33,6 +33,7 @@ struct EdgeDeckConfig {
 // singleton for this MVP - see s_instance.
 class EdgeWindow {
 public:
+    ~EdgeWindow();
     bool Create(HINSTANCE hInstance);
 
     static int RunMessageLoop();
@@ -51,14 +52,16 @@ private:
     LRESULT HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-    void RegisterClasses(HINSTANCE hInstance);
-    void ComputeLayout();
-    void CreateWindows(HINSTANCE hInstance);
+    bool RegisterClasses(HINSTANCE hInstance);
+    bool ComputeLayout();
+    bool CreateWindows(HINSTANCE hInstance);
+    void Relayout();
 
     void OnEnter();
     void OnLeave();
     void BeginOpen();
     void BeginClose();
+    void TogglePanel();
     void StepAnimation();
     void CheckPendingClose();
     int CurrentPanelX() const;
@@ -82,6 +85,8 @@ private:
     bool m_tabTracking = false;
     bool m_panelTracking = false;
     bool m_tabHovered = false;
+    bool m_inRelayout = false;
+    bool m_panelPinned = false;
     int m_hoveredRow = -1;
 
     float m_dpiScale = 1.0f;
@@ -102,7 +107,8 @@ private:
 
     static constexpr UINT_PTR kTimerAnim = 1;
     static constexpr UINT_PTR kTimerLeave = 2;
-    static constexpr int kHotkeyId = 1;
+    static constexpr int kHotkeyExitId = 1;
+    static constexpr int kHotkeyToggleId = 2;
     static constexpr UINT kAnimIntervalMs = 15;
 
     static EdgeWindow* s_instance;
