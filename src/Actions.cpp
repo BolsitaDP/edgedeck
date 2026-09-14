@@ -6,19 +6,21 @@
 
 namespace Actions {
 
-void OpenNotepad() {
-    ShellExecuteW(nullptr, L"open", L"notepad.exe", nullptr, nullptr, SW_SHOWNORMAL);
+bool OpenNotepad() {
+    return reinterpret_cast<INT_PTR>(
+               ShellExecuteW(nullptr, L"open", L"notepad.exe", nullptr, nullptr, SW_SHOWNORMAL)) > 32;
 }
 
-void OpenCalculator() {
-    ShellExecuteW(nullptr, L"open", L"calc.exe", nullptr, nullptr, SW_SHOWNORMAL);
+bool OpenCalculator() {
+    return reinterpret_cast<INT_PTR>(
+               ShellExecuteW(nullptr, L"open", L"calc.exe", nullptr, nullptr, SW_SHOWNORMAL)) > 32;
 }
 
 namespace {
 
 // Fallback used only if the shell COM object is unavailable: simulate the
 // Win+D shortcut, which is what "show desktop" is bound to system-wide.
-void SimulateWinD() {
+bool SimulateWinD() {
     INPUT inputs[4] = {};
 
     inputs[0].type = INPUT_KEYBOARD;
@@ -35,23 +37,25 @@ void SimulateWinD() {
     inputs[3].ki.wVk = VK_LWIN;
     inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-    SendInput(4, inputs, sizeof(INPUT));
+    return SendInput(4, inputs, sizeof(INPUT)) == 4;
 }
 
 } // namespace
 
-void ShowDesktopToggle() {
-    IShellDispatch* shellDispatch = nullptr;
+bool ShowDesktopToggle() {
+    // ToggleDesktop() only exists on IShellDispatch4+ (IShellDispatch itself
+    // predates it), so request that interface directly.
+    IShellDispatch4* shellDispatch = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
-                                   IID_IShellDispatch,
+                                   IID_IShellDispatch4,
                                    reinterpret_cast<void**>(&shellDispatch));
     if (SUCCEEDED(hr) && shellDispatch) {
-        shellDispatch->ToggleDesktop();
+        HRESULT toggleResult = shellDispatch->ToggleDesktop();
         shellDispatch->Release();
-        return;
+        if (SUCCEEDED(toggleResult)) return true;
     }
 
-    SimulateWinD();
+    return SimulateWinD();
 }
 
 } // namespace Actions

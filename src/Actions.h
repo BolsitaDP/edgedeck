@@ -4,8 +4,9 @@
 // Deliberately tiny: this MVP only needs to prove the panel can drive the OS.
 namespace Actions {
 
-void OpenNotepad();
-void OpenCalculator();
-void ShowDesktopToggle();
+// Return false when Windows cannot perform the requested action.
+bool OpenNotepad();
+bool OpenCalculator();
+bool ShowDesktopToggle();
 
 } // namespace Actions

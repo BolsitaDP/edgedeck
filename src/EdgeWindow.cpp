@@ -10,12 +10,17 @@ namespace {
 const wchar_t kTabClassName[] = L"EdgeDeckTabWindow";
 const wchar_t kPanelClassName[] = L"EdgeDeckPanelWindow";
 
-void ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
+bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
     // CreateRoundRectRgn's last two params are the rounding ellipse's
     // width/height (diameter), not a radius - double it to match radiusPx.
     int diameter = static_cast<int>(std::lround(radiusPx * 2.0f));
     HRGN region = CreateRoundRectRgn(0, 0, widthPx + 1, heightPx + 1, diameter, diameter);
-    SetWindowRgn(hwnd, region, TRUE); // ownership transferred to the window
+    if (!region) return false;
+    if (!SetWindowRgn(hwnd, region, TRUE)) {
+        DeleteObject(region);
+        return false;
+    }
+    return true; // ownership transferred to the window
 }
 } // namespace
 
@@ -24,6 +29,15 @@ EdgeWindow* EdgeWindow::s_instance = nullptr;
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
+
+EdgeWindow::~EdgeWindow() {
+    if (m_tabHwnd && IsWindow(m_tabHwnd)) {
+        DestroyWindow(m_tabHwnd);
+    } else if (m_panelHwnd && IsWindow(m_panelHwnd)) {
+        DestroyWindow(m_panelHwnd);
+    }
+    s_instance = nullptr;
+}
 
 bool EdgeWindow::Create(HINSTANCE hInstance) {
     s_instance = this;
@@ -37,14 +51,10 @@ bool EdgeWindow::Create(HINSTANCE hInstance) {
                             static_cast<float>(m_items.size()) * PanelLayout::RowHeight +
                             PanelLayout::BottomPadding;
 
-    RegisterClasses(hInstance);
-    ComputeLayout();
-    CreateWindows(hInstance);
-
-    return m_tabHwnd != nullptr && m_panelHwnd != nullptr;
+    return RegisterClasses(hInstance) && ComputeLayout() && CreateWindows(hInstance);
 }
 
-void EdgeWindow::RegisterClasses(HINSTANCE hInstance) {
+bool EdgeWindow::RegisterClasses(HINSTANCE hInstance) {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.hInstance = hInstance;
@@ -53,22 +63,24 @@ void EdgeWindow::RegisterClasses(HINSTANCE hInstance) {
 
     wc.lpszClassName = kTabClassName;
     wc.lpfnWndProc = TabProc;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) return false;
 
     wc.lpszClassName = kPanelClassName;
     wc.lpfnWndProc = PanelProc;
-    RegisterClassExW(&wc);
+    return RegisterClassExW(&wc) != 0;
 }
 
-void EdgeWindow::ComputeLayout() {
+bool EdgeWindow::ComputeLayout() {
     POINT origin{0, 0};
     HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
 
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(monitor, &mi);
+    if (!GetMonitorInfo(monitor, &mi)) return false;
 
     UINT dpiX = 96, dpiY = 96;
-    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        dpiX = 96;
+    }
     m_dpi = dpiX;
     m_dpiScale = static_cast<float>(dpiX) / 96.0f;
 
@@ -88,43 +100,97 @@ void EdgeWindow::ComputeLayout() {
     m_tabRectPx = {tabX, tabY, tabX + tabWpx, tabY + tabHpx};
 
     m_panelYPx = tabY + (tabHpx - m_panelHeightPx) / 2;
-    m_panelYPx = std::clamp(m_panelYPx, monTop, monBottom - m_panelHeightPx);
+    m_panelYPx = std::clamp(m_panelYPx, monTop, std::max(monTop, monBottom - m_panelHeightPx));
 
     m_panelOpenXPx = tabX - m_panelWidthPx; // resting position, left of the tab
-    m_panelClosedXPx = tabX;                // tucked back under the tab, off-screen edge ok
+    m_panelClosedXPx = monRight;            // fully outside the edge until it slides in
+    return true;
 }
 
-void EdgeWindow::CreateWindows(HINSTANCE hInstance) {
-    const DWORD exStyle =
+bool EdgeWindow::CreateWindows(HINSTANCE hInstance) {
+    const DWORD tabExStyle =
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+    const DWORD panelExStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
 
     m_tabHwnd = CreateWindowExW(
-        exStyle, kTabClassName, L"EdgeDeck", WS_POPUP, m_tabRectPx.left, m_tabRectPx.top,
+        tabExStyle, kTabClassName, L"EdgeDeck", WS_POPUP, m_tabRectPx.left, m_tabRectPx.top,
         m_tabRectPx.right - m_tabRectPx.left, m_tabRectPx.bottom - m_tabRectPx.top, nullptr,
         nullptr, hInstance, nullptr);
-    if (!m_tabHwnd) return;
+    if (!m_tabHwnd) return false;
 
-    SetLayeredWindowAttributes(m_tabHwnd, 0, m_config.windowAlpha, LWA_ALPHA);
-    ApplyRoundedRegion(m_tabHwnd, m_tabRectPx.right - m_tabRectPx.left,
-                        m_tabRectPx.bottom - m_tabRectPx.top, m_config.cornerRadius * m_dpiScale);
-    m_tabRenderer.AttachToWindow(m_tabHwnd);
+    if (!SetLayeredWindowAttributes(m_tabHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
+        !ApplyRoundedRegion(m_tabHwnd, m_tabRectPx.right - m_tabRectPx.left,
+                            m_tabRectPx.bottom - m_tabRectPx.top,
+                            m_config.cornerRadius * m_dpiScale) ||
+        !m_tabRenderer.AttachToWindow(m_tabHwnd)) return false;
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
 
-    m_panelHwnd = CreateWindowExW(exStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
+    m_panelHwnd = CreateWindowExW(panelExStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
                                    m_panelClosedXPx, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
                                    nullptr, nullptr, hInstance, nullptr);
-    if (!m_panelHwnd) return;
+    if (!m_panelHwnd) return false;
 
-    SetLayeredWindowAttributes(m_panelHwnd, 0, m_config.windowAlpha, LWA_ALPHA);
-    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                        m_config.cornerRadius * m_dpiScale);
-    m_panelRenderer.AttachToWindow(m_panelHwnd);
+    if (!SetLayeredWindowAttributes(m_panelHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
+        !ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
+                            m_config.cornerRadius * m_dpiScale) ||
+        !m_panelRenderer.AttachToWindow(m_panelHwnd)) return false;
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
 
     // Panel starts hidden; only the tab is shown at launch.
     ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
 
-    RegisterHotKey(m_tabHwnd, kHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'Q');
+    bool exitHotkey = RegisterHotKey(m_tabHwnd, kHotkeyExitId,
+                                     MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'Q') != 0;
+    bool toggleHotkey = RegisterHotKey(m_tabHwnd, kHotkeyToggleId,
+                                       MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'E') != 0;
+    if (!exitHotkey || !toggleHotkey) {
+        MessageBoxW(m_tabHwnd, L"One or more EdgeDeck keyboard shortcuts are unavailable.",
+                    L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+    }
+    return true;
+}
+
+void EdgeWindow::Relayout() {
+    if (m_inRelayout || !m_tabHwnd || !m_panelHwnd) return;
+    m_inRelayout = true;
+    if (!ComputeLayout()) {
+        m_inRelayout = false;
+        return;
+    }
+
+    // Display changes are uncommon; finish an in-flight slide at its endpoint.
+    KillTimer(m_tabHwnd, kTimerAnim);
+    const bool panelOpen = m_state == State::Open || m_state == State::Opening;
+    m_state = panelOpen ? State::Open : State::Hidden;
+    m_hoveredRow = -1;
+    TRACKMOUSEEVENT tabLeave{sizeof(tabLeave), TME_CANCEL | TME_LEAVE, m_tabHwnd, 0};
+    TRACKMOUSEEVENT panelLeave{sizeof(panelLeave), TME_CANCEL | TME_LEAVE, m_panelHwnd, 0};
+    TrackMouseEvent(&tabLeave);
+    TrackMouseEvent(&panelLeave);
+    m_tabTracking = false;
+    m_panelTracking = false;
+    m_tabHovered = false;
+
+    const int tabWidth = m_tabRectPx.right - m_tabRectPx.left;
+    const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
+    SetWindowPos(m_tabHwnd, HWND_TOPMOST, m_tabRectPx.left, m_tabRectPx.top,
+                 tabWidth, tabHeight, SWP_NOACTIVATE);
+    SetWindowPos(m_panelHwnd, m_tabHwnd,
+                 panelOpen ? m_panelOpenXPx : m_panelClosedXPx,
+                 m_panelYPx, m_panelWidthPx, m_panelHeightPx,
+                 SWP_NOACTIVATE | (panelOpen ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+
+    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
+    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
+                       m_config.cornerRadius * m_dpiScale);
+    m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
+    m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
+    m_tabRenderer.OnResize(static_cast<UINT>(tabWidth), static_cast<UINT>(tabHeight));
+    m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx),
+                             static_cast<UINT>(m_panelHeightPx));
+    InvalidateRect(m_tabHwnd, nullptr, FALSE);
+    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    m_inRelayout = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,10 +198,10 @@ void EdgeWindow::CreateWindows(HINSTANCE hInstance) {
 // ---------------------------------------------------------------------------
 
 int EdgeWindow::RunMessageLoop() {
-    MSG msg;
+    MSG msg{};
     BOOL result;
     while ((result = GetMessageW(&msg, nullptr, 0, 0)) != 0) {
-        if (result == -1) break;
+        if (result == -1) return 1;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -168,6 +234,7 @@ void EdgeWindow::OnEnter() {
         m_animStartTick = GetTickCount64();
         m_state = State::Opening;
         SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
+        InvalidateRect(m_tabHwnd, nullptr, FALSE);
     }
 }
 
@@ -192,7 +259,7 @@ void EdgeWindow::CheckPendingClose() {
         overPanel = PtInRect(&panelRect, pt);
     }
 
-    if (overTab || overPanel) return;
+    if (overTab || overPanel || m_panelPinned) return;
 
     if (m_state == State::Open || m_state == State::Opening) {
         BeginClose();
@@ -203,7 +270,7 @@ void EdgeWindow::BeginOpen() {
     if (!m_panelHwnd) return;
 
     m_hoveredRow = -1;
-    SetWindowPos(m_panelHwnd, HWND_TOPMOST, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
+    SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
                  m_panelHeightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
     m_animFromX = m_panelClosedXPx;
@@ -225,11 +292,28 @@ void EdgeWindow::BeginClose() {
     InvalidateRect(m_tabHwnd, nullptr, FALSE);
 }
 
+void EdgeWindow::TogglePanel() {
+    KillTimer(m_tabHwnd, kTimerLeave);
+    if (m_panelPinned) {
+        m_panelPinned = false;
+        BeginClose();
+        return;
+    }
+
+    m_panelPinned = true;
+    OnEnter();
+    m_hoveredRow = 0;
+    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    SetForegroundWindow(m_panelHwnd);
+    SetFocus(m_panelHwnd);
+}
+
 void EdgeWindow::StepAnimation() {
     ULONGLONG now = GetTickCount64();
     double t = static_cast<double>(now - m_animStartTick) / m_config.animationMs;
     t = std::clamp(t, 0.0, 1.0);
-    double eased = 1.0 - std::pow(1.0 - t, 3.0); // ease-out cubic
+    double remaining = 1.0 - t;
+    double eased = 1.0 - remaining * remaining * remaining; // ease-out cubic
 
     int x = m_animFromX + static_cast<int>(std::lround((m_animToX - m_animFromX) * eased));
     SetWindowPos(m_panelHwnd, nullptr, x, m_panelYPx, 0, 0,
@@ -266,11 +350,16 @@ int EdgeWindow::RowAt(int clientYPx) const {
 }
 
 void EdgeWindow::InvokeRow(int index) {
+    bool succeeded = true;
     switch (index) {
-        case 0: Actions::OpenNotepad(); break;
-        case 1: Actions::OpenCalculator(); break;
-        case 2: Actions::ShowDesktopToggle(); break;
+        case 0: succeeded = Actions::OpenNotepad(); break;
+        case 1: succeeded = Actions::OpenCalculator(); break;
+        case 2: succeeded = Actions::ShowDesktopToggle(); break;
         default: break;
+    }
+    if (!succeeded) {
+        MessageBoxW(m_panelHwnd, L"Windows could not complete this action.", L"EdgeDeck",
+                    MB_ICONERROR | MB_OK | MB_TOPMOST);
     }
 }
 
@@ -314,6 +403,9 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             OnLeave();
             return 0;
         }
+        case WM_LBUTTONUP:
+            TogglePanel();
+            return 0;
         case WM_RBUTTONUP: {
             POINT pt;
             GetCursorPos(&pt);
@@ -328,6 +420,10 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         case WM_ERASEBKGND:
             return 1; // avoid a redundant GDI fill before our D2D paint
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+            Relayout();
+            return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
@@ -351,14 +447,19 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             break;
         }
         case WM_HOTKEY: {
-            if (wParam == kHotkeyId) {
+            if (wParam == kHotkeyExitId) {
                 DestroyWindow(m_tabHwnd);
+                return 0;
+            }
+            if (wParam == kHotkeyToggleId) {
+                TogglePanel();
                 return 0;
             }
             break;
         }
         case WM_DESTROY: {
-            UnregisterHotKey(hwnd, kHotkeyId);
+            UnregisterHotKey(hwnd, kHotkeyExitId);
+            UnregisterHotKey(hwnd, kHotkeyToggleId);
             KillTimer(hwnd, kTimerAnim);
             KillTimer(hwnd, kTimerLeave);
             if (m_panelHwnd) {
@@ -397,7 +498,7 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         }
         case WM_MOUSELEAVE: {
             m_panelTracking = false;
-            if (m_hoveredRow != -1) {
+            if (m_hoveredRow != -1 && GetForegroundWindow() != m_panelHwnd) {
                 m_hoveredRow = -1;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
@@ -406,9 +507,49 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         }
         case WM_LBUTTONUP: {
             int row = RowAt(GET_Y_LPARAM(lParam));
-            if (row >= 0) InvokeRow(row);
+            if (row >= 0) {
+                InvokeRow(row);
+                m_panelPinned = false;
+                if (m_state == State::Open || m_state == State::Opening) BeginClose();
+            }
             return 0;
         }
+        case WM_KEYDOWN: {
+            const int count = static_cast<int>(m_items.size());
+            if (wParam == VK_ESCAPE) {
+                m_panelPinned = false;
+                BeginClose();
+                return 0;
+            }
+            if (count == 0) break;
+            if (wParam == VK_DOWN || wParam == VK_UP) {
+                if (wParam == VK_DOWN) {
+                    m_hoveredRow = (m_hoveredRow + 1) % count;
+                } else {
+                    m_hoveredRow = m_hoveredRow < 0 ? count - 1 :
+                                   (m_hoveredRow + count - 1) % count;
+                }
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
+            if (wParam == VK_RETURN || wParam == VK_SPACE) {
+                InvokeRow(m_hoveredRow < 0 ? 0 : m_hoveredRow);
+                m_panelPinned = false;
+                if (m_state == State::Open || m_state == State::Opening) BeginClose();
+                return 0;
+            }
+            break;
+        }
+        case WM_ACTIVATE:
+            if (LOWORD(wParam) == WA_INACTIVE && m_panelPinned) {
+                m_panelPinned = false;
+                if (m_state == State::Open || m_state == State::Opening) BeginClose();
+            }
+            return 0;
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+            Relayout();
+            return 0;
         case WM_ERASEBKGND:
             return 1;
         case WM_PAINT: {

@@ -45,7 +45,14 @@ public:
 
 private:
     bool EnsureTarget();
+    bool EnsureBrush(Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>& brush, D2D1_COLOR_F color);
+    void DiscardTarget();
 
     HWND m_hwnd = nullptr;
+    float m_renderDpi = 96.0f;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> m_target;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_primaryTextBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_secondaryTextBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_dividerBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_hoverBrush;
 };
