@@ -66,6 +66,23 @@ IDWriteTextFormat* GlyphFormat() {
     return fmt.Get();
 }
 
+IDWriteTextFormat* ControlFormat() {
+    if (!DWriteFactoryPtr()) return nullptr;
+    static ComPtr<IDWriteTextFormat> fmt = [] {
+        ComPtr<IDWriteTextFormat> f;
+        DWriteFactoryPtr()->CreateTextFormat(
+            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us",
+            f.GetAddressOf());
+        if (f) {
+            f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        return f;
+    }();
+    return fmt.Get();
+}
+
 // Dark, Windows 11-ish palette. Colors only - no acrylic/Mica for this MVP.
 const D2D1_COLOR_F kPanelBg = D2D1::ColorF(0.098f, 0.098f, 0.098f, 1.0f);
 const D2D1_COLOR_F kTabBg = D2D1::ColorF(0.145f, 0.145f, 0.145f, 1.0f);
@@ -74,6 +91,7 @@ const D2D1_COLOR_F kRowHoverBg = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.07f);
 const D2D1_COLOR_F kTextPrimary = D2D1::ColorF(0.93f, 0.93f, 0.93f, 1.0f);
 const D2D1_COLOR_F kTextSecondary = D2D1::ColorF(0.65f, 0.65f, 0.65f, 1.0f);
 const D2D1_COLOR_F kDivider = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f);
+const D2D1_COLOR_F kControlBg = D2D1::ColorF(0.18f, 0.18f, 0.18f, 1.0f);
 
 } // namespace
 
@@ -81,7 +99,7 @@ Renderer::~Renderer() = default;
 
 bool Renderer::AttachToWindow(HWND hwnd) {
     m_hwnd = hwnd;
-    return EnsureTarget() && TitleFormat() && ItemFormat() && GlyphFormat();
+    return EnsureTarget() && TitleFormat() && ItemFormat() && GlyphFormat() && ControlFormat();
 }
 
 bool Renderer::EnsureTarget() {
@@ -129,6 +147,7 @@ void Renderer::DiscardTarget() {
     m_secondaryTextBrush.Reset();
     m_dividerBrush.Reset();
     m_hoverBrush.Reset();
+    m_controlBrush.Reset();
     m_target.Reset();
 }
 
@@ -153,11 +172,13 @@ void Renderer::DrawTab(bool hovered, float w, float h, float /*radius*/, const w
 }
 
 void Renderer::DrawPanel(float w, float /*h*/, float /*radius*/,
-                          const std::vector<PanelItem>& items, int hoveredIndex) {
+                          const std::vector<PanelItem>& items, int hoveredIndex,
+                          int selectedSpotifyButton) {
     if (!EnsureTarget()) return;
     if (!EnsureBrush(m_primaryTextBrush, kTextPrimary) ||
         !EnsureBrush(m_dividerBrush, kDivider) ||
-        !EnsureBrush(m_hoverBrush, kRowHoverBg)) return;
+        !EnsureBrush(m_hoverBrush, kRowHoverBg) ||
+        !EnsureBrush(m_controlBrush, kControlBg)) return;
     ID2D1HwndRenderTarget* t = m_target.Get();
 
     t->BeginDraw();
@@ -187,6 +208,37 @@ void Renderer::DrawPanel(float w, float /*h*/, float /*radius*/,
             D2D1::RectF(PanelLayout::PaddingX, y, w - PanelLayout::PaddingX, y + PanelLayout::RowHeight);
         t->DrawText(items[i].text.c_str(), static_cast<UINT32>(items[i].text.size()), ItemFormat(),
                     rowRect, m_primaryTextBrush.Get());
+    }
+
+    float spotifyTop = PanelLayout::TitleHeight +
+                       static_cast<float>(items.size()) * PanelLayout::RowHeight;
+    t->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, spotifyTop),
+                D2D1::Point2F(w - PanelLayout::PaddingX, spotifyTop),
+                m_dividerBrush.Get(), 1.0f);
+
+    static constexpr wchar_t kSpotifyTitle[] = L"Spotify";
+    D2D1_RECT_F spotifyTitleRect = D2D1::RectF(
+        PanelLayout::PaddingX, spotifyTop + 2.0f, w - PanelLayout::PaddingX,
+        spotifyTop + PanelLayout::SpotifyHeaderHeight);
+    t->DrawText(kSpotifyTitle, static_cast<UINT32>(wcslen(kSpotifyTitle)), TitleFormat(),
+                spotifyTitleRect, m_primaryTextBrush.Get());
+
+    static constexpr const wchar_t* kButtonLabels[] = {L"Prev", L"Play/Pause", L"Next"};
+    float buttonWidth = (w - 2.0f * PanelLayout::PaddingX -
+                         2.0f * PanelLayout::SpotifyButtonGap) / 3.0f;
+    float buttonTop = spotifyTop + PanelLayout::SpotifyHeaderHeight;
+    for (int i = 0; i < 3; ++i) {
+        float x = PanelLayout::PaddingX +
+                  static_cast<float>(i) * (buttonWidth + PanelLayout::SpotifyButtonGap);
+        D2D1_RECT_F buttonRect = D2D1::RectF(
+            x, buttonTop, x + buttonWidth, buttonTop + PanelLayout::SpotifyButtonHeight);
+        D2D1_ROUNDED_RECT roundedButton = D2D1::RoundedRect(buttonRect, 6.0f, 6.0f);
+        t->FillRoundedRectangle(roundedButton, m_controlBrush.Get());
+        if (i == selectedSpotifyButton) {
+            t->FillRoundedRectangle(roundedButton, m_hoverBrush.Get());
+        }
+        t->DrawText(kButtonLabels[i], static_cast<UINT32>(wcslen(kButtonLabels[i])),
+                    ControlFormat(), buttonRect, m_primaryTextBrush.Get());
     }
 
     HRESULT hr = t->EndDraw();

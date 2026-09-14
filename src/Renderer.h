@@ -18,6 +18,10 @@ namespace PanelLayout {
 constexpr float PaddingX = 18.0f;
 constexpr float TitleHeight = 44.0f;
 constexpr float RowHeight = 44.0f;
+constexpr float SpotifyHeaderHeight = 36.0f;
+constexpr float SpotifyButtonHeight = 36.0f;
+constexpr float SpotifyButtonGap = 6.0f;
+constexpr float SpotifyHeight = SpotifyHeaderHeight + SpotifyButtonHeight;
 constexpr float BottomPadding = 10.0f;
 } // namespace PanelLayout
 
@@ -41,7 +45,8 @@ public:
 
     // Draws the flyout panel with its title and action rows.
     void DrawPanel(float w, float h, float radius,
-                   const std::vector<PanelItem>& items, int hoveredIndex);
+                   const std::vector<PanelItem>& items, int hoveredIndex,
+                   int selectedSpotifyButton);
 
 private:
     bool EnsureTarget();
@@ -55,4 +60,5 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_secondaryTextBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_dividerBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_hoverBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_controlBrush;
 };
