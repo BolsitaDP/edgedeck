@@ -17,6 +17,8 @@ add_executable(EdgeDeck WIN32
     src/Renderer.h
     src/Actions.cpp
     src/Actions.h
+    src/MediaControls.cpp
+    src/MediaControls.h
 )
 
 target_compile_definitions(EdgeDeck PRIVATE
@@ -37,6 +39,7 @@ target_link_libraries(EdgeDeck PRIVATE
     ole32
     oleaut32
     shcore
+    windowsapp
 )
 
 if (MSVC)

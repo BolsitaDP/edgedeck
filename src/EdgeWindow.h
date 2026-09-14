@@ -67,7 +67,9 @@ private:
     int CurrentPanelX() const;
 
     int RowAt(int clientYPx) const;
+    int SpotifyButtonAt(int clientXPx, int clientYPx) const;
     void InvokeRow(int index);
+    void InvokeSpotifyButton(int index);
 
     void ShowContextMenu(POINT screenPt);
 
@@ -87,7 +89,9 @@ private:
     bool m_tabHovered = false;
     bool m_inRelayout = false;
     bool m_panelPinned = false;
+    bool m_spotifyBusy = false;
     int m_hoveredRow = -1;
+    int m_selectedSpotifyButton = -1;
 
     float m_dpiScale = 1.0f;
     UINT m_dpi = 96;
@@ -110,6 +114,7 @@ private:
     static constexpr int kHotkeyExitId = 1;
     static constexpr int kHotkeyToggleId = 2;
     static constexpr UINT kAnimIntervalMs = 15;
+    static constexpr UINT kSpotifyResultMessage = WM_APP + 1;
 
     static EdgeWindow* s_instance;
 };

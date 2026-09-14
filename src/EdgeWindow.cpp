@@ -1,5 +1,6 @@
 #include "EdgeWindow.h"
 #include "Actions.h"
+#include "MediaControls.h"
 
 #include <shellscalingapi.h>
 #include <windowsx.h>
@@ -49,6 +50,7 @@ bool EdgeWindow::Create(HINSTANCE hInstance) {
     };
     m_config.panelHeight = PanelLayout::TitleHeight +
                             static_cast<float>(m_items.size()) * PanelLayout::RowHeight +
+                            PanelLayout::SpotifyHeight +
                             PanelLayout::BottomPadding;
 
     return RegisterClasses(hInstance) && ComputeLayout() && CreateWindows(hInstance);
@@ -163,6 +165,7 @@ void EdgeWindow::Relayout() {
     const bool panelOpen = m_state == State::Open || m_state == State::Opening;
     m_state = panelOpen ? State::Open : State::Hidden;
     m_hoveredRow = -1;
+    m_selectedSpotifyButton = -1;
     TRACKMOUSEEVENT tabLeave{sizeof(tabLeave), TME_CANCEL | TME_LEAVE, m_tabHwnd, 0};
     TRACKMOUSEEVENT panelLeave{sizeof(panelLeave), TME_CANCEL | TME_LEAVE, m_panelHwnd, 0};
     TrackMouseEvent(&tabLeave);
@@ -270,6 +273,7 @@ void EdgeWindow::BeginOpen() {
     if (!m_panelHwnd) return;
 
     m_hoveredRow = -1;
+    m_selectedSpotifyButton = -1;
     SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
                  m_panelHeightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
@@ -303,6 +307,7 @@ void EdgeWindow::TogglePanel() {
     m_panelPinned = true;
     OnEnter();
     m_hoveredRow = 0;
+    m_selectedSpotifyButton = -1;
     InvalidateRect(m_panelHwnd, nullptr, FALSE);
     SetForegroundWindow(m_panelHwnd);
     SetFocus(m_panelHwnd);
@@ -349,6 +354,24 @@ int EdgeWindow::RowAt(int clientYPx) const {
     return idx;
 }
 
+int EdgeWindow::SpotifyButtonAt(int clientXPx, int clientYPx) const {
+    float x = static_cast<float>(clientXPx) / m_dpiScale;
+    float y = static_cast<float>(clientYPx) / m_dpiScale;
+    float top = PanelLayout::TitleHeight +
+                static_cast<float>(m_items.size()) * PanelLayout::RowHeight +
+                PanelLayout::SpotifyHeaderHeight;
+    if (y < top || y >= top + PanelLayout::SpotifyButtonHeight) return -1;
+
+    float buttonWidth = (m_config.panelWidth - 2.0f * PanelLayout::PaddingX -
+                         2.0f * PanelLayout::SpotifyButtonGap) / 3.0f;
+    for (int i = 0; i < 3; ++i) {
+        float left = PanelLayout::PaddingX +
+                     static_cast<float>(i) * (buttonWidth + PanelLayout::SpotifyButtonGap);
+        if (x >= left && x < left + buttonWidth) return i;
+    }
+    return -1;
+}
+
 void EdgeWindow::InvokeRow(int index) {
     bool succeeded = true;
     switch (index) {
@@ -363,8 +386,21 @@ void EdgeWindow::InvokeRow(int index) {
     }
 }
 
+void EdgeWindow::InvokeSpotifyButton(int index) {
+    if (m_spotifyBusy) return;
+    MediaControls::SpotifyCommand command;
+    switch (index) {
+        case 0: command = MediaControls::SpotifyCommand::Previous; break;
+        case 1: command = MediaControls::SpotifyCommand::PlayPause; break;
+        case 2: command = MediaControls::SpotifyCommand::Next; break;
+        default: return;
+    }
+    m_spotifyBusy = true;
+    MediaControls::SendSpotifyCommand(command, m_tabHwnd, kSpotifyResultMessage);
+}
+
 void EdgeWindow::ShowContextMenu(POINT screenPt) {
-    constexpr UINT kMenuIdExit = 100; // distinct from kHotkeyId's WM_HOTKEY id space
+    constexpr UINT kMenuIdExit = 100; // distinct from the WM_HOTKEY ids
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
 
@@ -457,6 +493,20 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             }
             break;
         }
+        case kSpotifyResultMessage: {
+            m_spotifyBusy = false;
+            auto result = static_cast<MediaControls::Result>(wParam);
+            if (result == MediaControls::Result::Success) return 0;
+
+            const wchar_t* message = L"Windows could not control Spotify.";
+            if (result == MediaControls::Result::SpotifyNotFound) {
+                message = L"Open Spotify and start a song to enable these controls.";
+            } else if (result == MediaControls::Result::Unsupported) {
+                message = L"Spotify does not support this control right now.";
+            }
+            MessageBoxW(m_tabHwnd, message, L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+            return 0;
+        }
         case WM_DESTROY: {
             UnregisterHotKey(hwnd, kHotkeyExitId);
             UnregisterHotKey(hwnd, kHotkeyToggleId);
@@ -490,16 +540,20 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 OnEnter();
             }
             int row = RowAt(GET_Y_LPARAM(lParam));
-            if (row != m_hoveredRow) {
+            int spotifyButton = SpotifyButtonAt(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            if (row != m_hoveredRow || spotifyButton != m_selectedSpotifyButton) {
                 m_hoveredRow = row;
+                m_selectedSpotifyButton = spotifyButton;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         }
         case WM_MOUSELEAVE: {
             m_panelTracking = false;
-            if (m_hoveredRow != -1 && GetForegroundWindow() != m_panelHwnd) {
+            if (GetForegroundWindow() != m_panelHwnd &&
+                (m_hoveredRow != -1 || m_selectedSpotifyButton != -1)) {
                 m_hoveredRow = -1;
+                m_selectedSpotifyButton = -1;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             OnLeave();
@@ -507,35 +561,45 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         }
         case WM_LBUTTONUP: {
             int row = RowAt(GET_Y_LPARAM(lParam));
+            int spotifyButton = SpotifyButtonAt(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             if (row >= 0) {
                 InvokeRow(row);
                 m_panelPinned = false;
                 if (m_state == State::Open || m_state == State::Opening) BeginClose();
+            } else if (spotifyButton >= 0) {
+                InvokeSpotifyButton(spotifyButton);
             }
             return 0;
         }
         case WM_KEYDOWN: {
             const int count = static_cast<int>(m_items.size());
+            const int total = count + 3;
             if (wParam == VK_ESCAPE) {
                 m_panelPinned = false;
                 BeginClose();
                 return 0;
             }
-            if (count == 0) break;
             if (wParam == VK_DOWN || wParam == VK_UP) {
+                int selected = m_selectedSpotifyButton >= 0 ?
+                               count + m_selectedSpotifyButton : m_hoveredRow;
                 if (wParam == VK_DOWN) {
-                    m_hoveredRow = (m_hoveredRow + 1) % count;
+                    selected = (selected + 1) % total;
                 } else {
-                    m_hoveredRow = m_hoveredRow < 0 ? count - 1 :
-                                   (m_hoveredRow + count - 1) % count;
+                    selected = selected < 0 ? total - 1 : (selected + total - 1) % total;
                 }
+                m_hoveredRow = selected < count ? selected : -1;
+                m_selectedSpotifyButton = selected >= count ? selected - count : -1;
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }
             if (wParam == VK_RETURN || wParam == VK_SPACE) {
-                InvokeRow(m_hoveredRow < 0 ? 0 : m_hoveredRow);
-                m_panelPinned = false;
-                if (m_state == State::Open || m_state == State::Opening) BeginClose();
+                if (m_selectedSpotifyButton >= 0) {
+                    InvokeSpotifyButton(m_selectedSpotifyButton);
+                } else if (count > 0) {
+                    InvokeRow(m_hoveredRow < 0 ? 0 : m_hoveredRow);
+                    m_panelPinned = false;
+                    if (m_state == State::Open || m_state == State::Opening) BeginClose();
+                }
                 return 0;
             }
             break;
@@ -556,7 +620,8 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             m_panelRenderer.DrawPanel(m_config.panelWidth, m_config.panelHeight,
-                                       m_config.cornerRadius, m_items, m_hoveredRow);
+                                       m_config.cornerRadius, m_items, m_hoveredRow,
+                                       m_selectedSpotifyButton);
             EndPaint(hwnd, &ps);
             return 0;
         }
