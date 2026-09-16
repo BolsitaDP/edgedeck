@@ -1,6 +1,5 @@
-#include "EdgeWindow.h"
-#include "Actions.h"
-#include "MediaControls.h"
+#include "Tab.h"
+#include "App.h"
 
 #include <shellscalingapi.h>
 #include <windowsx.h>
@@ -8,9 +7,6 @@
 #include <algorithm>
 
 namespace {
-const wchar_t kTabClassName[] = L"EdgeDeckTabWindow";
-const wchar_t kPanelClassName[] = L"EdgeDeckPanelWindow";
-
 bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
     // CreateRoundRectRgn's last two params are the rounding ellipse's
     // width/height (diameter), not a radius - double it to match radiusPx.
@@ -25,38 +21,18 @@ bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
 }
 } // namespace
 
-EdgeWindow* EdgeWindow::s_instance = nullptr;
+Tab::Tab(App* owner, TabConfig config, std::unique_ptr<PanelWidget> widget)
+    : m_config(config), m_widget(std::move(widget)), m_owner(owner) {}
 
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
-
-EdgeWindow::~EdgeWindow() {
+Tab::~Tab() {
     if (m_tabHwnd && IsWindow(m_tabHwnd)) {
         DestroyWindow(m_tabHwnd);
     } else if (m_panelHwnd && IsWindow(m_panelHwnd)) {
         DestroyWindow(m_panelHwnd);
     }
-    s_instance = nullptr;
 }
 
-bool EdgeWindow::Create(HINSTANCE hInstance) {
-    s_instance = this;
-
-    m_items = {
-        {L"Open Notepad"},
-        {L"Open Calculator"},
-        {L"Show Desktop"},
-    };
-    m_config.panelHeight = PanelLayout::TitleHeight +
-                            static_cast<float>(m_items.size()) * PanelLayout::RowHeight +
-                            PanelLayout::SpotifyHeight +
-                            PanelLayout::BottomPadding;
-
-    return RegisterClasses(hInstance) && ComputeLayout() && CreateWindows(hInstance);
-}
-
-bool EdgeWindow::RegisterClasses(HINSTANCE hInstance) {
+bool Tab::RegisterClasses(HINSTANCE hInstance) {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.hInstance = hInstance;
@@ -72,7 +48,11 @@ bool EdgeWindow::RegisterClasses(HINSTANCE hInstance) {
     return RegisterClassExW(&wc) != 0;
 }
 
-bool EdgeWindow::ComputeLayout() {
+bool Tab::Create(HINSTANCE hInstance) {
+    return ComputeLayout() && CreateWindows(hInstance);
+}
+
+bool Tab::ComputeLayout() {
     POINT origin{0, 0};
     HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
 
@@ -93,10 +73,16 @@ bool EdgeWindow::ComputeLayout() {
 
     const int tabWpx = static_cast<int>(std::lround(m_config.tabWidth * m_dpiScale));
     const int tabHpx = static_cast<int>(std::lround(m_config.tabHeight * m_dpiScale));
-    m_panelWidthPx = static_cast<int>(std::lround(m_config.panelWidth * m_dpiScale));
-    m_panelHeightPx = static_cast<int>(std::lround(m_config.panelHeight * m_dpiScale));
 
-    // Right-edge placement (the only edge this MVP supports; see Edge enum).
+    m_panelHeightLogical =
+        PanelLayout::ChromeHeight +
+        (m_widget ? m_widget->PreferredContentHeight(m_config.panelWidth) : 0.0f) +
+        PanelLayout::BottomPadding;
+
+    m_panelWidthPx = static_cast<int>(std::lround(m_config.panelWidth * m_dpiScale));
+    m_panelHeightPx = static_cast<int>(std::lround(m_panelHeightLogical * m_dpiScale));
+
+    // Right-edge placement (the only edge this app supports for now).
     const int tabX = monRight - tabWpx;
     const int tabY = monTop + static_cast<int>((monHeight - tabHpx) * m_config.verticalRatio);
     m_tabRectPx = {tabX, tabY, tabX + tabWpx, tabY + tabHpx};
@@ -109,15 +95,16 @@ bool EdgeWindow::ComputeLayout() {
     return true;
 }
 
-bool EdgeWindow::CreateWindows(HINSTANCE hInstance) {
-    const DWORD tabExStyle =
+bool Tab::CreateWindows(HINSTANCE hInstance) {
+    // Both windows are permanently WS_EX_NOACTIVATE: no interaction with a
+    // tab - hover, click, or pin - ever steals foreground focus.
+    const DWORD exStyle =
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
-    const DWORD panelExStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
 
     m_tabHwnd = CreateWindowExW(
-        tabExStyle, kTabClassName, L"EdgeDeck", WS_POPUP, m_tabRectPx.left, m_tabRectPx.top,
+        exStyle, kTabClassName, L"EdgeDeck", WS_POPUP, m_tabRectPx.left, m_tabRectPx.top,
         m_tabRectPx.right - m_tabRectPx.left, m_tabRectPx.bottom - m_tabRectPx.top, nullptr,
-        nullptr, hInstance, nullptr);
+        nullptr, hInstance, this);
     if (!m_tabHwnd) return false;
 
     if (!SetLayeredWindowAttributes(m_tabHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
@@ -127,9 +114,9 @@ bool EdgeWindow::CreateWindows(HINSTANCE hInstance) {
         !m_tabRenderer.AttachToWindow(m_tabHwnd)) return false;
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
 
-    m_panelHwnd = CreateWindowExW(panelExStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
+    m_panelHwnd = CreateWindowExW(exStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
                                    m_panelClosedXPx, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
-                                   nullptr, nullptr, hInstance, nullptr);
+                                   nullptr, nullptr, hInstance, this);
     if (!m_panelHwnd) return false;
 
     if (!SetLayeredWindowAttributes(m_panelHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
@@ -138,21 +125,11 @@ bool EdgeWindow::CreateWindows(HINSTANCE hInstance) {
         !m_panelRenderer.AttachToWindow(m_panelHwnd)) return false;
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
 
-    // Panel starts hidden; only the tab is shown at launch.
     ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
-
-    bool exitHotkey = RegisterHotKey(m_tabHwnd, kHotkeyExitId,
-                                     MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'Q') != 0;
-    bool toggleHotkey = RegisterHotKey(m_tabHwnd, kHotkeyToggleId,
-                                       MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'E') != 0;
-    if (!exitHotkey || !toggleHotkey) {
-        MessageBoxW(m_tabHwnd, L"One or more EdgeDeck keyboard shortcuts are unavailable.",
-                    L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
-    }
     return true;
 }
 
-void EdgeWindow::Relayout() {
+void Tab::Relayout() {
     if (m_inRelayout || !m_tabHwnd || !m_panelHwnd) return;
     m_inRelayout = true;
     if (!ComputeLayout()) {
@@ -164,8 +141,9 @@ void EdgeWindow::Relayout() {
     KillTimer(m_tabHwnd, kTimerAnim);
     const bool panelOpen = m_state == State::Open || m_state == State::Opening;
     m_state = panelOpen ? State::Open : State::Hidden;
-    m_hoveredRow = -1;
-    m_selectedSpotifyButton = -1;
+    m_hoveredControl = -1;
+    if (m_widget) m_widget->SetHovered(-1);
+
     TRACKMOUSEEVENT tabLeave{sizeof(tabLeave), TME_CANCEL | TME_LEAVE, m_tabHwnd, 0};
     TRACKMOUSEEVENT panelLeave{sizeof(panelLeave), TME_CANCEL | TME_LEAVE, m_panelHwnd, 0};
     TrackMouseEvent(&tabLeave);
@@ -176,56 +154,81 @@ void EdgeWindow::Relayout() {
 
     const int tabWidth = m_tabRectPx.right - m_tabRectPx.left;
     const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
-    SetWindowPos(m_tabHwnd, HWND_TOPMOST, m_tabRectPx.left, m_tabRectPx.top,
-                 tabWidth, tabHeight, SWP_NOACTIVATE);
-    SetWindowPos(m_panelHwnd, m_tabHwnd,
-                 panelOpen ? m_panelOpenXPx : m_panelClosedXPx,
-                 m_panelYPx, m_panelWidthPx, m_panelHeightPx,
+    SetWindowPos(m_tabHwnd, HWND_TOPMOST, m_tabRectPx.left, m_tabRectPx.top, tabWidth, tabHeight,
+                 SWP_NOACTIVATE);
+    SetWindowPos(m_panelHwnd, m_tabHwnd, panelOpen ? m_panelOpenXPx : m_panelClosedXPx, m_panelYPx,
+                 m_panelWidthPx, m_panelHeightPx,
                  SWP_NOACTIVATE | (panelOpen ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
     ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
     ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                       m_config.cornerRadius * m_dpiScale);
+                        m_config.cornerRadius * m_dpiScale);
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
     m_tabRenderer.OnResize(static_cast<UINT>(tabWidth), static_cast<UINT>(tabHeight));
-    m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx),
-                             static_cast<UINT>(m_panelHeightPx));
+    m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
     InvalidateRect(m_tabHwnd, nullptr, FALSE);
     InvalidateRect(m_panelHwnd, nullptr, FALSE);
     m_inRelayout = false;
 }
 
+void Tab::ResizePanelToContent() {
+    if (!m_widget || !m_panelHwnd) return;
+
+    float newHeightLogical = PanelLayout::ChromeHeight +
+                              m_widget->PreferredContentHeight(m_config.panelWidth) +
+                              PanelLayout::BottomPadding;
+    int newHeightPx = static_cast<int>(std::lround(newHeightLogical * m_dpiScale));
+    if (newHeightPx == m_panelHeightPx) return;
+
+    m_panelHeightLogical = newHeightLogical;
+    m_panelHeightPx = newHeightPx;
+
+    // Keep the panel centered on the tab as it grows/shrinks, but never
+    // touch X - the slide animation may still be mid-flight and this must
+    // not snap it to its resting position early.
+    int tabCenterY = (m_tabRectPx.top + m_tabRectPx.bottom) / 2;
+    m_panelYPx = tabCenterY - m_panelHeightPx / 2;
+    int currentX = CurrentPanelX();
+
+    SetWindowPos(m_panelHwnd, nullptr, currentX, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
+                        m_config.cornerRadius * m_dpiScale);
+    m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
+}
+
 // ---------------------------------------------------------------------------
-// Message loop / static dispatch
+// Static dispatch (per-window GWLP_USERDATA - Tab is not a singleton)
 // ---------------------------------------------------------------------------
 
-int EdgeWindow::RunMessageLoop() {
-    MSG msg{};
-    BOOL result;
-    while ((result = GetMessageW(&msg, nullptr, 0, 0)) != 0) {
-        if (result == -1) return 1;
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+LRESULT CALLBACK Tab::TabProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    Tab* self = reinterpret_cast<Tab*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    if (msg == WM_NCCREATE) {
+        auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        self = reinterpret_cast<Tab*>(cs->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
     }
-    return static_cast<int>(msg.wParam);
+    return self ? self->HandleTabMessage(hwnd, msg, wParam, lParam)
+                : DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-LRESULT CALLBACK EdgeWindow::TabProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (s_instance) return s_instance->HandleTabMessage(hwnd, msg, wParam, lParam);
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-LRESULT CALLBACK EdgeWindow::PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (s_instance) return s_instance->HandlePanelMessage(hwnd, msg, wParam, lParam);
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
+LRESULT CALLBACK Tab::PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    Tab* self = reinterpret_cast<Tab*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    if (msg == WM_NCCREATE) {
+        auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        self = reinterpret_cast<Tab*>(cs->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+    }
+    return self ? self->HandlePanelMessage(hwnd, msg, wParam, lParam)
+                : DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 // ---------------------------------------------------------------------------
-// Hover state machine
+// Hover / pin state machine
 // ---------------------------------------------------------------------------
 
-void EdgeWindow::OnEnter() {
+void Tab::OnEnter() {
     KillTimer(m_tabHwnd, kTimerLeave);
 
     if (m_state == State::Hidden) {
@@ -241,39 +244,43 @@ void EdgeWindow::OnEnter() {
     }
 }
 
-void EdgeWindow::OnLeave() {
+void Tab::OnLeave() {
     // Debounce: don't close immediately, the cursor may just be crossing the
     // (borderless) seam between the tab window and the panel window.
     SetTimer(m_tabHwnd, kTimerLeave, static_cast<UINT>(m_config.closeDelayMs), nullptr);
 }
 
-void EdgeWindow::CheckPendingClose() {
+void Tab::CheckPendingClose() {
     POINT pt;
     GetCursorPos(&pt);
-
-    RECT tabRect{};
-    GetWindowRect(m_tabHwnd, &tabRect);
-    bool overTab = PtInRect(&tabRect, pt);
-
-    bool overPanel = false;
-    if (m_panelHwnd && IsWindowVisible(m_panelHwnd)) {
-        RECT panelRect{};
-        GetWindowRect(m_panelHwnd, &panelRect);
-        overPanel = PtInRect(&panelRect, pt);
-    }
-
-    if (overTab || overPanel || m_panelPinned) return;
+    if (IsPointInside(pt) || m_pinned) return;
 
     if (m_state == State::Open || m_state == State::Opening) {
         BeginClose();
     }
 }
 
-void EdgeWindow::BeginOpen() {
+bool Tab::IsPointInside(POINT screenPt) const {
+    RECT tabRect{};
+    GetWindowRect(m_tabHwnd, &tabRect);
+    if (PtInRect(&tabRect, screenPt)) return true;
+
+    if (m_panelHwnd && IsWindowVisible(m_panelHwnd)) {
+        RECT panelRect{};
+        GetWindowRect(m_panelHwnd, &panelRect);
+        if (PtInRect(&panelRect, screenPt)) return true;
+    }
+    return false;
+}
+
+void Tab::BeginOpen() {
     if (!m_panelHwnd) return;
 
-    m_hoveredRow = -1;
-    m_selectedSpotifyButton = -1;
+    m_hoveredControl = -1;
+    if (m_widget) {
+        m_widget->SetHovered(-1);
+        m_widget->OnPanelOpening(m_tabHwnd);
+    }
     SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
                  m_panelHeightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
@@ -286,7 +293,7 @@ void EdgeWindow::BeginOpen() {
     InvalidateRect(m_tabHwnd, nullptr, FALSE);
 }
 
-void EdgeWindow::BeginClose() {
+void Tab::BeginClose() {
     m_animFromX = CurrentPanelX();
     m_animToX = m_panelClosedXPx;
     m_animStartTick = GetTickCount64();
@@ -296,24 +303,32 @@ void EdgeWindow::BeginClose() {
     InvalidateRect(m_tabHwnd, nullptr, FALSE);
 }
 
-void EdgeWindow::TogglePanel() {
-    KillTimer(m_tabHwnd, kTimerLeave);
-    if (m_panelPinned) {
-        m_panelPinned = false;
-        BeginClose();
-        return;
-    }
-
-    m_panelPinned = true;
-    OnEnter();
-    m_hoveredRow = 0;
-    m_selectedSpotifyButton = -1;
+void Tab::TogglePin() {
+    m_pinned = !m_pinned;
+    if (m_owner) m_owner->NotifyPinChanged();
     InvalidateRect(m_panelHwnd, nullptr, FALSE);
-    SetForegroundWindow(m_panelHwnd);
-    SetFocus(m_panelHwnd);
+
+    if (!m_pinned) {
+        // Unpinned via the button itself; if the cursor already left both
+        // windows, close now instead of waiting for a leave event that
+        // already happened while the panel was pinned open.
+        POINT pt;
+        GetCursorPos(&pt);
+        if (!IsPointInside(pt) && (m_state == State::Open || m_state == State::Opening)) {
+            BeginClose();
+        }
+    }
 }
 
-void EdgeWindow::StepAnimation() {
+void Tab::ClosePinned() {
+    if (!m_pinned) return;
+    m_pinned = false;
+    if (m_owner) m_owner->NotifyPinChanged();
+    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    if (m_state == State::Open || m_state == State::Opening) BeginClose();
+}
+
+void Tab::StepAnimation() {
     ULONGLONG now = GetTickCount64();
     double t = static_cast<double>(now - m_animStartTick) / m_config.animationMs;
     t = std::clamp(t, 0.0, 1.0);
@@ -335,90 +350,36 @@ void EdgeWindow::StepAnimation() {
     }
 }
 
-int EdgeWindow::CurrentPanelX() const {
+int Tab::CurrentPanelX() const {
     RECT r{};
     GetWindowRect(m_panelHwnd, &r);
     return r.left;
 }
 
 // ---------------------------------------------------------------------------
-// Panel content hit-testing / actions
+// Panel hit-testing (chrome pin button, then delegate to the widget)
 // ---------------------------------------------------------------------------
 
-int EdgeWindow::RowAt(int clientYPx) const {
-    float logicalY = static_cast<float>(clientYPx) / m_dpiScale;
-    if (logicalY < PanelLayout::TitleHeight) return -1;
-
-    int idx = static_cast<int>((logicalY - PanelLayout::TitleHeight) / PanelLayout::RowHeight);
-    if (idx < 0 || idx >= static_cast<int>(m_items.size())) return -1;
-    return idx;
-}
-
-int EdgeWindow::SpotifyButtonAt(int clientXPx, int clientYPx) const {
+int Tab::HitTestPanel(int clientXPx, int clientYPx) const {
     float x = static_cast<float>(clientXPx) / m_dpiScale;
     float y = static_cast<float>(clientYPx) / m_dpiScale;
-    float top = PanelLayout::TitleHeight +
-                static_cast<float>(m_items.size()) * PanelLayout::RowHeight +
-                PanelLayout::SpotifyHeaderHeight;
-    if (y < top || y >= top + PanelLayout::SpotifyButtonHeight) return -1;
 
-    float buttonWidth = (m_config.panelWidth - 2.0f * PanelLayout::PaddingX -
-                         2.0f * PanelLayout::SpotifyButtonGap) / 3.0f;
-    for (int i = 0; i < 3; ++i) {
-        float left = PanelLayout::PaddingX +
-                     static_cast<float>(i) * (buttonWidth + PanelLayout::SpotifyButtonGap);
-        if (x >= left && x < left + buttonWidth) return i;
+    D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(m_config.panelWidth);
+    if (x >= pinRect.left && x <= pinRect.right && y >= pinRect.top && y <= pinRect.bottom) {
+        return kPinControlId;
     }
-    return -1;
-}
 
-void EdgeWindow::InvokeRow(int index) {
-    bool succeeded = true;
-    switch (index) {
-        case 0: succeeded = Actions::OpenNotepad(); break;
-        case 1: succeeded = Actions::OpenCalculator(); break;
-        case 2: succeeded = Actions::ShowDesktopToggle(); break;
-        default: break;
-    }
-    if (!succeeded) {
-        MessageBoxW(m_panelHwnd, L"Windows could not complete this action.", L"EdgeDeck",
-                    MB_ICONERROR | MB_OK | MB_TOPMOST);
-    }
-}
+    if (y < PanelLayout::ChromeHeight || !m_widget) return -1;
 
-void EdgeWindow::InvokeSpotifyButton(int index) {
-    if (m_spotifyBusy) return;
-    MediaControls::SpotifyCommand command;
-    switch (index) {
-        case 0: command = MediaControls::SpotifyCommand::Previous; break;
-        case 1: command = MediaControls::SpotifyCommand::PlayPause; break;
-        case 2: command = MediaControls::SpotifyCommand::Next; break;
-        default: return;
-    }
-    m_spotifyBusy = true;
-    MediaControls::SendSpotifyCommand(command, m_tabHwnd, kSpotifyResultMessage);
-}
-
-void EdgeWindow::ShowContextMenu(POINT screenPt) {
-    constexpr UINT kMenuIdExit = 100; // distinct from the WM_HOTKEY ids
-    HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
-
-    // Standard trick for a NOACTIVATE window's popup menu: briefly take the
-    // foreground so the menu dismisses correctly on an outside click, then
-    // post WM_NULL per MSDN so TrackPopupMenu's internal state settles.
-    SetForegroundWindow(m_tabHwnd);
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON, screenPt.x, screenPt.y, 0, m_tabHwnd, nullptr);
-    PostMessageW(m_tabHwnd, WM_NULL, 0, 0);
-
-    DestroyMenu(menu);
+    float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight - PanelLayout::BottomPadding;
+    return m_widget->HitTest(x, y - PanelLayout::ChromeHeight, m_config.panelWidth, contentHeight);
 }
 
 // ---------------------------------------------------------------------------
 // Tab window messages
 // ---------------------------------------------------------------------------
 
-LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_MOUSEMOVE: {
             if (!m_tabTracking) {
@@ -439,19 +400,10 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             OnLeave();
             return 0;
         }
-        case WM_LBUTTONUP:
-            TogglePanel();
-            return 0;
         case WM_RBUTTONUP: {
             POINT pt;
             GetCursorPos(&pt);
-            ShowContextMenu(pt);
-            return 0;
-        }
-        case WM_COMMAND: {
-            if (LOWORD(wParam) == 100) { // "Exit" from the context menu
-                DestroyWindow(m_tabHwnd);
-            }
+            if (m_owner) m_owner->ShowTabContextMenu(this, pt);
             return 0;
         }
         case WM_ERASEBKGND:
@@ -463,8 +415,7 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
-            bool expanded = (m_state == State::Open || m_state == State::Opening);
-            const wchar_t* glyph = expanded ? L"‹" : L"›"; // ‹ / ›
+            const wchar_t* glyph = m_widget ? m_widget->TabGlyph() : L"?";
             m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
                                    m_config.cornerRadius, glyph);
             EndPaint(hwnd, &ps);
@@ -482,44 +433,22 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             }
             break;
         }
-        case WM_HOTKEY: {
-            if (wParam == kHotkeyExitId) {
-                DestroyWindow(m_tabHwnd);
-                return 0;
-            }
-            if (wParam == kHotkeyToggleId) {
-                TogglePanel();
-                return 0;
-            }
-            break;
-        }
-        case kSpotifyResultMessage: {
-            m_spotifyBusy = false;
-            auto result = static_cast<MediaControls::Result>(wParam);
-            if (result == MediaControls::Result::Success) return 0;
-
-            const wchar_t* message = L"Windows could not control Spotify.";
-            if (result == MediaControls::Result::SpotifyNotFound) {
-                message = L"Open Spotify and start a song to enable these controls.";
-            } else if (result == MediaControls::Result::Unsupported) {
-                message = L"Spotify does not support this control right now.";
-            }
-            MessageBoxW(m_tabHwnd, message, L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
-            return 0;
-        }
         case WM_DESTROY: {
-            UnregisterHotKey(hwnd, kHotkeyExitId);
-            UnregisterHotKey(hwnd, kHotkeyToggleId);
             KillTimer(hwnd, kTimerAnim);
             KillTimer(hwnd, kTimerLeave);
             if (m_panelHwnd) {
                 DestroyWindow(m_panelHwnd);
                 m_panelHwnd = nullptr;
             }
-            PostQuitMessage(0);
             return 0;
         }
         default:
+            if (msg >= WM_APP && m_widget) {
+                m_widget->OnAsyncResult(msg, wParam);
+                ResizePanelToContent();
+                if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+                return 0;
+            }
             break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -529,7 +458,7 @@ LRESULT EdgeWindow::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 // Panel window messages
 // ---------------------------------------------------------------------------
 
-LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_MOUSEMOVE: {
             if (!m_panelTracking) {
@@ -539,89 +468,50 @@ LRESULT EdgeWindow::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 KillTimer(m_tabHwnd, kTimerLeave);
                 OnEnter();
             }
-            int row = RowAt(GET_Y_LPARAM(lParam));
-            int spotifyButton = SpotifyButtonAt(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-            if (row != m_hoveredRow || spotifyButton != m_selectedSpotifyButton) {
-                m_hoveredRow = row;
-                m_selectedSpotifyButton = spotifyButton;
+            int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            if (hit != m_hoveredControl) {
+                m_hoveredControl = hit;
+                if (m_widget) m_widget->SetHovered(hit >= 0 ? hit : -1);
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         }
         case WM_MOUSELEAVE: {
             m_panelTracking = false;
-            if (GetForegroundWindow() != m_panelHwnd &&
-                (m_hoveredRow != -1 || m_selectedSpotifyButton != -1)) {
-                m_hoveredRow = -1;
-                m_selectedSpotifyButton = -1;
+            if (m_hoveredControl != -1) {
+                m_hoveredControl = -1;
+                if (m_widget) m_widget->SetHovered(-1);
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             OnLeave();
             return 0;
         }
         case WM_LBUTTONUP: {
-            int row = RowAt(GET_Y_LPARAM(lParam));
-            int spotifyButton = SpotifyButtonAt(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-            if (row >= 0) {
-                InvokeRow(row);
-                m_panelPinned = false;
-                if (m_state == State::Open || m_state == State::Opening) BeginClose();
-            } else if (spotifyButton >= 0) {
-                InvokeSpotifyButton(spotifyButton);
-            }
-            return 0;
-        }
-        case WM_KEYDOWN: {
-            const int count = static_cast<int>(m_items.size());
-            const int total = count + 3;
-            if (wParam == VK_ESCAPE) {
-                m_panelPinned = false;
-                BeginClose();
-                return 0;
-            }
-            if (wParam == VK_DOWN || wParam == VK_UP) {
-                int selected = m_selectedSpotifyButton >= 0 ?
-                               count + m_selectedSpotifyButton : m_hoveredRow;
-                if (wParam == VK_DOWN) {
-                    selected = (selected + 1) % total;
-                } else {
-                    selected = selected < 0 ? total - 1 : (selected + total - 1) % total;
-                }
-                m_hoveredRow = selected < count ? selected : -1;
-                m_selectedSpotifyButton = selected >= count ? selected - count : -1;
+            int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            if (hit == kPinControlId) {
+                TogglePin();
+            } else if (hit >= 0 && m_widget) {
+                m_widget->Activate(hit, m_tabHwnd);
                 InvalidateRect(hwnd, nullptr, FALSE);
-                return 0;
-            }
-            if (wParam == VK_RETURN || wParam == VK_SPACE) {
-                if (m_selectedSpotifyButton >= 0) {
-                    InvokeSpotifyButton(m_selectedSpotifyButton);
-                } else if (count > 0) {
-                    InvokeRow(m_hoveredRow < 0 ? 0 : m_hoveredRow);
-                    m_panelPinned = false;
-                    if (m_state == State::Open || m_state == State::Opening) BeginClose();
+                // A pinned panel stays open through an action click; only an
+                // unpinned (hover-opened) panel auto-closes after acting.
+                if (!m_pinned && (m_state == State::Open || m_state == State::Opening)) {
+                    BeginClose();
                 }
-                return 0;
-            }
-            break;
-        }
-        case WM_ACTIVATE:
-            if (LOWORD(wParam) == WA_INACTIVE && m_panelPinned) {
-                m_panelPinned = false;
-                if (m_state == State::Open || m_state == State::Opening) BeginClose();
             }
             return 0;
+        }
+        case WM_ERASEBKGND:
+            return 1;
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
             Relayout();
             return 0;
-        case WM_ERASEBKGND:
-            return 1;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
-            m_panelRenderer.DrawPanel(m_config.panelWidth, m_config.panelHeight,
-                                       m_config.cornerRadius, m_items, m_hoveredRow,
-                                       m_selectedSpotifyButton);
+            m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(),
+                                       m_pinned);
             EndPaint(hwnd, &ps);
             return 0;
         }

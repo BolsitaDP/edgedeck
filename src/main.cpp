@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <objbase.h>
-#include "EdgeWindow.h"
+#include <commctrl.h>
+#include "App.h"
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     // Per-Monitor-V2 is the modern, manifest-free way to opt in to sharp
@@ -29,14 +30,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         return 1;
     }
 
+    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
+    InitCommonControlsEx(&icc); // needed once, before the settings window's comctl32 children
+
     int exitCode = 1;
     {
-        EdgeWindow app;
+        App app;
         if (!app.Create(hInstance)) {
             MessageBoxW(nullptr, L"EdgeDeck failed to initialize its windows.", L"EdgeDeck",
                         MB_ICONERROR | MB_OK);
         } else {
-            exitCode = EdgeWindow::RunMessageLoop();
+            exitCode = App::RunMessageLoop();
         }
     }
 

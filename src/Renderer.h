@@ -4,31 +4,31 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wrl/client.h>
-#include <string>
-#include <vector>
+#include "PanelWidget.h"
 
-// One entry in the panel's action list.
-struct PanelItem {
-    std::wstring text;
-};
-
-// Shared logical (96-DPI) layout constants for the panel's content.
-// Kept here so EdgeWindow's hit-testing and Renderer's drawing never drift apart.
+// Shared logical (96-DPI) layout constants for the panel's chrome (title +
+// pin button). Widgets own their own internal layout constants; this
+// namespace is only the part Tab's hit-testing and Renderer's chrome
+// drawing must agree on.
 namespace PanelLayout {
 constexpr float PaddingX = 18.0f;
-constexpr float TitleHeight = 44.0f;
-constexpr float RowHeight = 44.0f;
-constexpr float SpotifyHeaderHeight = 36.0f;
-constexpr float SpotifyButtonHeight = 36.0f;
-constexpr float SpotifyButtonGap = 6.0f;
-constexpr float SpotifyHeight = SpotifyHeaderHeight + SpotifyButtonHeight;
+constexpr float ChromeHeight = 44.0f;
 constexpr float BottomPadding = 10.0f;
+constexpr float PinButtonSize = 20.0f;
+
+inline D2D1_RECT_F PinButtonRect(float panelWidth) {
+    float top = (ChromeHeight - PinButtonSize) / 2.0f;
+    float right = panelWidth - PaddingX;
+    return D2D1::RectF(right - PinButtonSize, top, right, top + PinButtonSize);
+}
 } // namespace PanelLayout
 
 // Thin wrapper around a single Direct2D HWND render target + DirectWrite text
-// formats. One instance is owned per top-level window (tab, panel). All
-// drawing happens on demand from WM_PAINT - there is no render loop.
-class Renderer {
+// formats. One instance is owned per top-level window (tab, panel per Tab
+// instance). All drawing happens on demand from WM_PAINT - there is no
+// render loop. Implements IPanelPainter so widgets can draw without owning
+// any D2D resources themselves.
+class Renderer : public IPanelPainter {
 public:
     Renderer() = default;
     ~Renderer();
@@ -43,10 +43,16 @@ public:
     // Draws the small edge tab. w/h/radius are logical (96-DPI) units.
     void DrawTab(bool hovered, float w, float h, float radius, const wchar_t* glyph);
 
-    // Draws the flyout panel with its title and action rows.
-    void DrawPanel(float w, float h, float radius,
-                   const std::vector<PanelItem>& items, int hoveredIndex,
-                   int selectedSpotifyButton);
+    // Draws the panel chrome (title + pin glyph + divider), then delegates
+    // the content area to the widget via IPanelPainter.
+    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned);
+
+    // IPanelPainter
+    void DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) override;
+    void DrawLabel(D2D1_RECT_F rect, const wchar_t* text, bool muted) override;
+    void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) override;
+    void DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered, bool enabled) override;
+    void DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
 
 private:
     bool EnsureTarget();
