@@ -11,8 +11,19 @@ endif()
 
 add_executable(EdgeDeck WIN32
     src/main.cpp
-    src/EdgeWindow.cpp
-    src/EdgeWindow.h
+    src/App.cpp
+    src/App.h
+    src/Tab.cpp
+    src/Tab.h
+    src/PanelWidget.h
+    src/QuickActionsWidget.cpp
+    src/QuickActionsWidget.h
+    src/MediaWidget.cpp
+    src/MediaWidget.h
+    src/SettingsWindow.cpp
+    src/SettingsWindow.h
+    src/Config.cpp
+    src/Config.h
     src/Renderer.cpp
     src/Renderer.h
     src/Actions.cpp
@@ -40,10 +51,18 @@ target_link_libraries(EdgeDeck PRIVATE
     oleaut32
     shcore
     windowsapp
+    comctl32
 )
 
 if (MSVC)
     target_compile_options(EdgeDeck PRIVATE /W4 /permissive-)
+    # Merges the comctl32 v6 dependency into MSVC's own auto-generated
+    # embedded manifest (rather than embedding a second manifest resource
+    # ourselves, which collides with the linker's default one) - needed for
+    # the settings window's common controls to render themed.
+    target_link_options(EdgeDeck PRIVATE
+        "/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+    )
 else()
     target_compile_options(EdgeDeck PRIVATE -Wall -Wextra)
 endif()

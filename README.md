@@ -1,6 +1,6 @@
 # EdgeDeck
 
-EdgeDeck es un panel nativo y pequeño para Windows, anclado al borde derecho del monitor principal. Incluye tres acciones: abrir Bloc de notas, abrir Calculadora y mostrar u ocultar el escritorio.
+EdgeDeck es una utilidad nativa y ligera para Windows: varias pestañas pequeñas ancladas al borde derecho del monitor principal, cada una con su propio panel desplegable.
 
 ## Compilación
 
@@ -15,14 +15,18 @@ Ejecuta `build/Release/EdgeDeck.exe`.
 
 ## Uso
 
-- Pasa el cursor sobre la pestaña para abrir el panel temporalmente.
-- Haz clic en la pestaña para mantener el panel abierto; otro clic lo cierra. Con el panel activo, Arriba/Abajo selecciona una acción, Intro o Espacio la ejecuta y Escape lo cierra.
-- `Ctrl+Shift+Alt+E` abre o cierra el panel desde el teclado.
-- Haz clic derecho en la pestaña y elige **Exit**, o pulsa `Ctrl+Shift+Alt+Q`.
-- Los botones de Spotify permiten ir a la canción anterior, reproducir o pausar, y pasar a la siguiente. Spotify debe estar abierto y exponer una sesión de reproducción de Windows; estos botones no controlan otras aplicaciones de audio.
+- Pasa el cursor sobre una pestaña para abrir su panel; al sacar el mouse se cierra solo tras una breve espera.
+- Cada panel tiene un botón de pin (círculo, arriba a la derecha): fijado, el panel se queda abierto aunque muevas el mouse o hagas clic en una acción, hasta que lo desfijes o hagas clic fuera de él.
+- Clic derecho en cualquier pestaña → **Settings...** abre la ventana de configuración: tipo de widget por pestaña, posición vertical, tamaño de la pestaña y del panel. Los cambios se aplican al instante y se guardan en `%LOCALAPPDATA%\EdgeDeck\config.txt`.
+- Clic derecho → **Exit**, o `Ctrl+Shift+Alt+Q` desde cualquier lugar, cierra la aplicación.
 
-El panel responde a cambios de pantalla y escala mientras está abierto. Usa mensajes de Windows, sin sondeo en segundo plano; los temporizadores solo funcionan durante la animación o la breve espera antes del cierre. Los controles de Spotify hacen su trabajo de forma asíncrona únicamente al pulsar un botón y no necesitan OAuth ni solicitudes de red periódicas. Se limita a una instancia para evitar duplicar ventanas y atajos globales.
+## Widgets
 
-La lista de acciones, el monitor principal y el borde derecho todavía se definen en el código.
+- **Quick Actions**: abrir Bloc de notas, abrir Calculadora, mostrar/ocultar el escritorio.
+- **Media (auto-detect)**: Anterior / Reproducir-Pausa / Siguiente para lo que sea que Windows considere la sesión de reproducción activa en ese momento (Spotify, una pestaña de Chrome/Edge, VLC, etc.) - no está atado a una app en particular, sigue automáticamente la que esté sonando. Si ninguna app expone controles multimedia al sistema, los botones avisan en vez de fallar en silencio.
 
-Las letras no forman parte de esta primera etapa. Requieren una fuente independiente con permisos para mostrarlas; la referencia pública de la API de Spotify no documenta un endpoint de letras.
+El valor por defecto trae una pestaña de cada tipo; agregar, quitar o reordenar pestañas se hace desde Settings.
+
+## Notas técnicas
+
+Cada pestaña es event-driven: sin render loop ni sondeo del mouse (usa `TrackMouseEvent`/`WM_MOUSELEAVE`), los temporizadores solo corren durante la animación de apertura/cierre o la breve espera antes de cerrar. El cierre por "clic afuera" de un panel fijado usa un hook de mouse de bajo nivel que solo se instala mientras algo está realmente fijado, y nunca activa ni roba el foco de otra ventana. Los controles de media hacen su trabajo de forma asíncrona solo al pulsar un botón, sin solicitudes periódicas. La app se limita a una instancia para evitar duplicar ventanas y el atajo global.

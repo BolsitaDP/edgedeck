@@ -171,78 +171,114 @@ void Renderer::DrawTab(bool hovered, float w, float h, float /*radius*/, const w
     }
 }
 
-void Renderer::DrawPanel(float w, float /*h*/, float /*radius*/,
-                          const std::vector<PanelItem>& items, int hoveredIndex,
-                          int selectedSpotifyButton) {
+void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned) {
     if (!EnsureTarget()) return;
     if (!EnsureBrush(m_primaryTextBrush, kTextPrimary) ||
+        !EnsureBrush(m_secondaryTextBrush, kTextSecondary) ||
         !EnsureBrush(m_dividerBrush, kDivider) ||
         !EnsureBrush(m_hoverBrush, kRowHoverBg) ||
         !EnsureBrush(m_controlBrush, kControlBg)) return;
     ID2D1HwndRenderTarget* t = m_target.Get();
 
     t->BeginDraw();
+    t->SetTransform(D2D1::Matrix3x2F::Identity());
     t->Clear(kPanelBg);
 
-    D2D1_RECT_F titleRect = D2D1::RectF(PanelLayout::PaddingX, 0.0f, w - PanelLayout::PaddingX,
-                                         PanelLayout::TitleHeight);
-    static constexpr wchar_t kTitle[] = L"EdgeDeck";
-    t->DrawText(kTitle, static_cast<UINT32>(wcslen(kTitle)), TitleFormat(), titleRect,
+    D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(w);
+    D2D1_RECT_F titleRect = D2D1::RectF(PanelLayout::PaddingX, 0.0f, pinRect.left - 6.0f,
+                                         PanelLayout::ChromeHeight);
+    const wchar_t* title = widget ? widget->PanelTitle() : L"EdgeDeck";
+    t->DrawText(title, static_cast<UINT32>(wcslen(title)), TitleFormat(), titleRect,
                 m_primaryTextBrush.Get());
 
-    t->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, PanelLayout::TitleHeight),
-                D2D1::Point2F(w - PanelLayout::PaddingX, PanelLayout::TitleHeight),
+    // Numeric code points, not literal characters - see QuickActionsWidget.cpp.
+    static constexpr wchar_t kPinFilled[] = {0x25CF, 0}; // U+25CF BLACK CIRCLE
+    static constexpr wchar_t kPinHollow[] = {0x25CB, 0}; // U+25CB WHITE CIRCLE
+    const wchar_t* pinGlyph = pinned ? kPinFilled : kPinHollow;
+    t->DrawText(pinGlyph, 1, GlyphFormat(), pinRect, m_secondaryTextBrush.Get());
+
+    t->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, PanelLayout::ChromeHeight),
+                D2D1::Point2F(w - PanelLayout::PaddingX, PanelLayout::ChromeHeight),
                 m_dividerBrush.Get(), 1.0f);
 
-    for (size_t i = 0; i < items.size(); ++i) {
-        float y = PanelLayout::TitleHeight + static_cast<float>(i) * PanelLayout::RowHeight;
-
-        if (static_cast<int>(i) == hoveredIndex) {
-            D2D1_ROUNDED_RECT hoverRect = D2D1::RoundedRect(
-                D2D1::RectF(8.0f, y + 2.0f, w - 8.0f, y + PanelLayout::RowHeight - 2.0f), 6.0f,
-                6.0f);
-            t->FillRoundedRectangle(hoverRect, m_hoverBrush.Get());
-        }
-
-        D2D1_RECT_F rowRect =
-            D2D1::RectF(PanelLayout::PaddingX, y, w - PanelLayout::PaddingX, y + PanelLayout::RowHeight);
-        t->DrawText(items[i].text.c_str(), static_cast<UINT32>(items[i].text.size()), ItemFormat(),
-                    rowRect, m_primaryTextBrush.Get());
-    }
-
-    float spotifyTop = PanelLayout::TitleHeight +
-                       static_cast<float>(items.size()) * PanelLayout::RowHeight;
-    t->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, spotifyTop),
-                D2D1::Point2F(w - PanelLayout::PaddingX, spotifyTop),
-                m_dividerBrush.Get(), 1.0f);
-
-    static constexpr wchar_t kSpotifyTitle[] = L"Spotify";
-    D2D1_RECT_F spotifyTitleRect = D2D1::RectF(
-        PanelLayout::PaddingX, spotifyTop + 2.0f, w - PanelLayout::PaddingX,
-        spotifyTop + PanelLayout::SpotifyHeaderHeight);
-    t->DrawText(kSpotifyTitle, static_cast<UINT32>(wcslen(kSpotifyTitle)), TitleFormat(),
-                spotifyTitleRect, m_primaryTextBrush.Get());
-
-    static constexpr const wchar_t* kButtonLabels[] = {L"Prev", L"Play/Pause", L"Next"};
-    float buttonWidth = (w - 2.0f * PanelLayout::PaddingX -
-                         2.0f * PanelLayout::SpotifyButtonGap) / 3.0f;
-    float buttonTop = spotifyTop + PanelLayout::SpotifyHeaderHeight;
-    for (int i = 0; i < 3; ++i) {
-        float x = PanelLayout::PaddingX +
-                  static_cast<float>(i) * (buttonWidth + PanelLayout::SpotifyButtonGap);
-        D2D1_RECT_F buttonRect = D2D1::RectF(
-            x, buttonTop, x + buttonWidth, buttonTop + PanelLayout::SpotifyButtonHeight);
-        D2D1_ROUNDED_RECT roundedButton = D2D1::RoundedRect(buttonRect, 6.0f, 6.0f);
-        t->FillRoundedRectangle(roundedButton, m_controlBrush.Get());
-        if (i == selectedSpotifyButton) {
-            t->FillRoundedRectangle(roundedButton, m_hoverBrush.Get());
-        }
-        t->DrawText(kButtonLabels[i], static_cast<UINT32>(wcslen(kButtonLabels[i])),
-                    ControlFormat(), buttonRect, m_primaryTextBrush.Get());
+    if (widget) {
+        t->SetTransform(D2D1::Matrix3x2F::Translation(0.0f, PanelLayout::ChromeHeight));
+        widget->Draw(*this, w, h - PanelLayout::ChromeHeight - PanelLayout::BottomPadding);
+        t->SetTransform(D2D1::Matrix3x2F::Identity());
     }
 
     HRESULT hr = t->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
         DiscardTarget();
     }
+}
+
+void Renderer::DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    if (hovered) {
+        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(
+            D2D1::RectF(rect.left - 10.0f, rect.top + 2.0f, rect.right + 10.0f, rect.bottom - 2.0f),
+            6.0f, 6.0f);
+        t->FillRoundedRectangle(rr, m_hoverBrush.Get());
+    }
+    t->DrawText(text, static_cast<UINT32>(wcslen(text)), ItemFormat(), rect, m_primaryTextBrush.Get());
+}
+
+void Renderer::DrawLabel(D2D1_RECT_F rect, const wchar_t* text, bool muted) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+    ID2D1SolidColorBrush* brush = muted ? m_secondaryTextBrush.Get() : m_primaryTextBrush.Get();
+    t->DrawText(text, static_cast<UINT32>(wcslen(text)), ItemFormat(), rect, brush);
+}
+
+void Renderer::DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    // The color varies per app, so this brush can't come from the fixed
+    // palette cache - creating a solid-color brush is cheap and only ever
+    // happens during an actual WM_PAINT (event-driven, not per-frame).
+    ComPtr<ID2D1SolidColorBrush> badgeBrush;
+    if (FAILED(t->CreateSolidColorBrush(color, badgeBrush.GetAddressOf()))) return;
+
+    D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 6.0f, 6.0f);
+    t->FillRoundedRectangle(rr, badgeBrush.Get());
+    t->DrawText(letters, static_cast<UINT32>(wcslen(letters)), GlyphFormat(), rect,
+                m_primaryTextBrush.Get());
+}
+
+void Renderer::DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered, bool enabled) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
+    t->FillRoundedRectangle(rr, m_controlBrush.Get());
+    if (hovered && enabled) t->FillRoundedRectangle(rr, m_hoverBrush.Get());
+    t->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), GlyphFormat(), rect,
+                enabled ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get());
+}
+
+void Renderer::DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
+    t->FillRoundedRectangle(rr, m_controlBrush.Get());
+    if (hovered && enabled) t->FillRoundedRectangle(rr, m_hoverBrush.Get());
+
+    ID2D1SolidColorBrush* brush =
+        (enabled ? m_primaryTextBrush : m_secondaryTextBrush).Get();
+    float barWidth = (rect.right - rect.left) * 0.16f;
+    float barHeight = (rect.bottom - rect.top) * 0.42f;
+    float gap = barWidth * 0.9f;
+    float centerX = (rect.left + rect.right) / 2.0f;
+    float top = (rect.top + rect.bottom) / 2.0f - barHeight / 2.0f;
+    float bottom = top + barHeight;
+
+    t->FillRectangle(D2D1::RectF(centerX - gap / 2.0f - barWidth, top, centerX - gap / 2.0f, bottom),
+                      brush);
+    t->FillRectangle(D2D1::RectF(centerX + gap / 2.0f, top, centerX + gap / 2.0f + barWidth, bottom),
+                      brush);
 }
