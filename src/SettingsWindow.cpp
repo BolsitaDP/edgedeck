@@ -1,4 +1,5 @@
 #include "SettingsWindow.h"
+#include "Autostart.h"
 
 #include <commctrl.h>
 #include <algorithm>
@@ -18,6 +19,31 @@ constexpr int kIdDown = 108;
 constexpr int kIdSave = 109;
 constexpr int kIdClose = 110;
 constexpr int kIdTrackbar = 111;
+constexpr int kIdAutostart = 112;
+
+struct TypeEntry {
+    WidgetType type;
+    const wchar_t* comboLabel;
+    const wchar_t* listLabel;
+};
+constexpr TypeEntry kTypes[] = {
+    {WidgetType::QuickActions, L"Quick Actions", L"Quick Actions"},
+    {WidgetType::Media, L"Media (auto-detect)", L"Media"},
+    {WidgetType::Brightness, L"Brightness (monitors)", L"Brightness"},
+    {WidgetType::Lyrics, L"Lyrics (Spotify)", L"Lyrics"},
+};
+constexpr int kTypeCount = static_cast<int>(sizeof(kTypes) / sizeof(kTypes[0]));
+
+int TypeIndex(WidgetType type) {
+    for (int i = 0; i < kTypeCount; ++i) {
+        if (kTypes[i].type == type) return i;
+    }
+    return 0;
+}
+
+WidgetType TypeFromIndex(int index) {
+    return (index >= 0 && index < kTypeCount) ? kTypes[index].type : WidgetType::QuickActions;
+}
 
 const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 } // namespace
@@ -75,8 +101,9 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     make(L"STATIC", L"Widget type:", 0, 210, 12, 140, 18, 0);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 210, 30,
                         220, 200, kIdTypeCombo);
-    SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Quick Actions"));
-    SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Media (auto-detect)"));
+    for (const TypeEntry& entry : kTypes) {
+        SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.comboLabel));
+    }
 
     make(L"STATIC", L"Vertical position:", 0, 210, 64, 160, 18, 0);
     m_positionTrackbar =
@@ -95,6 +122,11 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_panelWidthEdit =
         make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 228, 100, 22, kIdPanelWidth);
 
+    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 210,
+                             262, 220, 22, kIdAutostart);
+    SendMessageW(m_autostartCheck, BM_SETCHECK,
+                 Autostart::IsEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
+
     m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 210, 296, 90, 26, kIdSave);
     m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 308, 296, 90, 26, kIdClose);
 }
@@ -102,8 +134,7 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 void SettingsWindow::RefreshList(int selectIndex) {
     SendMessageW(m_list, LB_RESETCONTENT, 0, 0);
     for (size_t i = 0; i < m_tabs.size(); ++i) {
-        const wchar_t* typeName =
-            m_tabs[i].widgetType == WidgetType::Media ? L"Media" : L"Quick Actions";
+        const wchar_t* typeName = kTypes[TypeIndex(m_tabs[i].widgetType)].listLabel;
         wchar_t buf[64];
         swprintf_s(buf, L"%zu: %s", i + 1, typeName);
         SendMessageW(m_list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(buf));
@@ -133,7 +164,7 @@ void SettingsWindow::LoadSelectedIntoControls() {
     if (!hasSelection) return;
     const TabSettings& t = m_tabs[m_selectedIndex];
 
-    SendMessageW(m_typeCombo, CB_SETCURSEL, t.widgetType == WidgetType::Media ? 1 : 0, 0);
+    SendMessageW(m_typeCombo, CB_SETCURSEL, TypeIndex(t.widgetType), 0);
 
     int pos = static_cast<int>(std::lround(t.verticalRatio * 100.0f));
     SendMessageW(m_positionTrackbar, TBM_SETPOS, TRUE, pos);
@@ -154,8 +185,7 @@ void SettingsWindow::StoreControlsIntoSelected() {
     if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_tabs.size())) return;
     TabSettings& t = m_tabs[m_selectedIndex];
 
-    t.widgetType = SendMessageW(m_typeCombo, CB_GETCURSEL, 0, 0) == 1 ? WidgetType::Media
-                                                                       : WidgetType::QuickActions;
+    t.widgetType = TypeFromIndex(static_cast<int>(SendMessageW(m_typeCombo, CB_GETCURSEL, 0, 0)));
 
     int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
     t.verticalRatio = std::clamp(pos, 0, 100) / 100.0f;
@@ -210,6 +240,7 @@ void SettingsWindow::OnTrackbarChanged() {
 
 void SettingsWindow::OnSave() {
     StoreControlsIntoSelected();
+    Autostart::SetEnabled(SendMessageW(m_autostartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
     if (m_onSave) m_onSave(m_tabs);
     DestroyWindow(m_hwnd);
 }
@@ -228,11 +259,6 @@ LRESULT CALLBACK SettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
-            // m_hwnd is only assigned once CreateWindowExW returns to Create(),
-            // but WM_CREATE fires synchronously from inside that same call, so
-            // CreateControls (which parents children off m_hwnd) must use the
-            // hwnd handed to us here instead - it's already valid.
-            m_hwnd = hwnd;
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
             CreateControls(cs->hInstance);
             RefreshList(0);

@@ -20,6 +20,16 @@ add_executable(EdgeDeck WIN32
     src/QuickActionsWidget.h
     src/MediaWidget.cpp
     src/MediaWidget.h
+    src/BrightnessWidget.cpp
+    src/BrightnessWidget.h
+    src/LyricsWidget.cpp
+    src/LyricsWidget.h
+    src/LrcLyrics.cpp
+    src/LrcLyrics.h
+    src/BrightnessControls.cpp
+    src/BrightnessControls.h
+    src/Autostart.cpp
+    src/Autostart.h
     src/SettingsWindow.cpp
     src/SettingsWindow.h
     src/Config.cpp
@@ -52,6 +62,9 @@ target_link_libraries(EdgeDeck PRIVATE
     shcore
     windowsapp
     comctl32
+    dxva2
+    advapi32
+    winhttp
 )
 
 if (MSVC)

@@ -2,6 +2,8 @@
 #include "Tab.h"
 #include "QuickActionsWidget.h"
 #include "MediaWidget.h"
+#include "BrightnessWidget.h"
+#include "LyricsWidget.h"
 #include "SettingsWindow.h"
 
 #include <algorithm>
@@ -12,8 +14,12 @@ constexpr UINT kMenuIdExit = 100;
 constexpr UINT kMenuIdSettings = 101;
 
 std::unique_ptr<PanelWidget> MakeWidget(WidgetType type) {
-    if (type == WidgetType::Media) return std::make_unique<MediaWidget>();
-    return std::make_unique<QuickActionsWidget>();
+    switch (type) {
+        case WidgetType::Media: return std::make_unique<MediaWidget>();
+        case WidgetType::Brightness: return std::make_unique<BrightnessWidget>();
+        case WidgetType::Lyrics: return std::make_unique<LyricsWidget>();
+        default: return std::make_unique<QuickActionsWidget>();
+    }
 }
 } // namespace
 
@@ -22,10 +28,6 @@ App* App::s_instance = nullptr;
 App::App() = default;
 
 App::~App() {
-    if (m_mouseHook) {
-        UnhookWindowsHookEx(m_mouseHook);
-        m_mouseHook = nullptr;
-    }
     m_tabs.clear();
     if (m_utilityHwnd && IsWindow(m_utilityHwnd)) {
         DestroyWindow(m_utilityHwnd);
@@ -57,7 +59,6 @@ bool App::BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hIns
         newTabs.push_back(std::move(tab));
     }
     m_tabs = std::move(newTabs); // old tabs (if any) are destroyed here
-    UpdateMouseHook();           // nothing can still be pinned from the old set
     return true;
 }
 
@@ -122,28 +123,6 @@ int App::RunMessageLoop() {
     return static_cast<int>(msg.wParam);
 }
 
-void App::NotifyPinChanged() { UpdateMouseHook(); }
-
-void App::UpdateMouseHook() {
-    bool anyPinned = std::any_of(m_tabs.begin(), m_tabs.end(),
-                                  [](const std::unique_ptr<Tab>& t) { return t->IsPinned(); });
-
-    if (anyPinned && !m_mouseHook) {
-        m_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, m_hInstance, 0);
-    } else if (!anyPinned && m_mouseHook) {
-        UnhookWindowsHookEx(m_mouseHook);
-        m_mouseHook = nullptr;
-    }
-}
-
-void App::HandleGlobalClick(POINT screenPt) {
-    for (auto& tab : m_tabs) {
-        if (tab->IsPinned() && !tab->IsPointInside(screenPt)) {
-            tab->ClosePinned();
-        }
-    }
-}
-
 void App::ShowTabContextMenu(Tab* /*tab*/, POINT screenPt) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
@@ -165,7 +144,7 @@ void App::RequestExit() {
 }
 
 // ---------------------------------------------------------------------------
-// Static callbacks. App is a legitimate process-wide singleton (exactly one
+// Static callback. App is a legitimate process-wide singleton (exactly one
 // per process), unlike Tab, so a plain static back-pointer is fine here.
 // ---------------------------------------------------------------------------
 
@@ -192,13 +171,4 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-LRESULT CALLBACK App::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && s_instance &&
-        (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN)) {
-        auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
-        s_instance->HandleGlobalClick(info->pt);
-    }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }

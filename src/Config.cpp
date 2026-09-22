@@ -18,19 +18,28 @@ std::wstring ConfigFilePath() {
 }
 
 const wchar_t* WidgetTypeToString(WidgetType type) {
-    return type == WidgetType::Media ? L"Media" : L"QuickActions";
+    switch (type) {
+        case WidgetType::Media: return L"Media";
+        case WidgetType::Brightness: return L"Brightness";
+        case WidgetType::Lyrics: return L"Lyrics";
+        default: return L"QuickActions";
+    }
 }
 
 WidgetType WidgetTypeFromString(const std::wstring& s) {
     // "Spotify" is accepted for configs saved before the media widget became
     // app-agnostic.
-    return (s == L"Media" || s == L"Spotify") ? WidgetType::Media : WidgetType::QuickActions;
+    if (s == L"Media" || s == L"Spotify") return WidgetType::Media;
+    if (s == L"Brightness") return WidgetType::Brightness;
+    if (s == L"Lyrics") return WidgetType::Lyrics;
+    return WidgetType::QuickActions;
 }
 
 std::vector<TabSettings> DefaultTabs() {
     return {
-        {WidgetType::QuickActions, 1.0f / 3.0f, 26.0f, 76.0f, 300.0f},
-        {WidgetType::Media, 2.0f / 3.0f, 26.0f, 76.0f, 300.0f},
+        {WidgetType::QuickActions, 0.25f, 26.0f, 76.0f, 300.0f},
+        {WidgetType::Media, 0.50f, 26.0f, 76.0f, 300.0f},
+        {WidgetType::Brightness, 0.75f, 26.0f, 76.0f, 300.0f},
     };
 }
 

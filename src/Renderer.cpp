@@ -83,6 +83,46 @@ IDWriteTextFormat* ControlFormat() {
     return fmt.Get();
 }
 
+// Push-pin silhouette (cap, stem, flared plate, needle) pointing down, in a
+// box centered on the origin. Device-independent, so it is built once per
+// process and shared by every panel's render target.
+ID2D1PathGeometry* PinGeometry() {
+    static ComPtr<ID2D1PathGeometry> geometry = []() -> ComPtr<ID2D1PathGeometry> {
+        ID2D1Factory* factory = D2DFactory();
+        ComPtr<ID2D1PathGeometry> g;
+        if (!factory || FAILED(factory->CreatePathGeometry(g.GetAddressOf()))) return nullptr;
+
+        ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(g->Open(sink.GetAddressOf()))) return nullptr;
+
+        static const D2D1_POINT_2F pts[] = {
+            {-3.5f, -8.5f}, {3.5f, -8.5f}, {3.5f, -6.5f}, {2.0f, -6.5f}, {2.0f, -1.5f},
+            {5.0f, 0.5f},   {5.0f, 2.0f},  {0.7f, 2.0f},  {0.0f, 8.5f},  {-0.7f, 2.0f},
+            {-5.0f, 2.0f},  {-5.0f, 0.5f}, {-2.0f, -1.5f}, {-2.0f, -6.5f}, {-3.5f, -6.5f},
+        };
+        sink->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLines(pts + 1, static_cast<UINT32>(sizeof(pts) / sizeof(pts[0]) - 1));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        if (FAILED(sink->Close())) return nullptr;
+        return g;
+    }();
+    return geometry.Get();
+}
+
+ID2D1StrokeStyle* RoundStrokeStyle() {
+    static ComPtr<ID2D1StrokeStyle> style = []() -> ComPtr<ID2D1StrokeStyle> {
+        ID2D1Factory* factory = D2DFactory();
+        ComPtr<ID2D1StrokeStyle> s;
+        if (!factory) return nullptr;
+        D2D1_STROKE_STYLE_PROPERTIES props = D2D1::StrokeStyleProperties(
+            D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+            D2D1_LINE_JOIN_ROUND);
+        if (FAILED(factory->CreateStrokeStyle(props, nullptr, 0, s.GetAddressOf()))) return nullptr;
+        return s;
+    }();
+    return style.Get();
+}
+
 // Dark, Windows 11-ish palette. Colors only - no acrylic/Mica for this MVP.
 const D2D1_COLOR_F kPanelBg = D2D1::ColorF(0.098f, 0.098f, 0.098f, 1.0f);
 const D2D1_COLOR_F kTabBg = D2D1::ColorF(0.145f, 0.145f, 0.145f, 1.0f);
@@ -92,6 +132,7 @@ const D2D1_COLOR_F kTextPrimary = D2D1::ColorF(0.93f, 0.93f, 0.93f, 1.0f);
 const D2D1_COLOR_F kTextSecondary = D2D1::ColorF(0.65f, 0.65f, 0.65f, 1.0f);
 const D2D1_COLOR_F kDivider = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f);
 const D2D1_COLOR_F kControlBg = D2D1::ColorF(0.18f, 0.18f, 0.18f, 1.0f);
+const D2D1_COLOR_F kAccent = D2D1::ColorF(0.30f, 0.62f, 0.98f, 1.0f);
 
 } // namespace
 
@@ -148,6 +189,7 @@ void Renderer::DiscardTarget() {
     m_dividerBrush.Reset();
     m_hoverBrush.Reset();
     m_controlBrush.Reset();
+    m_accentBrush.Reset();
     m_target.Reset();
 }
 
@@ -171,13 +213,14 @@ void Renderer::DrawTab(bool hovered, float w, float h, float /*radius*/, const w
     }
 }
 
-void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned) {
+void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered) {
     if (!EnsureTarget()) return;
     if (!EnsureBrush(m_primaryTextBrush, kTextPrimary) ||
         !EnsureBrush(m_secondaryTextBrush, kTextSecondary) ||
         !EnsureBrush(m_dividerBrush, kDivider) ||
         !EnsureBrush(m_hoverBrush, kRowHoverBg) ||
-        !EnsureBrush(m_controlBrush, kControlBg)) return;
+        !EnsureBrush(m_controlBrush, kControlBg) ||
+        !EnsureBrush(m_accentBrush, kAccent)) return;
     ID2D1HwndRenderTarget* t = m_target.Get();
 
     t->BeginDraw();
@@ -191,11 +234,7 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned) {
     t->DrawText(title, static_cast<UINT32>(wcslen(title)), TitleFormat(), titleRect,
                 m_primaryTextBrush.Get());
 
-    // Numeric code points, not literal characters - see QuickActionsWidget.cpp.
-    static constexpr wchar_t kPinFilled[] = {0x25CF, 0}; // U+25CF BLACK CIRCLE
-    static constexpr wchar_t kPinHollow[] = {0x25CB, 0}; // U+25CB WHITE CIRCLE
-    const wchar_t* pinGlyph = pinned ? kPinFilled : kPinHollow;
-    t->DrawText(pinGlyph, 1, GlyphFormat(), pinRect, m_secondaryTextBrush.Get());
+    DrawPin(pinRect, pinned, pinHovered);
 
     t->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, PanelLayout::ChromeHeight),
                 D2D1::Point2F(w - PanelLayout::PaddingX, PanelLayout::ChromeHeight),
@@ -211,6 +250,34 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned) {
     if (hr == D2DERR_RECREATE_TARGET) {
         DiscardTarget();
     }
+}
+
+void Renderer::DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered) {
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    if (hovered) {
+        t->FillRoundedRectangle(D2D1::RoundedRect(rect, 6.0f, 6.0f), m_hoverBrush.Get());
+    }
+
+    ID2D1PathGeometry* geometry = PinGeometry();
+    if (!geometry) return;
+    ID2D1StrokeStyle* stroke = RoundStrokeStyle();
+
+    // Pinned: upright, solid accent color. Unpinned: tilted, outline only -
+    // the classic "pin it" / "pinned" pair, readable at a glance.
+    const float cx = (rect.left + rect.right) / 2.0f;
+    const float cy = (rect.top + rect.bottom) / 2.0f;
+    t->SetTransform(D2D1::Matrix3x2F::Rotation(pinned ? 0.0f : 40.0f) *
+                    D2D1::Matrix3x2F::Translation(cx, cy));
+
+    if (pinned) {
+        t->FillGeometry(geometry, m_accentBrush.Get());
+        t->DrawGeometry(geometry, m_accentBrush.Get(), 1.0f, stroke);
+    } else {
+        ID2D1SolidColorBrush* brush = hovered ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get();
+        t->DrawGeometry(geometry, brush, 1.4f, stroke);
+    }
+    t->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 
 void Renderer::DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) {
@@ -281,4 +348,35 @@ void Renderer::DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
                       brush);
     t->FillRectangle(D2D1::RectF(centerX + gap / 2.0f, top, centerX + gap / 2.0f + barWidth, bottom),
                       brush);
+}
+
+void Renderer::DrawSlider(D2D1_RECT_F track, float value01, bool active, bool enabled) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+
+    value01 = value01 < 0.0f ? 0.0f : (value01 > 1.0f ? 1.0f : value01);
+    const float cy = (track.top + track.bottom) / 2.0f;
+    const float halfThickness = 2.5f;
+    const float thumbX = track.left + (track.right - track.left) * value01;
+
+    D2D1_ROUNDED_RECT full = D2D1::RoundedRect(
+        D2D1::RectF(track.left, cy - halfThickness, track.right, cy + halfThickness), halfThickness,
+        halfThickness);
+    t->FillRoundedRectangle(full, m_controlBrush.Get());
+
+    D2D1_ROUNDED_RECT filled = D2D1::RoundedRect(
+        D2D1::RectF(track.left, cy - halfThickness, thumbX, cy + halfThickness), halfThickness,
+        halfThickness);
+    t->FillRoundedRectangle(filled, enabled ? m_accentBrush.Get() : m_secondaryTextBrush.Get());
+
+    const float radius = active ? 8.0f : 7.0f;
+    t->FillEllipse(D2D1::Ellipse(D2D1::Point2F(thumbX, cy), radius, radius),
+                    enabled ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get());
+}
+
+void Renderer::DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) {
+    if (!m_target) return;
+    ID2D1HwndRenderTarget* t = m_target.Get();
+    t->DrawText(text, static_cast<UINT32>(wcslen(text)), ControlFormat(), rect,
+                muted ? m_secondaryTextBrush.Get() : m_primaryTextBrush.Get());
 }

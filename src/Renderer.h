@@ -14,7 +14,7 @@ namespace PanelLayout {
 constexpr float PaddingX = 18.0f;
 constexpr float ChromeHeight = 44.0f;
 constexpr float BottomPadding = 10.0f;
-constexpr float PinButtonSize = 20.0f;
+constexpr float PinButtonSize = 24.0f;
 
 inline D2D1_RECT_F PinButtonRect(float panelWidth) {
     float top = (ChromeHeight - PinButtonSize) / 2.0f;
@@ -45,7 +45,7 @@ public:
 
     // Draws the panel chrome (title + pin glyph + divider), then delegates
     // the content area to the widget via IPanelPainter.
-    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned);
+    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered);
 
     // IPanelPainter
     void DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) override;
@@ -53,9 +53,12 @@ public:
     void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) override;
     void DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered, bool enabled) override;
     void DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
+    void DrawSlider(D2D1_RECT_F track, float value01, bool active, bool enabled) override;
+    void DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) override;
 
 private:
     bool EnsureTarget();
+    void DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered);
     bool EnsureBrush(Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>& brush, D2D1_COLOR_F color);
     void DiscardTarget();
 
@@ -67,4 +70,5 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_dividerBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_hoverBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_controlBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_accentBrush;
 };
