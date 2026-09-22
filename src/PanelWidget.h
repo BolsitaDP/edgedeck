@@ -8,6 +8,8 @@
 enum class WidgetType {
     QuickActions,
     Media,
+    Brightness,
+    Lyrics,
 };
 
 // Drawing primitives a PanelWidget can call without owning any D2D
@@ -36,6 +38,14 @@ public:
     // bars) as vector shapes instead of a font glyph - U+23F8 isn't covered
     // by the fonts available here and renders as a broken box.
     virtual void DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) = 0;
+
+    // Horizontal slider: `track` is the full track span (thumb travels along
+    // its horizontal extent, vertically centered), value01 in [0,1]. `active`
+    // = hovered or being dragged (thumb grows slightly).
+    virtual void DrawSlider(D2D1_RECT_F track, float value01, bool active, bool enabled) = 0;
+
+    // Short centered value text (e.g. "75%") next to a slider.
+    virtual void DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) = 0;
 };
 
 // One tab hosts exactly one PanelWidget. This is deliberately 1:1 (not a
@@ -82,4 +92,13 @@ public:
     // a widget kick off a per-open refresh (e.g. MediaWidget re-scanning
     // active sessions) instead of polling in the background. Default no-op.
     virtual void OnPanelOpening(HWND /*ownerHwnd*/) {}
+
+    // Drag support for sliders. Coordinates are content-local logical units
+    // (same space as HitTest). OnDragBegin returns true to claim the press:
+    // Tab then captures the mouse and routes moves to OnDragMove until the
+    // button is released (OnDragEnd). Defaults: no dragging.
+    virtual bool OnDragBegin(float /*x*/, float /*y*/, float /*width*/, float /*contentHeight*/,
+                              HWND /*ownerHwnd*/) { return false; }
+    virtual void OnDragMove(float /*x*/, float /*y*/, float /*width*/, float /*contentHeight*/) {}
+    virtual void OnDragEnd() {}
 };

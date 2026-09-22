@@ -40,10 +40,7 @@ public:
 
     bool Create(HINSTANCE hInstance);
 
-    bool IsPinned() const { return m_pinned; }
-    // Called by App's mouse hook when a click lands outside this tab while pinned.
-    void ClosePinned();
-    // Used by App's mouse hook and by this tab's own close-delay check.
+    // True when the cursor is over this tab or its (visible) panel.
     bool IsPointInside(POINT screenPt) const;
 
 private:
@@ -69,6 +66,7 @@ private:
     void StepAnimation();
     void CheckPendingClose();
     void TogglePin();
+    void EndDrag();
     int CurrentPanelX() const;
 
     // Chrome (title/pin) hit-test; delegates to the widget for anything
@@ -91,6 +89,7 @@ private:
     bool m_panelTracking = false;
     bool m_tabHovered = false;
     bool m_pinned = false;
+    bool m_dragging = false; // a widget slider owns the mouse (SetCapture) until button-up
     bool m_inRelayout = false;
     int m_hoveredControl = -1;
 

@@ -36,7 +36,7 @@ bool Tab::RegisterClasses(HINSTANCE hInstance) {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.hInstance = hInstance;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
     wc.hbrBackground = nullptr; // we paint the whole client area ourselves
 
     wc.lpszClassName = kTabClassName;
@@ -88,7 +88,7 @@ bool Tab::ComputeLayout() {
     m_tabRectPx = {tabX, tabY, tabX + tabWpx, tabY + tabHpx};
 
     m_panelYPx = tabY + (tabHpx - m_panelHeightPx) / 2;
-    m_panelYPx = std::clamp(m_panelYPx, monTop, std::max(monTop, monBottom - m_panelHeightPx));
+    m_panelYPx = std::clamp(m_panelYPx, monTop, static_cast<int>(monBottom) - m_panelHeightPx);
 
     m_panelOpenXPx = tabX - m_panelWidthPx; // resting position, left of the tab
     m_panelClosedXPx = monRight;            // fully outside the edge until it slides in
@@ -253,7 +253,7 @@ void Tab::OnLeave() {
 void Tab::CheckPendingClose() {
     POINT pt;
     GetCursorPos(&pt);
-    if (IsPointInside(pt) || m_pinned) return;
+    if (IsPointInside(pt) || m_pinned || m_dragging) return;
 
     if (m_state == State::Open || m_state == State::Opening) {
         BeginClose();
@@ -305,7 +305,6 @@ void Tab::BeginClose() {
 
 void Tab::TogglePin() {
     m_pinned = !m_pinned;
-    if (m_owner) m_owner->NotifyPinChanged();
     InvalidateRect(m_panelHwnd, nullptr, FALSE);
 
     if (!m_pinned) {
@@ -320,12 +319,18 @@ void Tab::TogglePin() {
     }
 }
 
-void Tab::ClosePinned() {
-    if (!m_pinned) return;
-    m_pinned = false;
-    if (m_owner) m_owner->NotifyPinChanged();
-    InvalidateRect(m_panelHwnd, nullptr, FALSE);
-    if (m_state == State::Open || m_state == State::Opening) BeginClose();
+void Tab::EndDrag() {
+    if (!m_dragging) return;
+    m_dragging = false; // first, so the WM_CAPTURECHANGED from ReleaseCapture is a no-op
+    ReleaseCapture();
+    if (m_widget) m_widget->OnDragEnd();
+    if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+
+    // The cursor may have left the panel while dragging; the leave events
+    // were swallowed by the capture, so start the normal close countdown.
+    POINT pt;
+    GetCursorPos(&pt);
+    if (!IsPointInside(pt)) OnLeave();
 }
 
 void Tab::StepAnimation() {
@@ -468,6 +473,16 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 KillTimer(m_tabHwnd, kTimerLeave);
                 OnEnter();
             }
+            if (m_dragging && m_widget) {
+                float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
+                float y = static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale -
+                          PanelLayout::ChromeHeight;
+                float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
+                                      PanelLayout::BottomPadding;
+                m_widget->OnDragMove(x, y, m_config.panelWidth, contentHeight);
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
             int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             if (hit != m_hoveredControl) {
                 m_hoveredControl = hit;
@@ -486,18 +501,38 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             OnLeave();
             return 0;
         }
+        case WM_LBUTTONDOWN: {
+            if (!m_widget) return 0;
+            float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
+            float y = static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale -
+                      PanelLayout::ChromeHeight;
+            if (y < 0.0f) return 0; // press on the title/pin chrome, not the content
+            float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
+                                  PanelLayout::BottomPadding;
+            if (m_widget->OnDragBegin(x, y, m_config.panelWidth, contentHeight, m_tabHwnd)) {
+                m_dragging = true;
+                SetCapture(hwnd);
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+        case WM_CAPTURECHANGED:
+            if (m_dragging && reinterpret_cast<HWND>(lParam) != hwnd) EndDrag();
+            return 0;
         case WM_LBUTTONUP: {
+            if (m_dragging) {
+                EndDrag();
+                return 0;
+            }
             int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             if (hit == kPinControlId) {
                 TogglePin();
             } else if (hit >= 0 && m_widget) {
+                // Acting never closes the panel: while the cursor is over the
+                // tab it stays open, and it closes only once the cursor leaves
+                // (or never, if pinned).
                 m_widget->Activate(hit, m_tabHwnd);
                 InvalidateRect(hwnd, nullptr, FALSE);
-                // A pinned panel stays open through an action click; only an
-                // unpinned (hover-opened) panel auto-closes after acting.
-                if (!m_pinned && (m_state == State::Open || m_state == State::Opening)) {
-                    BeginClose();
-                }
             }
             return 0;
         }
@@ -511,7 +546,7 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(),
-                                       m_pinned);
+                                       m_pinned, m_hoveredControl == kPinControlId);
             EndPaint(hwnd, &ps);
             return 0;
         }
