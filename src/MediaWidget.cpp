@@ -339,7 +339,8 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
                 break;
             }
         }
-        return discard();
+        discard();
+        return;
     }
 
     discard();
