@@ -5,10 +5,10 @@ namespace {
 constexpr float kPaddingX = 18.0f;
 constexpr float kRowHeight = 44.0f;
 constexpr const wchar_t* kLabels[] = {L"Open Notepad", L"Open Calculator", L"Show Desktop"};
-constexpr int kRowCount = 3;
-// Written as a numeric code point (not a literal character in the source
-// file) to avoid depending on the compiler's source-file encoding detection.
-constexpr wchar_t kTabGlyph[] = {0x2261, 0}; // U+2261 IDENTICAL TO
+// U+2261 IDENTICAL TO, written as a numeric code point (not a literal
+// character in the source file) to avoid depending on the compiler's
+// source-file encoding detection.
+constexpr wchar_t kTabGlyph[] = {0x2261, 0};
 } // namespace
 
 const wchar_t* QuickActionsWidget::TabGlyph() const {
@@ -27,7 +27,7 @@ void QuickActionsWidget::Draw(IPanelPainter& painter, float width, float /*conte
     for (int i = 0; i < kRowCount; ++i) {
         float y = static_cast<float>(i) * kRowHeight;
         D2D1_RECT_F rect = D2D1::RectF(kPaddingX, y, width - kPaddingX, y + kRowHeight);
-        painter.DrawRow(rect, kLabels[i], i == m_hovered);
+        painter.DrawRow(rect, kLabels[i], i == m_hovered || i == m_focused);
     }
 }
 
@@ -50,4 +50,37 @@ void QuickActionsWidget::Activate(int controlId, HWND /*ownerHwnd*/) {
         MessageBoxW(nullptr, L"Windows could not complete this action.", L"EdgeDeck",
                     MB_ICONERROR | MB_OK | MB_TOPMOST);
     }
+}
+
+std::wstring QuickActionsWidget::AccessibleSummary() const { return L"Quick Actions."; }
+
+std::wstring QuickActionsWidget::AccessibleControlText(int controlId) const {
+    if (controlId < 0 || controlId >= kRowCount) return {};
+    return kLabels[controlId];
+}
+
+bool QuickActionsWidget::OnKeyDown(UINT key, int focusedControl) {
+    switch (key) {
+        case VK_UP:
+            m_focused = (focusedControl <= 0) ? kRowCount - 1 : focusedControl - 1;
+            break;
+        case VK_DOWN:
+            m_focused = (focusedControl < 0 || focusedControl >= kRowCount - 1) ? 0
+                                                                                 : focusedControl + 1;
+            break;
+        case VK_HOME:
+            m_focused = 0;
+            break;
+        case VK_END:
+            m_focused = kRowCount - 1;
+            break;
+        case VK_SPACE:
+        case VK_RETURN:
+            if (focusedControl >= 0) Activate(focusedControl, nullptr);
+            return true;
+        default:
+            return false;
+    }
+    m_hovered = m_focused;
+    return true;
 }

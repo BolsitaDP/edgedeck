@@ -1,7 +1,9 @@
 #pragma once
 
 #include <windows.h>
+
 #include <vector>
+
 #include "PanelWidget.h"
 
 // The user-configurable subset of a tab's layout. Tab's own TabConfig also
@@ -15,11 +17,44 @@ struct TabSettings {
     float panelWidth = 300.0f;
 };
 
+// Range limits, in one place so the settings UI, the loader and Tab all agree.
+// A hand-edited or truncated config file goes through exactly the same
+// clamping as the UI, so it can no longer ask for a negative width or a
+// position off the top of the screen.
+namespace ConfigLimits {
+constexpr float kMinTabWidth = 12.0f;
+constexpr float kMaxTabWidth = 60.0f;
+constexpr float kMinTabHeight = 40.0f;
+constexpr float kMaxTabHeight = 200.0f;
+constexpr float kMinPanelWidth = 180.0f;
+constexpr float kMaxPanelWidth = 520.0f;
+
+inline void Clamp(TabSettings& s) {
+    if (!(s.verticalRatio >= 0.0f)) s.verticalRatio = 0.5f; // also catches NaN
+    if (s.verticalRatio > 1.0f) s.verticalRatio = 1.0f;
+    if (!(s.tabWidth >= kMinTabWidth)) s.tabWidth = 26.0f;
+    if (s.tabWidth > kMaxTabWidth) s.tabWidth = kMaxTabWidth;
+    if (!(s.tabHeight >= kMinTabHeight)) s.tabHeight = 76.0f;
+    if (s.tabHeight > kMaxTabHeight) s.tabHeight = kMaxTabHeight;
+    if (!(s.panelWidth >= kMinPanelWidth)) s.panelWidth = 300.0f;
+    if (s.panelWidth > kMaxPanelWidth) s.panelWidth = kMaxPanelWidth;
+}
+} // namespace ConfigLimits
+
 // Tiny hand-rolled key=value file under %LOCALAPPDATA%\EdgeDeck\ - no JSON
 // library, written only when the user hits Save in the settings window.
 namespace Config {
 
+// Returns the saved tabs, or a default set if there is no readable file.
+// Every entry is clamped through ConfigLimits::Clamp before it is returned.
 std::vector<TabSettings> LoadOrDefault();
+
+// Written to a sibling temp file and swapped in atomically, so a crash or a
+// full disk can never leave a half-written file that later loads as "one tab
+// instead of three". Returns false if the file could not be committed.
 bool Save(const std::vector<TabSettings>& tabs);
+
+// Absolute path of the config file, or empty if %LOCALAPPDATA% is unusable.
+std::wstring FilePath();
 
 } // namespace Config

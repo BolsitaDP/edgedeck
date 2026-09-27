@@ -1,6 +1,9 @@
 #pragma once
 
 #include <windows.h>
+
+#include "AsyncResult.h"
+
 #include <string>
 #include <vector>
 
@@ -24,17 +27,25 @@ enum class Status {
     NetworkError,
 };
 
-struct Result {
+struct Result : AsyncEnvelope {
     Status status = Status::NetworkError;
     std::wstring trackKey; // "Artist - Title", used for caching and display
     std::vector<Line> lines;
     int positionMs = 0; // local playback position at fetch time
 };
 
+// Parses LRC text ("[mm:ss.xx]line", repeatable and multi-timestamp tags) into
+// sorted, timestamped lines. Exposed for tests; not used outside this module at
+// runtime.
+std::vector<Line> ParseLrc(const std::wstring& lrc);
+
 // Checks a local cache (keyed by title/artist - zero network cost on a hit)
-// before querying LRCLIB. Runs entirely on a background thread-pool job
-// kicked off by the panel opening; posts a `Result*` back via
-// notifyMessage/wParam. The receiver owns it and must delete it.
-void FetchCurrentLyrics(HWND notifyWindow, UINT notifyMessage);
+// before querying LRCLIB, and records negative hits too, so a track that has no
+// synced lyrics is not re-requested on every single panel open. Runs entirely
+// on a background thread-pool job kicked off by the panel opening; posts a
+// Result* back to notifyWindow as notifyMessage, taking ownership either way
+// (see PostOrDelete). The caller stamps the envelope with its in-flight
+// `requestId`.
+void FetchCurrentLyrics(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId);
 
 } // namespace LrcLyrics
