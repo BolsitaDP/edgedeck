@@ -31,6 +31,21 @@
 // and is it still current?" before touching any state.
 // ---------------------------------------------------------------------------
 
+// What an envelope actually carries. A widget that forwards one message id for
+// more than one job (LyricsWidget reuses one for both the sampled track and the
+// "something changed" ping) cannot tell the payloads apart by message alone, and
+// guessing turns a bare notification into a read past the end of the object. The
+// receiver checks this before it casts.
+enum class AsyncKind : int {
+    Notification = 0, // "re-read what you show"; no payload past the envelope
+    MediaSessions,
+    MediaCommand,
+    NowPlaying,
+    Monitors,
+    BrightnessWrite,
+    Lyrics,
+};
+
 struct AsyncEnvelope {
     // Monotonic, process-wide, never reused. Assigned by NextRequestId() at
     // the moment the job is launched and echoed back untouched.
@@ -40,6 +55,14 @@ struct AsyncEnvelope {
     // job: MediaControls::Result, LrcLyrics::Status, a bool for a DDC/CI
     // write, etc. Generic here so the envelope needs no knowledge of them.
     int code = 0;
+
+    // Which concrete type this really is, so a receiver never has to infer it
+    // from the message id. A virtual function rather than a data member on
+    // purpose: a `kind` field redeclared in a derived struct would *hide* the
+    // base one, so every read through an AsyncEnvelope* would silently see the
+    // base default and every widget would drop every result. Overriding cannot
+    // be got wrong that way.
+    virtual AsyncKind Kind() const { return AsyncKind::Notification; }
 
     virtual ~AsyncEnvelope() = default;
 };

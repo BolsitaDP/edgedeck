@@ -76,7 +76,7 @@ void LyricsWidget::OnPanelOpening(HWND ownerHwnd) {
     // the panel re-fetches the moment the user skips, without a refresh ever
     // being requested by hand.
     if (!m_subscription) {
-        m_subscription = MediaControls::SubscribeToChanges(ownerHwnd, kNowPlayingMessage);
+        m_subscription = MediaControls::SubscribeToChanges(ownerHwnd, kChangedMessage);
     }
 
     if (m_fetchRequestId != 0) return; // one lookup at a time
@@ -123,7 +123,18 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     if (!envelope) return;
     auto discard = [&] { delete envelope; };
 
+    if (message == kChangedMessage) {
+        // Bare notification: take a fresh sample and let the handler below decide
+        // whether the track actually changed.
+        if (m_owner && m_nowPlayingRequestId == 0) {
+            m_nowPlayingRequestId = m_requests.Begin();
+            MediaControls::QueryNowPlaying(m_owner, kNowPlayingMessage, m_nowPlayingRequestId);
+        }
+        return discard();
+    }
+
     if (message == kFetchMessage) {
+        if (envelope->Kind() != AsyncKind::Lyrics) return discard();
         auto* result = static_cast<LrcLyrics::Result*>(envelope);
         if (!m_requests.Accept(result->requestId)) return discard();
         m_fetchRequestId = 0;
@@ -137,11 +148,11 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     }
 
     if (message == kNowPlayingMessage) {
+        if (envelope->Kind() != AsyncKind::NowPlaying) return discard();
         auto* now = static_cast<MediaControls::NowPlaying*>(envelope);
 
-        // Both the tick sample and the manager's change event arrive on this
-        // message; neither carries a request id we recognise in the tick case,
-        // so the tracker is only consulted for the fetch it owns.
+        // A tick sample carries a request id we recognise; a change event no
+        // longer reaches here at all, having been split off above.
         if (m_nowPlayingRequestId != 0) {
             if (!m_requests.Accept(now->requestId)) return discard();
             m_nowPlayingRequestId = 0;

@@ -28,6 +28,7 @@ enum class Status {
 };
 
 struct Result : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::Lyrics; }
     Status status = Status::NetworkError;
     std::wstring trackKey; // "Artist - Title", used for caching and display
     std::vector<Line> lines;

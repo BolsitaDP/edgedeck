@@ -157,8 +157,12 @@ void VolumeWidget::Refresh() {
 
 void VolumeWidget::OnPanelOpening(HWND /*ownerHwnd*/) { Refresh(); }
 
-void VolumeWidget::OnPanelVisibilityChanged(bool visible) {
-    if (visible) Refresh();
+void VolumeWidget::OnPanelVisibilityChanged(bool) {
+    // Deliberately does nothing. OnPanelOpening already listed the endpoints a
+    // fraction of a second before the slide finished, and replacing every Core
+    // Audio handle again at that point churns the whole device collection to
+    // learn nothing new. Endpoints appearing or disappearing is a rare event
+    // next to a slide; OnTick is what keeps the levels honest in the meantime.
 }
 
 void VolumeWidget::OnTick() {

@@ -45,6 +45,11 @@ public:
     static constexpr UINT kFetchMessage = kWidgetMessageFirst + 21;
     static constexpr UINT kNowPlayingMessage = kWidgetMessageFirst + 22;
 
+    // A separate id from kNowPlayingMessage, deliberately. The change
+    // subscription posts a bare AsyncEnvelope; routing it through the
+    // NowPlaying handler made the handler read a NowPlaying that was not there.
+    static constexpr UINT kChangedMessage = kWidgetMessageFirst + 23;
+
 private:
     enum class State { Loading, Ready, Empty };
 
