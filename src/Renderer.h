@@ -83,8 +83,8 @@ public:
     // Renders the whole surface. Returns false if the target could not be built.
     bool Composite();
 
-    // Draws the small edge tab. w/h/radius are logical (96-DPI) units.
-    void DrawTab(bool hovered, float w, float h, float radius, const wchar_t* glyph);
+    // Draws the small edge tab. w/h are logical (96-DPI) units.
+    void DrawTab(bool hovered, float w, float h, const wchar_t* glyph);
 
     // Draws the panel chrome (title + pin glyph + divider), then delegates
     // the content area to the widget via IPanelPainter.
