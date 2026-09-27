@@ -213,7 +213,7 @@ void Tab::Relayout() {
     ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
                        m_config.cornerRadius * m_dpiScale);
 
-    m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight, m_config.cornerRadius,
+    m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
                           m_widget ? m_widget->TabGlyph() : L"?");
     if (panelOpen) DrawPanelSurface();
     UpdateTickTimer();
@@ -523,7 +523,7 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
-                                  m_config.cornerRadius, m_widget ? m_widget->TabGlyph() : L"?");
+                                  m_widget ? m_widget->TabGlyph() : L"?");
             EndPaint(hwnd, &ps);
             return 0;
         }

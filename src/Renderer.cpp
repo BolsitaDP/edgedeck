@@ -416,7 +416,9 @@ void Renderer::FillRoundedPanel(float w, float h, float /*radius*/, D2D1_COLOR_F
     m_target->FillRectangle(D2D1::RectF(0.0f, 0.0f, w, h), brush.Get());
 }
 
-void Renderer::DrawTab(bool hovered, float w, float h, float radius, const wchar_t* glyph) {
+// No radius parameter: the rounded shape comes from the window region (see the
+// note on the class), so the surface itself is a plain rectangle.
+void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
     if (!EnsureTarget()) return;
 
     // Re-read on every paint: the user can switch between light and dark, or turn
