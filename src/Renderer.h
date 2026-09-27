@@ -30,21 +30,43 @@ inline D2D1_RECT_F PinButtonRect(float panelWidth) {
 // can change while the app runs, so it is re-read on WM_SETTINGCHANGE rather
 // than hardcoded - and high contrast takes over the colours entirely, because a
 // hand-picked background is exactly what high contrast exists to replace.
+//
+// Current() returns a cached copy. The previous version queried the registry and
+// SystemParametersInfo on every single paint, which is a synchronising disk-backed
+// call roughly fifteen times per animation frame per tab. Refresh() does the real
+// work and is driven by the theme-related window messages instead, so the cost is
+// paid once per actual change and never in the paint path.
 struct PanelTheme {
     bool highContrast = false;
     bool dark = true;
 
-    D2D1_COLOR_F panelBg{};
-    D2D1_COLOR_F tabBg{};
-    D2D1_COLOR_F tabHoverBg{};
+    D2D1_COLOR_F panelBg{};   // the panel surface
+    D2D1_COLOR_F tabBg{};     // the rail, unhovered
+    D2D1_COLOR_F tabHoverBg{};// hovered: matches panelBg so the panel reads as
+                              // growing out of the tab
     D2D1_COLOR_F rowHoverBg{};
     D2D1_COLOR_F textPrimary{};
     D2D1_COLOR_F textSecondary{};
     D2D1_COLOR_F divider{};
-    D2D1_COLOR_F controlBg{};
-    D2D1_COLOR_F accent{};
+    D2D1_COLOR_F controlBg{}; // slider track, button fill
+    D2D1_COLOR_F accent{};    // the user's Windows accent, legible on panelBg
 
-    static PanelTheme Current();
+    // A one-pixel inner outline. SetWindowRgn is a 1-bit mask, so the window edge
+    // is aliased against whatever is behind it; a deliberate border reads as a
+    // designed edge and hides the staircase.
+    D2D1_COLOR_F edge{};
+
+    // The cached palette. Cheap by construction - a struct copy, no syscalls.
+    static const PanelTheme& Current();
+
+    // Re-reads the system state. Returns true if anything actually changed, so
+    // callers can skip a relayout when the user merely moved a window around.
+    static bool Refresh();
+
+    // Same colours, different role, so a renderer can react to a palette change
+    // without comparing floats.
+    bool operator==(const PanelTheme& other) const;
+    bool operator!=(const PanelTheme& other) const { return !(*this == other); }
 };
 
 // Thin Direct2D + DirectWrite wrapper. One instance is owned per top-level
@@ -90,6 +112,9 @@ public:
     // the content area to the widget via IPanelPainter.
     void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered);
 
+    // 1px inner outline. Called after Clear in both DrawTab and DrawPanel.
+    void DrawEdge(float w, float h);
+
     // IPanelPainter
     void DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) override;
     void DrawLabel(D2D1_RECT_F rect, const wchar_t* text, bool muted) override;
@@ -112,6 +137,9 @@ private:
     void DiscardTarget();
     void ResetBrushes();
     bool EnsureBrushes();
+
+    // Picks up a new palette and drops the brushes that baked in the old one.
+    void AdoptTheme();
     void FillRoundedPanel(float w, float h, float radius, D2D1_COLOR_F color);
     void DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered);
     ID2D1SolidColorBrush* DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled);
@@ -132,4 +160,5 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_hoverBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_controlBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_accentBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_edgeBrush;
 };

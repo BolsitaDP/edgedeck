@@ -517,7 +517,13 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_THEMECHANGED:
             // Theme, contrast and DPI changes all land here, and all of them
             // change the palette or the metrics the layout was computed from.
-            Relayout();
+            //
+            // The palette refresh lives here rather than in the paint path: it is
+            // a registry read plus a SystemParametersInfo, and doing it per paint
+            // meant doing it about fifteen times per animation frame. Refresh()
+            // reports whether anything actually changed, so a settings change that
+            // does not affect the palette skips the relayout entirely.
+            if (PanelTheme::Refresh()) Relayout();
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
@@ -707,7 +713,10 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_SETTINGCHANGE:
         case WM_SYSCOLORCHANGE:
         case WM_THEMECHANGED:
-            Relayout();
+            // The tab window handles these too, and whichever one is reached
+            // first does the single refresh; the other sees no change and skips
+            // its relayout.
+            if (PanelTheme::Refresh()) Relayout();
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;

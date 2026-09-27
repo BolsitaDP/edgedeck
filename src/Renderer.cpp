@@ -231,21 +231,134 @@ private:
 // Theme
 // ---------------------------------------------------------------------------
 
-PanelTheme PanelTheme::Current() {
+namespace {
+
+// The palette Windows itself uses, so the panel looks like part of the desktop
+// rather than a foreign object pasted onto it.
+//
+// Windows 11's "Mica" and "Acrylic" materials blur whatever is behind the
+// window, which a layered window with a 1-bit region cannot reproduce. What the
+// system falls back to when the material is unavailable is a flat set of solid
+// colours, and those are the values below - they are the same greys the
+// Settings app and File Explorer land on with materials off, so a user who has
+// turned materials off still sees their panel match the rest of Windows.
+//
+// Dark greys are the layered/elevated ramp (#202020, #2B2B2B, #333333); light
+// uses the Mica-fallback neutral with white cards on top.
+constexpr float kDarkPanel = 32.0f / 255.0f;   // #202020
+constexpr float kDarkRail = 26.0f / 255.0f;    // #1A1A1A, one step below the panel
+constexpr float kDarkControl = 51.0f / 255.0f; // #333333
+constexpr float kDarkText = 255.0f / 255.0f;   // #FFFFFF
+constexpr float kDarkTextSecondary = 197.0f / 255.0f; // #C5C5C5
+
+constexpr float kLightPanel = 243.0f / 255.0f; // #F3F3F3, Mica fallback
+constexpr float kLightRail = 236.0f / 255.0f;  // #ECECEC
+constexpr float kLightControl = 225.0f / 255.0f; // #E1E1E1
+constexpr float kLightText = 27.0f / 255.0f;   // #1B1B1B
+constexpr float kLightTextSecondary = 94.0f / 255.0f; // #5E5E5E
+
+// Relative luminance, for deciding whether the accent is readable on the panel.
+float Luminance(D2D1_COLOR_F c) {
+    return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+}
+
+// Mixes towards white (or black) until the result clears `target` contrast
+// against `against`.
+//
+// This matters because the accent is the user's choice and can be anything -
+// including a dark blue that would be invisible as a filled slider on a dark
+// panel. Windows lightens the accent for dark mode for exactly this reason; this
+// is the same idea, computed rather than taken from a second registry value that
+// is not always present.
+D2D1_COLOR_F EnsureContrast(D2D1_COLOR_F accent, D2D1_COLOR_F against, float target) {
+    // Contrast ratio between two relative luminances.
+    auto ratio = [&](float a, float b) {
+        const float hi = std::max(a, b);
+        const float lo = std::min(a, b);
+        return (hi + 0.05f) / (lo + 0.05f);
+    };
+
+    const float toward = Luminance(against) < 0.5f ? 1.0f : 0.0f;
+    D2D1_COLOR_F result = accent;
+    // 24 steps is enough to reach white from any starting point while changing
+    // the hue as little as possible; each step moves 1/24 of the way.
+    for (int i = 0; i < 24; ++i) {
+        if (ratio(Luminance(result), Luminance(against)) >= target) break;
+        const float step = static_cast<float>(i + 1) / 24.0f;
+        result = D2D1::ColorF(accent.r + (toward - accent.r) * step,
+                              accent.g + (toward - accent.g) * step,
+                              accent.b + (toward - accent.b) * step, 1.0f);
+    }
+    return result;
+}
+
+// The user's accent colour, as Windows stores it: 0x00BBGGRR under
+// Themes\\Personalize. Absent on some builds, in which case the modern default
+// blue is a better guess than anything invented here.
+D2D1_COLOR_F SystemAccent(bool dark) {
+    DWORD bgr = 0;
+    DWORD bytes = sizeof(bgr);
+    const LSTATUS rc =
+        RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AccentColor", RRF_RT_REG_DWORD, nullptr, &bgr, &bytes);
+
+    if (rc != ERROR_SUCCESS) {
+        return dark ? D2D1::ColorF(0.376f, 0.804f, 1.0f, 1.0f)    // #60CDFF
+                    : D2D1::ColorF(0.0f, 0.475f, 0.831f, 1.0f);  // #0079D1
+    }
+    return D2D1::ColorF(static_cast<float>((bgr >> 16) & 0xFF) / 255.0f,
+                        static_cast<float>((bgr >> 8) & 0xFF) / 255.0f,
+                        static_cast<float>(bgr & 0xFF) / 255.0f, 1.0f);
+}
+
+PanelTheme g_theme;
+bool g_themeValid = false;
+
+} // namespace
+
+bool PanelTheme::operator==(const PanelTheme& other) const {
+    auto same = [](D2D1_COLOR_F a, D2D1_COLOR_F b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    };
+    return highContrast == other.highContrast && dark == other.dark &&
+           same(panelBg, other.panelBg) && same(tabBg, other.tabBg) &&
+           same(tabHoverBg, other.tabHoverBg) && same(rowHoverBg, other.rowHoverBg) &&
+           same(textPrimary, other.textPrimary) && same(textSecondary, other.textSecondary) &&
+           same(divider, other.divider) && same(controlBg, other.controlBg) &&
+           same(accent, other.accent) && same(edge, other.edge);
+}
+
+const PanelTheme& PanelTheme::Current() {
+    if (!g_themeValid) Refresh();
+    return g_theme;
+}
+
+bool PanelTheme::Refresh() {
     PanelTheme t;
 
     HIGHCONTRASTW hc{};
     hc.cbSize = sizeof(hc);
-    t.highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) != 0;
+    // The return value only says the call worked, which it always does; whether
+    // high contrast is actually *on* is a bit in the structure it filled in.
+    // Testing the return value instead pins the app permanently to the
+    // GetSysColor() branch, which follows the light system colours and is why
+    // the panel ignored the user's dark mode setting.
+    t.highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) != 0 &&
+                     (hc.dwFlags & HCF_HIGHCONTRASTON) != 0;
 
-    // Dark when the desktop or apps are in dark mode. The registry is the only
-    // synchronous answer available to a classic Win32 process; re-reading it on
-    // WM_SETTINGCHANGE is enough for a palette refresh.
+    // AppsUseLightTheme is the setting that governs how a classic Win32 app is
+    // expected to look, which is exactly what this is.
+    // pcbData must point at a real DWORD. Passing nullptr for it makes
+    // RegGetValueW fail with ERROR_INVALID_PARAMETER, which - because the result
+    // is a silent fallback to the light palette - meant this app had been
+    // ignoring the user's dark mode setting entirely.
     DWORD appsUseLightTheme = 1;
+    DWORD themeBytes = sizeof(appsUseLightTheme);
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                      L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &appsUseLightTheme,
-                     nullptr) != ERROR_SUCCESS) {
+                     &themeBytes) != ERROR_SUCCESS) {
         appsUseLightTheme = 1;
     }
     t.dark = (appsUseLightTheme == 0);
@@ -253,41 +366,53 @@ PanelTheme PanelTheme::Current() {
     if (t.highContrast) {
         // Whatever colours the user chose, honour them: use the system
         // window/button/text colours rather than inventing a palette of our own,
-        // which is exactly what high contrast exists to prevent.
+        // which is exactly what high contrast exists to prevent. Note that the
+        // accent is the system highlight colour, not the personalisation one -
+        // the whole point of the mode is that the user's choices win.
         t.panelBg = D2D1::ColorF(GetSysColor(COLOR_WINDOW), 1.0f);
         t.tabBg = D2D1::ColorF(GetSysColor(COLOR_BTNFACE), 1.0f);
-        t.tabHoverBg = D2D1::ColorF(GetSysColor(COLOR_BTNHIGHLIGHT), 1.0f);
+        t.tabHoverBg = D2D1::ColorF(GetSysColor(COLOR_WINDOW), 1.0f);
         t.rowHoverBg = D2D1::ColorF(GetSysColor(COLOR_HIGHLIGHT), 1.0f);
         t.textPrimary = D2D1::ColorF(GetSysColor(COLOR_WINDOWTEXT), 1.0f);
-        t.textSecondary = D2D1::ColorF(GetSysColor(COLOR_GRAYTEXT), 1.0f);
-        t.divider = D2D1::ColorF(GetSysColor(COLOR_WINDOWTEXT), 0.35f);
+        t.textSecondary = D2D1::ColorF(GetSysColor(COLOR_WINDOWTEXT), 1.0f);
+        t.divider = D2D1::ColorF(GetSysColor(COLOR_WINDOWTEXT), 0.54f);
         t.controlBg = D2D1::ColorF(GetSysColor(COLOR_BTNFACE), 1.0f);
         t.accent = D2D1::ColorF(GetSysColor(COLOR_HIGHLIGHT), 1.0f);
-        return t;
+        t.edge = D2D1::ColorF(GetSysColor(COLOR_WINDOWTEXT), 0.75f);
+    } else if (t.dark) {
+        t.panelBg = D2D1::ColorF(kDarkPanel, kDarkPanel, kDarkPanel, 1.0f);
+        t.tabBg = D2D1::ColorF(kDarkRail, kDarkRail, kDarkRail, 1.0f);
+        t.tabHoverBg = t.panelBg;
+        t.rowHoverBg = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.06f);
+        t.textPrimary = D2D1::ColorF(kDarkText, kDarkText, kDarkText, 1.0f);
+        t.textSecondary = D2D1::ColorF(kDarkTextSecondary, kDarkTextSecondary, kDarkTextSecondary, 1.0f);
+        t.divider = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.09f);
+        t.controlBg = D2D1::ColorF(kDarkControl, kDarkControl, kDarkControl, 1.0f);
+        t.accent = SystemAccent(true);
+        t.edge = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f);
+    } else {
+        t.panelBg = D2D1::ColorF(kLightPanel, kLightPanel, kLightPanel, 1.0f);
+        t.tabBg = D2D1::ColorF(kLightRail, kLightRail, kLightRail, 1.0f);
+        t.tabHoverBg = t.panelBg;
+        t.rowHoverBg = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.05f);
+        t.textPrimary = D2D1::ColorF(kLightText, kLightText, kLightText, 1.0f);
+        t.textSecondary =
+            D2D1::ColorF(kLightTextSecondary, kLightTextSecondary, kLightTextSecondary, 1.0f);
+        t.divider = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f);
+        t.controlBg = D2D1::ColorF(kLightControl, kLightControl, kLightControl, 1.0f);
+        t.accent = SystemAccent(false);
+        t.edge = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.14f);
     }
 
-    if (t.dark) {
-        t.panelBg = D2D1::ColorF(0.098f, 0.098f, 0.098f, 1.0f);
-        t.tabBg = D2D1::ColorF(0.145f, 0.145f, 0.145f, 1.0f);
-        t.tabHoverBg = D2D1::ColorF(0.20f, 0.20f, 0.20f, 1.0f);
-        t.rowHoverBg = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.07f);
-        t.textPrimary = D2D1::ColorF(0.93f, 0.93f, 0.93f, 1.0f);
-        t.textSecondary = D2D1::ColorF(0.68f, 0.68f, 0.68f, 1.0f);
-        t.divider = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f);
-        t.controlBg = D2D1::ColorF(0.20f, 0.20f, 0.20f, 1.0f);
-        t.accent = D2D1::ColorF(0.30f, 0.62f, 0.98f, 1.0f);
-    } else {
-        t.panelBg = D2D1::ColorF(0.97f, 0.97f, 0.97f, 1.0f);
-        t.tabBg = D2D1::ColorF(0.91f, 0.91f, 0.91f, 1.0f);
-        t.tabHoverBg = D2D1::ColorF(0.84f, 0.84f, 0.84f, 1.0f);
-        t.rowHoverBg = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.06f);
-        t.textPrimary = D2D1::ColorF(0.11f, 0.11f, 0.11f, 1.0f);
-        t.textSecondary = D2D1::ColorF(0.42f, 0.42f, 0.42f, 1.0f);
-        t.divider = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.12f);
-        t.controlBg = D2D1::ColorF(0.90f, 0.90f, 0.90f, 1.0f);
-        t.accent = D2D1::ColorF(0.16f, 0.47f, 0.85f, 1.0f);
-    }
-    return t;
+    // The accent sits on the panel, on the slider track and on the progress bar.
+    // 3:1 is the WCAG threshold for non-text UI, and is also roughly where a
+    // filled shape stops reading as a shape.
+    t.accent = EnsureContrast(t.accent, t.panelBg, 3.0f);
+
+    const bool changed = !g_themeValid || !(g_theme == t);
+    g_theme = t;
+    g_themeValid = true;
+    return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +435,7 @@ void Renderer::ResetBrushes() {
     m_hoverBrush.Reset();
     m_controlBrush.Reset();
     m_accentBrush.Reset();
+    m_edgeBrush.Reset();
 }
 
 bool Renderer::AttachToWindow(HWND hwnd, bool rounded) {
@@ -383,6 +509,15 @@ void Renderer::Present() {
     // next EnsureTarget builds a fresh one.
 }
 
+void Renderer::AdoptTheme() {
+    const PanelTheme& latest = PanelTheme::Current();
+    if (latest == m_theme) return;
+    m_theme = latest;
+    // The brushes bake in the old colours, so a palette change has to drop them
+    // or the panel keeps painting with the previous theme's text and accents.
+    ResetBrushes();
+}
+
 bool Renderer::EnsureBrushes() {
     if (!m_target) return false;
     auto make = [&](ComPtr<ID2D1SolidColorBrush>& brush, D2D1_COLOR_F color) {
@@ -394,7 +529,8 @@ bool Renderer::EnsureBrushes() {
     return make(m_primaryTextBrush, m_theme.textPrimary) &&
            make(m_secondaryTextBrush, m_theme.textSecondary) &&
            make(m_dividerBrush, m_theme.divider) && make(m_hoverBrush, m_theme.rowHoverBg) &&
-           make(m_controlBrush, m_theme.controlBg) && make(m_accentBrush, m_theme.accent);
+           make(m_controlBrush, m_theme.controlBg) && make(m_accentBrush, m_theme.accent) &&
+           make(m_edgeBrush, m_theme.edge);
 }
 
 bool Renderer::Composite() {
@@ -421,21 +557,33 @@ void Renderer::FillRoundedPanel(float w, float h, float /*radius*/, D2D1_COLOR_F
 void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
     if (!EnsureTarget()) return;
 
-    // Re-read on every paint: the user can switch between light and dark, or turn
-    // high contrast on, while the app is running, and a tab is cheap to repaint.
-    m_theme = PanelTheme::Current();
+    // The palette itself is cached and refreshed from the theme window messages;
+    // this only picks up a change that has already happened.
+    AdoptTheme();
+    if (!EnsureBrushes()) return;
 
     m_target->BeginDraw();
     m_target->SetTransform(D2D1::Matrix3x2F::Identity());
     m_target->Clear(hovered ? m_theme.tabHoverBg : m_theme.tabBg);
+    DrawEdge(w, h);
 
+    // Hovered, the tab is the same surface as the panel it opens, so the panel
+    // reads as sliding out of the tab rather than appearing next to it.
     ComPtr<ID2D1SolidColorBrush> brush;
-    if (SUCCEEDED(m_target->CreateSolidColorBrush(m_theme.textSecondary, brush.GetAddressOf()))) {
+    if (SUCCEEDED(m_target->CreateSolidColorBrush(
+            hovered ? m_theme.textPrimary : m_theme.textSecondary, brush.GetAddressOf()))) {
         m_target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), GlyphFormat(),
                            D2D1::RectF(0.0f, 0.0f, w, h), brush.Get());
     }
 
     if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) DiscardTarget();
+}
+
+// The 1px inner outline, drawn inset by half a pixel so the stroke lands fully
+// inside the window region instead of straddling its aliased edge.
+void Renderer::DrawEdge(float w, float h) {
+    if (!m_edgeBrush || w <= 1.0f || h <= 1.0f) return;
+    m_target->DrawRectangle(D2D1::RectF(0.5f, 0.5f, w - 0.5f, h - 0.5f), m_edgeBrush.Get(), 1.0f);
 }
 
 void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered) {
@@ -454,19 +602,24 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
     if (clientWidth > 0.0f) w = clientWidth;
     if (clientHeight > 0.0f) h = clientHeight;
 
-    m_theme = PanelTheme::Current();
+    AdoptTheme();
     if (!EnsureBrushes()) return;
 
     m_target->BeginDraw();
     m_target->SetTransform(D2D1::Matrix3x2F::Identity());
     m_target->Clear(m_theme.panelBg);
+    DrawEdge(w, h);
 
     const D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(w);
     const D2D1_RECT_F titleRect = D2D1::RectF(PanelLayout::PaddingX, 0.0f, pinRect.left - 6.0f,
                                               PanelLayout::ChromeHeight);
     const wchar_t* title = widget ? widget->PanelTitle() : L"EdgeDeck";
+
+    // The title is chrome, not content, so it is drawn in the secondary tone. The
+    // rows below then carry the brightest text on the panel and the eye lands on
+    // the data first, which is the whole point of the panel.
     m_target->DrawText(title, static_cast<UINT32>(wcslen(title)), TitleFormat(), titleRect,
-                       m_primaryTextBrush.Get());
+                       m_secondaryTextBrush.Get());
 
     DrawPin(pinRect, pinned, pinHovered);
 
