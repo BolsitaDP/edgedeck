@@ -40,7 +40,21 @@ struct DeviceInfo {
 // Enumerates active output endpoints. The default device is listed first.
 // Returns false only if the audio service could not be reached at all, in which
 // case `out` is left empty.
+//
+// This is the expensive one: it resolves each endpoint's friendly name, and that
+// is a property-store lookup which crosses a process boundary for endpoints an app
+// owns. Names are cached by endpoint id, so this is slow the first time a device
+// is seen and cheap afterwards. Use RefreshStates for anything on a timer.
 bool RefreshDevices(std::vector<DeviceInfo>& out);
+
+// Updates the percent and muted of each entry in place, matching by endpoint id,
+// in a single enumeration.
+//
+// This is the per-tick path, so it deliberately does no name lookups and opens
+// each endpoint once. Querying per device instead would re-enumerate the whole
+// collection for every row, which turns a two-times-a-second poll into dozens of
+// COM round trips a second.
+bool RefreshStates(std::vector<DeviceInfo>& devices);
 
 // Re-reads one device's current volume and mute state into `out`. `out.id` is
 // left as the caller set it; the other fields are overwritten.
