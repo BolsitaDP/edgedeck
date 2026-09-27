@@ -4,7 +4,10 @@
 #include "MediaWidget.h"
 #include "BrightnessWidget.h"
 #include "LyricsWidget.h"
+#include "VolumeWidget.h"
 #include "SettingsWindow.h"
+
+#include <shellapi.h>
 
 #include <algorithm>
 
@@ -12,12 +15,30 @@ namespace {
 const wchar_t kUtilityClassName[] = L"EdgeDeckUtilityWindow";
 constexpr UINT kMenuIdExit = 100;
 constexpr UINT kMenuIdSettings = 101;
+constexpr UINT kTrayId = 102;
+
+// Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
+// with them, and a chord nothing else claims.
+constexpr int kExitHotkeyVk = 'Q';
+
+// The user-configurable subset of a tab's layout, mapped onto Tab's full
+// geometry. Everything TabConfig carries that is not user-facing (corner
+// radius, animation and close timing) keeps its default.
+TabConfig MakeTabConfig(const TabSettings& s) {
+    TabConfig config;
+    config.verticalRatio = s.verticalRatio;
+    config.tabWidth = s.tabWidth;
+    config.tabHeight = s.tabHeight;
+    config.panelWidth = s.panelWidth;
+    return config;
+}
 
 std::unique_ptr<PanelWidget> MakeWidget(WidgetType type) {
     switch (type) {
         case WidgetType::Media: return std::make_unique<MediaWidget>();
         case WidgetType::Brightness: return std::make_unique<BrightnessWidget>();
         case WidgetType::Lyrics: return std::make_unique<LyricsWidget>();
+        case WidgetType::Volume: return std::make_unique<VolumeWidget>();
         default: return std::make_unique<QuickActionsWidget>();
     }
 }
@@ -28,10 +49,12 @@ App* App::s_instance = nullptr;
 App::App() = default;
 
 App::~App() {
+    RemoveTrayIcon();
     m_tabs.clear();
     if (m_utilityHwnd && IsWindow(m_utilityHwnd)) {
         DestroyWindow(m_utilityHwnd);
     }
+    Tab::UnregisterClasses();
     s_instance = nullptr;
 }
 
@@ -42,19 +65,16 @@ bool App::Create(HINSTANCE hInstance) {
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
-    return BuildTabsFrom(Config::LoadOrDefault(), hInstance);
+    if (!BuildTabsFrom(Config::LoadOrDefault(), hInstance)) return false;
+    AddTrayIcon();
+    return true;
 }
 
 bool App::BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hInstance) {
     std::vector<std::unique_ptr<Tab>> newTabs;
+    newTabs.reserve(settings.size());
     for (const auto& s : settings) {
-        TabConfig config;
-        config.verticalRatio = s.verticalRatio;
-        config.tabWidth = s.tabWidth;
-        config.tabHeight = s.tabHeight;
-        config.panelWidth = s.panelWidth;
-
-        auto tab = std::make_unique<Tab>(this, config, MakeWidget(s.widgetType));
+        auto tab = std::make_unique<Tab>(this, MakeTabConfig(s), MakeWidget(s.widgetType));
         if (!tab->Create(hInstance)) return false;
         newTabs.push_back(std::move(tab));
     }
@@ -70,14 +90,53 @@ void App::OpenSettings() {
 
     m_settingsWindow = std::make_unique<SettingsWindow>();
     m_settingsWindow->Create(m_hInstance, Config::LoadOrDefault(),
-                              [this](const std::vector<TabSettings>& settings) {
-                                  ApplySettings(settings);
-                              });
+                             [this](const std::vector<TabSettings>& settings) {
+                                 ApplySettings(settings);
+                             });
 }
 
 void App::ApplySettings(const std::vector<TabSettings>& settings) {
-    Config::Save(settings);
-    BuildTabsFrom(settings, m_hInstance);
+    if (!Config::Save(settings)) {
+        // Saving is the one operation whose failure the user would otherwise
+        // never find out about: the tabs would move and then quietly revert on
+        // the next launch.
+        MessageBoxW(nullptr,
+                    L"EdgeDeck could not write its settings file.\n\n"
+                    L"Your changes will apply for this session but will not be kept.",
+                    L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+    }
+
+    // A tab only has to be rebuilt when its widget type changed. Everything
+    // else - size, position, order of the untouched tabs - is applied in place,
+    // so an open or pinned panel, its scroll position and any in-flight async
+    // work all survive the edit. The previous code destroyed and recreated every
+    // tab on each Save, which closed every panel and dropped every pin.
+    if (m_tabs.size() == settings.size()) {
+        bool typesMatch = true;
+        for (size_t i = 0; i < settings.size(); ++i) {
+            if (m_tabs[i]->WidgetType() != settings[i].widgetType) {
+                typesMatch = false;
+                break;
+            }
+        }
+        if (typesMatch) {
+            for (size_t i = 0; i < settings.size(); ++i) {
+                m_tabs[i]->ApplyConfig(MakeTabConfig(settings[i]));
+            }
+            return;
+        }
+    }
+
+    if (!BuildTabsFrom(settings, m_hInstance)) {
+        MessageBoxW(nullptr, L"EdgeDeck could not rebuild its panels. The previous layout is still "
+                            L"in place.",
+                    L"EdgeDeck", MB_ICONERROR | MB_OK | MB_TOPMOST);
+    }
+}
+
+void App::OpenTabByIndex(size_t index) {
+    if (index >= m_tabs.size()) return;
+    m_tabs[index]->RequestOpen();
 }
 
 bool App::CreateUtilityWindow(HINSTANCE hInstance) {
@@ -87,19 +146,58 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
     wc.lpfnWndProc = UtilityProc;
     if (!RegisterClassExW(&wc)) return false;
 
-    // Never shown - exists purely to host the exit hotkey and the tab
-    // context menu (TrackPopupMenu needs some owner HWND for the standard
-    // NOACTIVATE-safe dismiss trick; a hidden window works fine for that,
-    // same technique tray-icon apps use).
+    // Never shown - exists purely to host the exit hotkey, the per-tab openers,
+    // the notification-area icon and the tab context menu (TrackPopupMenu needs
+    // some owner HWND for the standard NOACTIVATE-safe dismiss trick; a hidden
+    // window works fine for that, same technique tray-icon apps use).
     m_utilityHwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kUtilityClassName, L"EdgeDeck", WS_POPUP, 0,
                                      0, 0, 0, nullptr, nullptr, hInstance, nullptr);
     if (!m_utilityHwnd) return false;
 
-    if (!RegisterHotKey(m_utilityHwnd, kExitHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'Q')) {
-        MessageBoxW(nullptr, L"EdgeDeck's exit shortcut (Ctrl+Shift+Alt+Q) is unavailable.",
+    if (!RegisterHotKey(m_utilityHwnd, kExitHotkeyId, MOD_CONTROL | MOD_ALT, kExitHotkeyVk)) {
+        MessageBoxW(nullptr, L"EdgeDeck's exit shortcut (Ctrl+Alt+Q) is unavailable.",
                     L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
     }
+
+    for (int i = 0; i < kOpenHotkeyCount; ++i) {
+        RegisterHotKey(m_utilityHwnd, kOpenHotkeyBase + i, MOD_CONTROL | MOD_ALT, '1' + i);
+    }
     return true;
+}
+
+bool App::AddTrayIcon() {
+    if (!m_utilityHwnd) return false;
+
+    const HINSTANCE instance = m_hInstance;
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = m_utilityHwnd;
+    nid.uID = kTrayId;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.uCallbackMessage = kTrayCallbackMessage;
+    // The app's own icon from the resource script, so the notification area
+    // shows EdgeDeck rather than the generic application glyph.
+    nid.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(kIconIdEdgeDeck));
+    if (!nid.hIcon) {
+        nid.hIcon = static_cast<HICON>(LoadImageW(
+            nullptr, IDI_APPLICATION, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+            GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
+    }
+    wcscpy_s(nid.szTip, L"EdgeDeck");
+
+    m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    return m_trayAdded;
+}
+
+void App::RemoveTrayIcon() {
+    if (!m_trayAdded) return;
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = m_utilityHwnd;
+    nid.uID = kTrayId;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    m_trayAdded = false;
 }
 
 int App::RunMessageLoop() {
@@ -111,8 +209,9 @@ int App::RunMessageLoop() {
         // The settings window is a plain (non-dialog-resource) window built
         // from comctl32 children; IsDialogMessage is what gives it free
         // Tab/arrow/Enter navigation between them without hand-rolled code.
-        HWND settingsHwnd =
-            (s_instance && s_instance->m_settingsWindow) ? s_instance->m_settingsWindow->Hwnd() : nullptr;
+        const HWND settingsHwnd =
+            (s_instance && s_instance->m_settingsWindow) ? s_instance->m_settingsWindow->Hwnd()
+                                                          : nullptr;
         if (settingsHwnd && IsWindow(settingsHwnd) && IsDialogMessage(settingsHwnd, &msg)) {
             continue;
         }
@@ -151,8 +250,13 @@ void App::RequestExit() {
 LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_HOTKEY:
-            if (wParam == kExitHotkeyId && s_instance) {
+            if (!s_instance) break;
+            if (wParam == kExitHotkeyId) {
                 s_instance->RequestExit();
+            } else if (wParam >= kOpenHotkeyBase &&
+                       wParam < kOpenHotkeyBase + kOpenHotkeyCount) {
+                s_instance->OpenTabByIndex(
+                    static_cast<size_t>(wParam - kOpenHotkeyBase));
             }
             return 0;
         case WM_COMMAND:
@@ -163,8 +267,41 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                 s_instance->OpenSettings();
             }
             return 0;
+        case kTrayCallbackMessage: {
+            // Notification-area icon. Left click opens Settings, right click
+            // the menu. This is the safety net: without it, a user whose tabs
+            // are off-screen (a monitor disconnected at the wrong moment) or who
+            // has removed every tab has no way to reach Settings or Exit at all.
+            if (!s_instance) break;
+            if (LOWORD(lParam) == WM_LBUTTONUP || LOWORD(lParam) == WM_LBUTTONDBLCLK) {
+                s_instance->OpenSettings();
+            } else if (LOWORD(lParam) == WM_RBUTTONUP) {
+                HMENU menu = CreatePopupMenu();
+                AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
+                AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
+
+                POINT pt;
+                GetCursorPos(&pt);
+                SetForegroundWindow(hwnd);
+                const UINT cmd = static_cast<UINT>(
+                    TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y,
+                                   0, hwnd, nullptr));
+                PostMessageW(hwnd, WM_NULL, 0, 0);
+                DestroyMenu(menu);
+                if (cmd == kMenuIdSettings) s_instance->OpenSettings();
+                if (cmd == kMenuIdExit) s_instance->RequestExit();
+            }
+            return 0;
+        }
         case WM_DESTROY:
-            if (s_instance) UnregisterHotKey(hwnd, kExitHotkeyId);
+            if (s_instance) {
+                s_instance->RemoveTrayIcon();
+                for (int i = 0; i < kOpenHotkeyCount; ++i) {
+                    UnregisterHotKey(hwnd, kOpenHotkeyBase + i);
+                }
+                UnregisterHotKey(hwnd, kExitHotkeyId);
+            }
             PostQuitMessage(0);
             return 0;
         default:

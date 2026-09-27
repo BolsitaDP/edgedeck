@@ -9,6 +9,7 @@ Requiere Windows 10 versión 1809 o posterior, CMake 3.20+, Visual Studio 2022 B
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
 Ejecuta `build/Release/EdgeDeck.exe`. Es una aplicación de subsistema Windows: no abre consola ni aparece en la barra de tareas.
@@ -18,7 +19,23 @@ Ejecuta `build/Release/EdgeDeck.exe`. Es una aplicación de subsistema Windows: 
 - Pasa el cursor sobre una pestaña para abrir su panel. Mientras el cursor siga sobre la pestaña o su panel, el panel permanece abierto, incluso si haces clic en algo de su interior. Se cierra solo cuando sacas el cursor (tras una breve espera).
 - Cada panel tiene un botón de chincheta arriba a la derecha. Al fijarla (chincheta azul y vertical) el panel queda abierto aunque muevas el mouse fuera o hagas clic en cualquier otro sitio, hasta que vuelvas a pulsarla (chincheta hueca e inclinada).
 - Clic derecho en cualquier pestaña → **Settings...** abre la ventana de configuración: tipo de widget por pestaña, posición vertical, tamaño de la pestaña y del panel, y la casilla **Start with Windows**. Los cambios se aplican al guardar y se escriben en `%LOCALAPPDATA%\EdgeDeck\config.txt`.
-- Clic derecho → **Exit**, o `Ctrl+Shift+Alt+Q` desde cualquier lugar, cierra la aplicación.
+- Clic derecho → **Exit**, o `Ctrl+Alt+Q` desde cualquier lugar, cierra la aplicación.
+- EdgeDeck también vive en el **área de notificación**: clic izquierdo en el icono abre Settings, clic derecho abre el menú con Settings/Exit. Es la vía de escape cuando las pestañas quedan fuera de pantalla (p. ej. desconectas el monitor) o si no tienes ninguna pestaña.
+
+## Teclado
+
+Los paneles nunca roban el foco de la aplicación que estés usando, así que se manejan desde el teclado mientras el puntero está sobre ellos:
+
+| Atajo | Acción |
+|---|---|
+| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Abre y fija la pestaña correspondiente |
+| `Ctrl+Alt+Q` | Salir de EdgeDeck |
+| Flechas | Mover el foco entre controles (izquierda/derecha también ajustan un slider) |
+| Rueda del ratón | Ajustar el control enfocado |
+| `Enter` / `Espacio` | Activar el control enfocado |
+| `Escape` | Desfijar y cerrar el panel |
+
+Los widgets exponen texto accesible para lectores de pantalla (`PanelWidget::AccessibleSummary` y `AccessibleControlText`).
 
 ## Inicio con Windows
 
@@ -27,14 +44,84 @@ La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra
 ## Widgets
 
 - **Quick Actions**: abrir Bloc de notas, abrir Calculadora, mostrar/ocultar el escritorio.
-- **Media (auto-detect)**: una fila por cada app con sesión de reproducción activa en Windows (Spotify, una pestaña de Chrome/Edge, VLC, etc.), cada una con su badge de color, nombre y botones Anterior / Reproducir-Pausa / Siguiente. La lista se actualiza al abrir el panel.
+- **Media (auto-detect)**: una fila por cada app con sesión de reproducción activa en Windows (Spotify, una pestaña de Chrome/Edge, VLC, etc). Cada fila muestra el badge de la app, el nombre, la pista, una barra de progreso y los botones Anterior / Reproducir-Pausa / Siguiente.
+- **Volume**: una fila por cada dispositivo de salida de audio, con slider de volumen y botón de silencio. Arrastrar un slider silenciado lo reactiva, que es lo que se espera del gesto.
 - **Brightness (monitors)**: una fila por monitor con su nombre real y un slider de brillo (clic o arrastre; se aplica al soltar). Usa DDC/CI (API de configuración de monitores de Windows), así que funciona con monitores externos que lo tengan activado; los que no lo soportan muestran "Brightness control not available". Los paneles integrados de portátiles no usan DDC/CI y por ahora no se controlan.
-- **Lyrics**: muestra la letra sincronizada de lo que sea que esté sonando (no solo Spotify - sigue al mismo "reproductor activo" que ya usa Windows para el resto del sistema), centrada en el punto de la canción en que estabas cuando abriste el panel (no sigue la canción en vivo mientras el panel permanece abierto, para no necesitar un timer). No requiere cuenta ni configuración: las letras vienen de [LRCLIB](https://lrclib.net), una base de datos pública y gratuita hecha para esto, sin login ni API key.
+- **Lyrics**: muestra la letra sincronizada de lo que sea que esté sonando (no solo Spotify - sigue al mismo "reproductor activo" que ya usa Windows para el resto del sistema). Las letras vienen de [LRCLIB](https://lrclib.net), una base de datos pública y gratuita hecha para esto, sin login ni API key.
 
-El valor por defecto trae una pestaña de Quick Actions, Media y Brightness; Lyrics se agrega desde Settings → Add si la quieres usar.
+El valor por defecto trae una pestaña de Quick Actions, Media, Volume y Brightness; Lyrics se agrega desde Settings → Add si la quieres usar.
 
-Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\lyrics_cache\`), así que no se vuelve a pedir por red la próxima vez que suene la misma canción. Al ser una base comunitaria, alguna canción muy nueva o poco común puede no tener letra sincronizada disponible todavía.
+Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\lyrics_cache\`), así que no se vuelve a pedir por red la próxima vez que suene la misma canción. Los "no hay letra" también se cachean (con 7 días de caducidad), para no golpear un servicio público gratuito cada vez que se abre el panel. Al ser una base comunitaria, alguna canción muy nueva o poco común puede no tener letra sincronizada disponible todavía.
+
+## Apariencia
+
+El panel sigue el tema de Windows: usa la paleta oscura o clara según el ajuste del sistema, y cuando el **alto contraste** está activo toma directamente los colores de ventana, texto y botón del usuario en vez de una paleta propia. Todo se recalcula al recibir `WM_SETTINGCHANGE` / `WM_THEMECHANGED`, así que cambiar de tema no reinicia la app.
 
 ## Notas técnicas
 
-Cada pestaña es event-driven: sin render loop ni sondeo del mouse (usa `TrackMouseEvent`/`WM_MOUSELEAVE`), los temporizadores solo corren durante la animación de apertura/cierre o la breve espera antes de cerrar. No hay hooks globales de mouse ni de teclado (salvo el atajo de salida registrado con `RegisterHotKey`). Media, Brightness y Lyrics hacen su trabajo en un job corto del thread pool disparado únicamente por una acción del usuario (abrir el panel, pulsar un botón, mover un slider); no hay threads, timers ni polling permanentes. Un slider de brillo muestra el valor en vivo mientras lo arrastras, pero la escritura DDC/CI al monitor se hace una sola vez, al soltar (varios monitores guardan el brillo en memoria no volátil, así que no conviene escribir de forma continua). Lyrics revisa primero el caché local (costo cero de red) antes de llamar a LRCLIB. La app se limita a una instancia para evitar duplicar ventanas y el atajo global.
+**Nada de polling en reposo.** No hay render loop ni sondeo del ratón: el hover usa `TrackMouseEvent` / `WM_MOUSELEAVE`. Solo hay temporizadores en tres casos concretos, y ninguno corre con los paneles cerrados:
+
+- la animación de apertura/cierre (15 ms mientras dura),
+- la breve espera antes de cerrar (320 ms),
+- un muestreo de 500 ms **solo mientras un panel está visible** y solo para widgets que lo piden. Existe únicamente para la posición de reproducción dentro de una pista, que es lo único que Windows no notifica por evento; Lyrics y Media lo usan, el resto no lo activa.
+
+**Cambios por evento, no por sondeo.** Media se suscribe a los eventos de
+`GlobalSystemMediaTransportControlsSessionManager` (`CurrentSessionChanged`,
+`SessionsChanged`) y de cada sesión (`PlaybackInfoChanged`,
+`MediaPropertiesChanged`), de modo que empezar a reproducir, pausar o saltar
+actualiza el panel abierto al instante. Lo mismo hace Lyrics para re-buscar la
+letra cuando cambia de pista. No hay hooks globales de ratón ni de teclado, salvo
+el atajo de salida y los de apertura registrados con `RegisterHotKey`.
+
+**Propiedad de los resultados asíncronos.** Todo trabajo en segundo plano
+(WinRT, DDC/CI, HTTPS) devuelve su resultado con un sobre único
+(`AsyncResult.h`) que lleva un `requestId` y una "generación de lista". El
+receptor siempre lo libera, lo haya pedido o no, y lo descarta si no coincide con
+lo que tiene en vuelo. Eso elimina de raíz las tres formas en que esto se rompe:
+fuga cuando la pestaña se destruye con un trabajo en curso, fuga cuando el
+mensaje llega a un HWND reciclado, y datos rancios cuando un refresco sustituye a
+otro.
+
+**Un slider de brillo** muestra el valor en vivo mientras lo arrastras, pero la
+escritura DDC/CI al monitor se hace una sola vez, al soltar (varios monitores
+guardan el brillo en memoria no volátil, así que no conviene escribir de forma
+continua). Si el monitor rechaza la escritura, la fila vuelve al último valor que
+el hardware confirmó en lugar de seguir mostrando un brillo que no es real. En
+Core Audio no hace falta aplazar nada: el volumen es una llamada en proceso, así
+que el slider escribe en cada movimiento y el panel se relee mientras está
+visible para seguir las teclas de volumen de otra app.
+
+**Red.** Las peticiones a LRCLIB usan una sesión WinHTTP compartida con keep-alive
+y timeouts explícitos (5 s resolver/conectar/enviar, 8 s recibir): los valores por
+omisión de WinHTTP son de ~60 s, suficiente para que un mal día de red deje un hilo del
+pool bloqueado un minuto, y cada apertura de panel puede lanzar otro. La respuesta
+tiene un tope de 4 MB.
+
+**Transformaciones de Direct2D.** `SetTransform` *reemplaza* la matriz, no la
+compone, y el chrome del panel vive en una traslación que se instala antes de
+delegar en el widget. Por eso `Renderer` compone toda transformación local
+*sobre* la vigente (`ScopedTransform::Compose`) en vez de fijarla: hacerlo al revés
+manda los iconos fuera del panel, y terminar con `SetTransform(Identity)` en vez de
+restaurar deja el resto del contenido desplazado exactamente el alto del chrome.
+Parece una sutileza, pero produce un fallo de layout que parece un error
+aritmético en el widget.
+
+**Esquinas redondeadas.** Se siguen recortando con `SetWindowRgn`, que es una
+máscara de 1 bit y por tanto escalonada a partir de 125% de escalado. Hacerlas
+correctas exige alfa por píxel, y toda superficie D2D disponible sin un dispositivo
+DXGI (`ID2D1HwndRenderTarget` e `ID2D1DCRenderTarget` incluidos) presenta a través
+de GDI, que descarta el canal alfa: se intentó, componiendo con
+`UpdateLayeredWindow`, y la ventana se componía sin mostrar nada. Solucionarlo de
+verdad pasa a `ID2D1DeviceContext` sobre `ID2D1Device1` con volcado manual del
+bitmap, que es un cambio bastante mayor que la calidad de las esquinas.
+
+**Registro.** Los fallos que antes eran invisibles (una superficie D2D que no se
+puede crear, un `config.txt` que no se puede escribir, una pestaña que no se puede
+construir) se anotan en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log`, con rotura a
+`.old` al pasar de 512 KB.
+
+**Pruebas.** `tests/` cubre lo que no tiene ventanas: el parser LRC (fracciones,
+marcas repetidas, tags de metadatos, `offset`, orden) y el fichero de config
+(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas).
+Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son
+widgets y ventanas, y no hay forma de ejercitarlos sin sesión de escritorio.

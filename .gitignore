@@ -1,5 +1,10 @@
 /build/
 /build-*/
+/out/
+/temp/
 /.vs/
 /.claude/scheduled_tasks.lock
 *.user
+*.suo
+*.VC.db
+*.VC.opendb

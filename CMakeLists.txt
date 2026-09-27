@@ -9,12 +9,18 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Pure-logic code (the LRC parser, the config reader/writer) is compiled a second
+# time into a small console-free test binary, so CI can cover the parts that
+# have no windowing in them.
+option(EDGEDECK_BUILD_TESTS "Build the EdgeDeck unit tests" ON)
+
 add_executable(EdgeDeck WIN32
     src/main.cpp
     src/App.cpp
     src/App.h
     src/Tab.cpp
     src/Tab.h
+    src/AsyncResult.h
     src/PanelWidget.h
     src/QuickActionsWidget.cpp
     src/QuickActionsWidget.h
@@ -26,6 +32,10 @@ add_executable(EdgeDeck WIN32
     src/LyricsWidget.h
     src/LrcLyrics.cpp
     src/LrcLyrics.h
+    src/VolumeWidget.cpp
+    src/VolumeWidget.h
+    src/VolumeControls.cpp
+    src/VolumeControls.h
     src/BrightnessControls.cpp
     src/BrightnessControls.h
     src/Autostart.cpp
@@ -34,12 +44,15 @@ add_executable(EdgeDeck WIN32
     src/SettingsWindow.h
     src/Config.cpp
     src/Config.h
+    src/Diagnostics.cpp
+    src/Diagnostics.h
     src/Renderer.cpp
     src/Renderer.h
     src/Actions.cpp
     src/Actions.h
     src/MediaControls.cpp
     src/MediaControls.h
+    res/EdgeDeck.rc
 )
 
 target_compile_definitions(EdgeDeck PRIVATE
@@ -65,17 +78,27 @@ target_link_libraries(EdgeDeck PRIVATE
     dxva2
     advapi32
     winhttp
+    mmdevapi
+    propsys
+    uuid
+    avrt
 )
-
 if (MSVC)
-    target_compile_options(EdgeDeck PRIVATE /W4 /permissive-)
-    # Merges the comctl32 v6 dependency into MSVC's own auto-generated
-    # embedded manifest (rather than embedding a second manifest resource
-    # ourselves, which collides with the linker's default one) - needed for
-    # the settings window's common controls to render themed.
-    target_link_options(EdgeDeck PRIVATE
-        "/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
-    )
+    # /utf-8 pins the source and execution character sets, so a stray non-ASCII
+    # character in a string literal or a comment is a non-issue rather than a
+    # build that depends on the code page it happens to be compiled under.
+    target_compile_options(EdgeDeck PRIVATE /W4 /permissive- /utf-8)
+
+    # The manifest (DPI awareness, UTF-8 code page, supported OS, and the
+    # Common-Controls v6 dependency) is merged into the executable by the
+    # resource script, which is the only way to get DPI awareness applied before
+    # the first window is created.
+    target_sources(EdgeDeck PRIVATE res/EdgeDeck.manifest)
 else()
     target_compile_options(EdgeDeck PRIVATE -Wall -Wextra)
+endif()
+
+if (EDGEDECK_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()

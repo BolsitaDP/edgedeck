@@ -1,7 +1,9 @@
 #pragma once
 
 #include <windows.h>
+
 #include <memory>
+
 #include "PanelWidget.h"
 #include "Renderer.h"
 
@@ -19,7 +21,6 @@ struct TabConfig {
     float cornerRadius = 10.0f;
     int animationMs = 200;
     int closeDelayMs = 320;
-    BYTE windowAlpha = 235; // out of 255; whole-window constant alpha via LWA_ALPHA
 };
 
 // One edge tab + its flyout panel. Owns its own hover/animate state machine
@@ -37,11 +38,27 @@ public:
     // Registers both window classes. Must be called exactly once, before any
     // Tab is constructed.
     static bool RegisterClasses(HINSTANCE hInstance);
+    static void UnregisterClasses();
 
     bool Create(HINSTANCE hInstance);
 
     // True when the cursor is over this tab or its (visible) panel.
     bool IsPointInside(POINT screenPt) const;
+
+    // Which widget this tab hosts. App uses it to decide whether a settings
+    // change can be applied in place or needs the tab rebuilt.
+    WidgetType WidgetType() const { return m_widget ? m_widget->Type() : WidgetType::QuickActions; }
+
+    // Opens and pins the panel, for a keyboard shortcut that named this tab.
+    void RequestOpen();
+
+    // Which monitor this tab is laid out against. Defaults to the primary one.
+    void SetMonitor(HMONITOR monitor);
+    HMONITOR Monitor() const { return m_monitor; }
+
+    // Re-lays out for a new configuration without replacing the widget, so an
+    // open or pinned panel and any in-flight async work survive the change.
+    void ApplyConfig(const TabConfig& config);
 
 private:
     enum class State { Hidden, Opening, Open, Closing };
@@ -69,6 +86,11 @@ private:
     void EndDrag();
     int CurrentPanelX() const;
 
+    void UpdateTickTimer();
+    void MovePanelTo(int x);
+    void ClampPanelY();
+    void DrawPanelSurface();
+
     // Chrome (title/pin) hit-test; delegates to the widget for anything
     // below the chrome. Returns a control id: kPinControlId, or a
     // widget-defined id (>=0), or -1 for no hit.
@@ -92,9 +114,11 @@ private:
     bool m_dragging = false; // a widget slider owns the mouse (SetCapture) until button-up
     bool m_inRelayout = false;
     int m_hoveredControl = -1;
+    int m_focusedControl = -1;
 
     float m_dpiScale = 1.0f;
     UINT m_dpi = 96;
+    HMONITOR m_monitor = nullptr;
 
     // Physical-pixel geometry, in screen coordinates.
     RECT m_tabRectPx{};
@@ -111,6 +135,14 @@ private:
 
     static constexpr UINT_PTR kTimerAnim = 1;
     static constexpr UINT_PTR kTimerLeave = 2;
+    static constexpr UINT_PTR kTimerTick = 3;
     static constexpr UINT kAnimIntervalMs = 15;
+
+    // How often a visible panel samples the one thing Windows offers no event
+    // for: the playback position inside a track. Runs only while a panel is
+    // open and only for a widget that asked for it, so a closed EdgeDeck still
+    // has no timers at all.
+    static constexpr UINT kTickIntervalMs = 500;
+
     static constexpr int kPinControlId = -2; // distinct from "no hit" (-1) and widget ids (>=0)
 };

@@ -1,16 +1,32 @@
+#include "Diagnostics.h"
 #include "Tab.h"
 #include "App.h"
 
 #include <shellscalingapi.h>
 #include <windowsx.h>
-#include <cmath>
+
 #include <algorithm>
+#include <cmath>
 
 namespace {
+// Layered (so the panel can be translucent), topmost, tool-window and - the
+// important one - never activate: hover, click or pin on a tab must not pull
+// focus away from whatever the user is actually doing.
+const DWORD kWindowExStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+
+// Whole-window alpha. The old value of 235 washed out the text along with the
+// background; 246 keeps a hint of translucency while staying legible over any
+// wallpaper.
+constexpr BYTE kWindowAlpha = 246;
+
+// Rounded corners come from a window region, which is a 1-bit mask: the edges
+// are visibly jagged at 125% scaling and above. Doing it properly needs
+// per-pixel alpha, which needs a DXGI-backed D2D device (see the note on the
+// Renderer class), so the region stays for now.
 bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
     // CreateRoundRectRgn's last two params are the rounding ellipse's
-    // width/height (diameter), not a radius - double it to match radiusPx.
-    int diameter = static_cast<int>(std::lround(radiusPx * 2.0f));
+    // width/height (its diameter), not a radius - double it to match radiusPx.
+    const int diameter = static_cast<int>(std::lround(radiusPx * 2.0f));
     HRGN region = CreateRoundRectRgn(0, 0, widthPx + 1, heightPx + 1, diameter, diameter);
     if (!region) return false;
     if (!SetWindowRgn(hwnd, region, TRUE)) {
@@ -36,7 +52,7 @@ bool Tab::RegisterClasses(HINSTANCE hInstance) {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.hInstance = hInstance;
-    wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = nullptr; // we paint the whole client area ourselves
 
     wc.lpszClassName = kTabClassName;
@@ -48,21 +64,31 @@ bool Tab::RegisterClasses(HINSTANCE hInstance) {
     return RegisterClassExW(&wc) != 0;
 }
 
-bool Tab::Create(HINSTANCE hInstance) {
-    return ComputeLayout() && CreateWindows(hInstance);
+void Tab::UnregisterClasses() {
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    UnregisterClassW(kTabClassName, instance);
+    UnregisterClassW(kPanelClassName, instance);
+}
+
+bool Tab::Create(HINSTANCE hInstance) { return ComputeLayout() && CreateWindows(hInstance); }
+
+void Tab::SetMonitor(HMONITOR monitor) {
+    if (m_monitor == monitor) return;
+    m_monitor = monitor;
+    Relayout();
 }
 
 bool Tab::ComputeLayout() {
-    POINT origin{0, 0};
-    HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR monitor =
+        m_monitor ? m_monitor : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    m_monitor = monitor;
 
     MONITORINFO mi{sizeof(mi)};
     if (!GetMonitorInfo(monitor, &mi)) return false;
 
-    UINT dpiX = 96, dpiY = 96;
-    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
-        dpiX = 96;
-    }
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) dpiX = 96;
     m_dpi = dpiX;
     m_dpiScale = static_cast<float>(dpiX) / 96.0f;
 
@@ -73,6 +99,15 @@ bool Tab::ComputeLayout() {
 
     const int tabWpx = static_cast<int>(std::lround(m_config.tabWidth * m_dpiScale));
     const int tabHpx = static_cast<int>(std::lround(m_config.tabHeight * m_dpiScale));
+
+    // A widget that cannot lay out legibly in a narrow panel says so, so the
+    // configured width is raised to fit rather than silently producing
+    // unreadable rows - the old floor of 200 logical pixels left the media
+    // widget with a 38-pixel-wide name field.
+    if (m_widget) {
+        const float chrome = PanelLayout::PaddingX * 2.0f;
+        m_config.panelWidth = std::max(m_config.panelWidth, m_widget->MinContentWidth() + chrome);
+    }
 
     m_panelHeightLogical =
         PanelLayout::ChromeHeight +
@@ -87,61 +122,66 @@ bool Tab::ComputeLayout() {
     const int tabY = monTop + static_cast<int>((monHeight - tabHpx) * m_config.verticalRatio);
     m_tabRectPx = {tabX, tabY, tabX + tabWpx, tabY + tabHpx};
 
-    m_panelYPx = tabY + (tabHpx - m_panelHeightPx) / 2;
-    m_panelYPx = std::clamp(m_panelYPx, monTop, static_cast<int>(monBottom) - m_panelHeightPx);
+    ClampPanelY();
 
     m_panelOpenXPx = tabX - m_panelWidthPx; // resting position, left of the tab
     m_panelClosedXPx = monRight;            // fully outside the edge until it slides in
     return true;
 }
 
+void Tab::ClampPanelY() {
+    MONITORINFO mi{sizeof(mi)};
+    if (!m_monitor || !GetMonitorInfo(m_monitor, &mi)) return;
+    const int centerY = (m_tabRectPx.top + m_tabRectPx.bottom) / 2;
+    const int wanted = centerY - m_panelHeightPx / 2;
+    const int lowest = static_cast<int>(mi.rcMonitor.bottom) - m_panelHeightPx;
+    m_panelYPx = std::clamp<int>(wanted, static_cast<int>(mi.rcMonitor.top), lowest);
+}
+
 bool Tab::CreateWindows(HINSTANCE hInstance) {
-    // Both windows are permanently WS_EX_NOACTIVATE: no interaction with a
-    // tab - hover, click, or pin - ever steals foreground focus.
-    const DWORD exStyle =
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+    const int tabWidth = m_tabRectPx.right - m_tabRectPx.left;
+    const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
 
-    m_tabHwnd = CreateWindowExW(
-        exStyle, kTabClassName, L"EdgeDeck", WS_POPUP, m_tabRectPx.left, m_tabRectPx.top,
-        m_tabRectPx.right - m_tabRectPx.left, m_tabRectPx.bottom - m_tabRectPx.top, nullptr,
-        nullptr, hInstance, this);
+    m_tabHwnd = CreateWindowExW(kWindowExStyle, kTabClassName, L"EdgeDeck", WS_POPUP,
+                                m_tabRectPx.left, m_tabRectPx.top, tabWidth, tabHeight, nullptr,
+                                nullptr, hInstance, this);
     if (!m_tabHwnd) return false;
-
-    if (!SetLayeredWindowAttributes(m_tabHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
-        !ApplyRoundedRegion(m_tabHwnd, m_tabRectPx.right - m_tabRectPx.left,
-                            m_tabRectPx.bottom - m_tabRectPx.top,
-                            m_config.cornerRadius * m_dpiScale) ||
-        !m_tabRenderer.AttachToWindow(m_tabHwnd)) return false;
+    if (!m_tabRenderer.AttachToWindow(m_tabHwnd, true)) {
+        Diagnostics::Error("Tab: could not create text formats for the edge tab");
+    }
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
+    SetLayeredWindowAttributes(m_tabHwnd, 0, kWindowAlpha, LWA_ALPHA);
+    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
 
-    m_panelHwnd = CreateWindowExW(exStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
+    m_panelHwnd = CreateWindowExW(kWindowExStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
                                    m_panelClosedXPx, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
                                    nullptr, nullptr, hInstance, this);
     if (!m_panelHwnd) return false;
-
-    if (!SetLayeredWindowAttributes(m_panelHwnd, 0, m_config.windowAlpha, LWA_ALPHA) ||
-        !ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                            m_config.cornerRadius * m_dpiScale) ||
-        !m_panelRenderer.AttachToWindow(m_panelHwnd)) return false;
+    if (!m_panelRenderer.AttachToWindow(m_panelHwnd, true)) {
+        Diagnostics::Error("Tab: could not create text formats for the panel");
+    }
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
+    SetLayeredWindowAttributes(m_panelHwnd, 0, kWindowAlpha, LWA_ALPHA);
+    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx, m_config.cornerRadius * m_dpiScale);
 
     ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
+
+    // Park the panel just off the edge; it stays hidden until the first hover.
+    SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
+                 m_panelHeightPx, SWP_NOACTIVATE | SWP_HIDEWINDOW);
     return true;
 }
 
 void Tab::Relayout() {
     if (m_inRelayout || !m_tabHwnd || !m_panelHwnd) return;
     m_inRelayout = true;
-    if (!ComputeLayout()) {
-        m_inRelayout = false;
-        return;
-    }
 
-    // Display changes are uncommon; finish an in-flight slide at its endpoint.
     KillTimer(m_tabHwnd, kTimerAnim);
-    const bool panelOpen = m_state == State::Open || m_state == State::Opening;
+
+    const bool panelOpen = (m_state == State::Open || m_state == State::Opening);
     m_state = panelOpen ? State::Open : State::Hidden;
     m_hoveredControl = -1;
+    m_focusedControl = -1;
     if (m_widget) m_widget->SetHovered(-1);
 
     TRACKMOUSEEVENT tabLeave{sizeof(tabLeave), TME_CANCEL | TME_LEAVE, m_tabHwnd, 0};
@@ -152,6 +192,11 @@ void Tab::Relayout() {
     m_panelTracking = false;
     m_tabHovered = false;
 
+    if (!ComputeLayout()) {
+        m_inRelayout = false;
+        return;
+    }
+
     const int tabWidth = m_tabRectPx.right - m_tabRectPx.left;
     const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
     SetWindowPos(m_tabHwnd, HWND_TOPMOST, m_tabRectPx.left, m_tabRectPx.top, tabWidth, tabHeight,
@@ -160,42 +205,50 @@ void Tab::Relayout() {
                  m_panelWidthPx, m_panelHeightPx,
                  SWP_NOACTIVATE | (panelOpen ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
-    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
-    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                        m_config.cornerRadius * m_dpiScale);
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
     m_tabRenderer.OnResize(static_cast<UINT>(tabWidth), static_cast<UINT>(tabHeight));
     m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
-    InvalidateRect(m_tabHwnd, nullptr, FALSE);
-    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
+    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
+                       m_config.cornerRadius * m_dpiScale);
+
+    m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight, m_config.cornerRadius,
+                          m_widget ? m_widget->TabGlyph() : L"?");
+    if (panelOpen) DrawPanelSurface();
+    UpdateTickTimer();
     m_inRelayout = false;
+}
+
+void Tab::ApplyConfig(const TabConfig& config) {
+    m_config = config;
+    if (!m_tabHwnd || !m_panelHwnd) return;
+    Relayout();
+    if (m_state == State::Open) DrawPanelSurface();
 }
 
 void Tab::ResizePanelToContent() {
     if (!m_widget || !m_panelHwnd) return;
 
-    float newHeightLogical = PanelLayout::ChromeHeight +
-                              m_widget->PreferredContentHeight(m_config.panelWidth) +
-                              PanelLayout::BottomPadding;
-    int newHeightPx = static_cast<int>(std::lround(newHeightLogical * m_dpiScale));
+    const float newHeightLogical = PanelLayout::ChromeHeight +
+                                   m_widget->PreferredContentHeight(m_config.panelWidth) +
+                                   PanelLayout::BottomPadding;
+    const int newHeightPx = static_cast<int>(std::lround(newHeightLogical * m_dpiScale));
     if (newHeightPx == m_panelHeightPx) return;
 
     m_panelHeightLogical = newHeightLogical;
     m_panelHeightPx = newHeightPx;
+    ClampPanelY();
 
-    // Keep the panel centered on the tab as it grows/shrinks, but never
-    // touch X - the slide animation may still be mid-flight and this must
-    // not snap it to its resting position early.
-    int tabCenterY = (m_tabRectPx.top + m_tabRectPx.bottom) / 2;
-    m_panelYPx = tabCenterY - m_panelHeightPx / 2;
-    int currentX = CurrentPanelX();
-
-    SetWindowPos(m_panelHwnd, nullptr, currentX, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    // X is left alone: a slide may still be in flight and must not be snapped to
+    // its resting position.
+    SetWindowPos(m_panelHwnd, nullptr, 0, 0, m_panelWidthPx, m_panelHeightPx,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                        m_config.cornerRadius * m_dpiScale);
+                       m_config.cornerRadius * m_dpiScale);
     m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
+
+    if (m_state == State::Open || m_state == State::Opening) DrawPanelSurface();
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +293,6 @@ void Tab::OnEnter() {
         m_animStartTick = GetTickCount64();
         m_state = State::Opening;
         SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
-        InvalidateRect(m_tabHwnd, nullptr, FALSE);
     }
 }
 
@@ -254,13 +306,11 @@ void Tab::CheckPendingClose() {
     POINT pt;
     GetCursorPos(&pt);
     if (IsPointInside(pt) || m_pinned || m_dragging) return;
-
-    if (m_state == State::Open || m_state == State::Opening) {
-        BeginClose();
-    }
+    if (m_state == State::Open || m_state == State::Opening) BeginClose();
 }
 
 bool Tab::IsPointInside(POINT screenPt) const {
+    if (!m_tabHwnd) return false;
     RECT tabRect{};
     GetWindowRect(m_tabHwnd, &tabRect);
     if (PtInRect(&tabRect, screenPt)) return true;
@@ -281,8 +331,6 @@ void Tab::BeginOpen() {
         m_widget->SetHovered(-1);
         m_widget->OnPanelOpening(m_tabHwnd);
     }
-    SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
-                 m_panelHeightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
     m_animFromX = m_panelClosedXPx;
     m_animToX = m_panelOpenXPx;
@@ -290,27 +338,34 @@ void Tab::BeginOpen() {
     m_state = State::Opening;
     SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
 
-    InvalidateRect(m_tabHwnd, nullptr, FALSE);
+    // The panel has to be shown before it can be painted: InvalidateRect on a
+    // hidden window never produces a WM_PAINT, so without this the slide would
+    // animate an empty rectangle. SW_SHOWNOACTIVATE keeps the WS_EX_NOACTIVATE
+    // promise - opening a panel must not take focus from the foreground app.
+    ShowWindow(m_panelHwnd, SW_SHOWNOACTIVATE);
+    InvalidateRect(m_panelHwnd, nullptr, FALSE);
 }
 
 void Tab::BeginClose() {
+    if (m_state == State::Hidden || m_state == State::Closing) return;
+
     m_animFromX = CurrentPanelX();
     m_animToX = m_panelClosedXPx;
     m_animStartTick = GetTickCount64();
     m_state = State::Closing;
     SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
-
-    InvalidateRect(m_tabHwnd, nullptr, FALSE);
+    if (m_widget) m_widget->OnPanelVisibilityChanged(false);
+    UpdateTickTimer();
 }
 
 void Tab::TogglePin() {
     m_pinned = !m_pinned;
-    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
 
     if (!m_pinned) {
         // Unpinned via the button itself; if the cursor already left both
-        // windows, close now instead of waiting for a leave event that
-        // already happened while the panel was pinned open.
+        // windows, close now instead of waiting for a leave event that already
+        // happened while the panel was pinned open.
         POINT pt;
         GetCursorPos(&pt);
         if (!IsPointInside(pt) && (m_state == State::Open || m_state == State::Opening)) {
@@ -319,46 +374,87 @@ void Tab::TogglePin() {
     }
 }
 
+void Tab::RequestOpen() {
+    if (!m_panelHwnd) return;
+    OnEnter();
+    // A keyboard-opened panel has no cursor over it, so nothing would ever start
+    // the leave countdown. Pin it instead, and let Escape close it.
+    if (m_state != State::Hidden) {
+        m_pinned = true;
+        InvalidateRect(m_panelHwnd, nullptr, FALSE);
+    }
+}
+
 void Tab::EndDrag() {
     if (!m_dragging) return;
-    m_dragging = false; // first, so the WM_CAPTURECHANGED from ReleaseCapture is a no-op
+    m_dragging = false; // first, so WM_CAPTURECHANGED from ReleaseCapture is a no-op
     ReleaseCapture();
     if (m_widget) m_widget->OnDragEnd();
     if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
 
-    // The cursor may have left the panel while dragging; the leave events
-    // were swallowed by the capture, so start the normal close countdown.
+    // The cursor may have left the panel while dragging; the leave events were
+    // swallowed by the capture, so start the normal close countdown.
     POINT pt;
     GetCursorPos(&pt);
     if (!IsPointInside(pt)) OnLeave();
 }
 
-void Tab::StepAnimation() {
-    ULONGLONG now = GetTickCount64();
-    double t = static_cast<double>(now - m_animStartTick) / m_config.animationMs;
-    t = std::clamp(t, 0.0, 1.0);
-    double remaining = 1.0 - t;
-    double eased = 1.0 - remaining * remaining * remaining; // ease-out cubic
+void Tab::UpdateTickTimer() {
+    if (!m_tabHwnd) return;
+    const bool wantsTick = m_widget && m_widget->WantsTicks() &&
+                           (m_state == State::Open || m_state == State::Opening);
+    if (wantsTick) {
+        SetTimer(m_tabHwnd, kTimerTick, kTickIntervalMs, nullptr);
+    } else {
+        KillTimer(m_tabHwnd, kTimerTick);
+    }
+}
 
-    int x = m_animFromX + static_cast<int>(std::lround((m_animToX - m_animFromX) * eased));
+void Tab::MovePanelTo(int x) {
+    if (!m_panelHwnd || !IsWindowVisible(m_panelHwnd)) return;
+    // Reposition only (SWP_NOSIZE): a slide costs one cheap call per frame
+    // instead of a full relayout of a topmost layered window.
     SetWindowPos(m_panelHwnd, nullptr, x, m_panelYPx, 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
 
-    if (t >= 1.0) {
-        KillTimer(m_tabHwnd, kTimerAnim);
-        if (m_state == State::Opening) {
-            m_state = State::Open;
-        } else if (m_state == State::Closing) {
-            ShowWindow(m_panelHwnd, SW_HIDE);
-            m_state = State::Hidden;
-        }
+void Tab::StepAnimation() {
+    const ULONGLONG now = GetTickCount64();
+    const double duration = m_config.animationMs > 0 ? m_config.animationMs : 1;
+    double t = static_cast<double>(now - m_animStartTick) / duration;
+    t = std::clamp(t, 0.0, 1.0);
+    const double remaining = 1.0 - t;
+    const double eased = 1.0 - remaining * remaining * remaining; // ease-out cubic
+
+    const int x =
+        m_animFromX + static_cast<int>(std::lround((m_animToX - m_animFromX) * eased));
+    MovePanelTo(x);
+
+    if (t < 1.0) return;
+
+    KillTimer(m_tabHwnd, kTimerAnim);
+    if (m_state == State::Opening) {
+        m_state = State::Open;
+        if (m_widget) m_widget->OnPanelVisibilityChanged(true);
+    } else if (m_state == State::Closing) {
+        ShowWindow(m_panelHwnd, SW_HIDE);
+        m_state = State::Hidden;
+        if (m_widget) m_widget->OnPanelVisibilityChanged(false);
     }
+    UpdateTickTimer();
 }
 
 int Tab::CurrentPanelX() const {
     RECT r{};
-    GetWindowRect(m_panelHwnd, &r);
+    if (!m_panelHwnd || !GetWindowRect(m_panelHwnd, &r)) return m_panelOpenXPx;
     return r.left;
+}
+
+void Tab::DrawPanelSurface() {
+    if (!m_panelHwnd || !m_widget) return;
+    m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(), m_pinned,
+                              m_hoveredControl == kPinControlId);
+    if (m_state == State::Open) MovePanelTo(m_panelOpenXPx);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,17 +462,18 @@ int Tab::CurrentPanelX() const {
 // ---------------------------------------------------------------------------
 
 int Tab::HitTestPanel(int clientXPx, int clientYPx) const {
-    float x = static_cast<float>(clientXPx) / m_dpiScale;
-    float y = static_cast<float>(clientYPx) / m_dpiScale;
+    const float x = static_cast<float>(clientXPx) / m_dpiScale;
+    const float y = static_cast<float>(clientYPx) / m_dpiScale;
 
-    D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(m_config.panelWidth);
+    const D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(m_config.panelWidth);
     if (x >= pinRect.left && x <= pinRect.right && y >= pinRect.top && y <= pinRect.bottom) {
         return kPinControlId;
     }
 
     if (y < PanelLayout::ChromeHeight || !m_widget) return -1;
 
-    float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight - PanelLayout::BottomPadding;
+    const float contentHeight =
+        m_panelHeightLogical - PanelLayout::ChromeHeight - PanelLayout::BottomPadding;
     return m_widget->HitTest(x, y - PanelLayout::ChromeHeight, m_config.panelWidth, contentHeight);
 }
 
@@ -415,14 +512,18 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 1; // avoid a redundant GDI fill before our D2D paint
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
+        case WM_SETTINGCHANGE:
+        case WM_SYSCOLORCHANGE:
+        case WM_THEMECHANGED:
+            // Theme, contrast and DPI changes all land here, and all of them
+            // change the palette or the metrics the layout was computed from.
             Relayout();
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
-            const wchar_t* glyph = m_widget ? m_widget->TabGlyph() : L"?";
             m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
-                                   m_config.cornerRadius, glyph);
+                                  m_config.cornerRadius, m_widget ? m_widget->TabGlyph() : L"?");
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -436,11 +537,19 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 CheckPendingClose();
                 return 0;
             }
+            if (wParam == kTimerTick) {
+                if (m_widget && (m_state == State::Open || m_state == State::Opening)) {
+                    m_widget->OnTick();
+                    if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+                }
+                return 0;
+            }
             break;
         }
         case WM_DESTROY: {
             KillTimer(hwnd, kTimerAnim);
             KillTimer(hwnd, kTimerLeave);
+            KillTimer(hwnd, kTimerTick);
             if (m_panelHwnd) {
                 DestroyWindow(m_panelHwnd);
                 m_panelHwnd = nullptr;
@@ -448,7 +557,9 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
         default:
-            if (msg >= WM_APP && m_widget) {
+            // Only the widget's private range is forwarded. Anything else at or
+            // above WM_APP belongs to somebody else and must not be swallowed.
+            if (PanelWidget::IsWidgetMessage(msg) && m_widget) {
                 m_widget->OnAsyncResult(msg, wParam);
                 ResizePanelToContent();
                 if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
@@ -474,20 +585,22 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 OnEnter();
             }
             if (m_dragging && m_widget) {
-                float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
-                float y = static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale -
-                          PanelLayout::ChromeHeight;
-                float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
-                                      PanelLayout::BottomPadding;
+                const float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
+                const float y =
+                    static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale - PanelLayout::ChromeHeight;
+                const float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
+                                            PanelLayout::BottomPadding;
                 m_widget->OnDragMove(x, y, m_config.panelWidth, contentHeight);
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }
-            int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-            if (hit != m_hoveredControl) {
-                m_hoveredControl = hit;
-                if (m_widget) m_widget->SetHovered(hit >= 0 ? hit : -1);
-                InvalidateRect(hwnd, nullptr, FALSE);
+            {
+                const int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+                if (hit != m_hoveredControl) {
+                    m_hoveredControl = hit;
+                    if (m_widget) m_widget->SetHovered(hit >= 0 ? hit : -1);
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
             }
             return 0;
         }
@@ -503,12 +616,12 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
         case WM_LBUTTONDOWN: {
             if (!m_widget) return 0;
-            float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
-            float y = static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale -
-                      PanelLayout::ChromeHeight;
+            const float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
+            const float y =
+                static_cast<float>(GET_Y_LPARAM(lParam)) / m_dpiScale - PanelLayout::ChromeHeight;
             if (y < 0.0f) return 0; // press on the title/pin chrome, not the content
-            float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
-                                  PanelLayout::BottomPadding;
+            const float contentHeight = m_panelHeightLogical - PanelLayout::ChromeHeight -
+                                        PanelLayout::BottomPadding;
             if (m_widget->OnDragBegin(x, y, m_config.panelWidth, contentHeight, m_tabHwnd)) {
                 m_dragging = true;
                 SetCapture(hwnd);
@@ -524,7 +637,7 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 EndDrag();
                 return 0;
             }
-            int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            const int hit = HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             if (hit == kPinControlId) {
                 TogglePin();
             } else if (hit >= 0 && m_widget) {
@@ -536,17 +649,70 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             return 0;
         }
+        case WM_KEYDOWN: {
+            // The panel never takes focus, so it is driven straight from the
+            // keyboard while the pointer is over it. This is what makes every
+            // widget reachable without a mouse.
+            if (!m_widget) return 0;
+            const UINT key = static_cast<UINT>(wParam);
+
+            if (key == VK_ESCAPE) {
+                m_pinned = false;
+                InvalidateRect(hwnd, nullptr, FALSE);
+                BeginClose();
+                return 0;
+            }
+
+            if (m_widget->FocusableControlCount() > 0 && m_focusedControl < 0) {
+                m_focusedControl = 0;
+            }
+
+            if ((key == VK_LEFT || key == VK_RIGHT) && m_focusedControl >= 0) {
+                float value01 = 0.0f;
+                if (m_widget->OnStepControl(m_focusedControl, key == VK_RIGHT ? 1 : -1, value01)) {
+                    m_hoveredControl = m_focusedControl;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                }
+            }
+
+            if (m_widget->OnKeyDown(key, m_focusedControl)) {
+                const int focused = m_widget->FocusedControl();
+                if (focused >= 0) {
+                    m_focusedControl = focused;
+                    m_hoveredControl = focused;
+                }
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
+            return 0;
+        }
+        case WM_MOUSEWHEEL: {
+            // The wheel steps the focused slider, which is the one adjustment
+            // that benefits most from not needing a drag.
+            if (!m_widget || m_widget->FocusableControlCount() == 0) return 0;
+            if (m_focusedControl < 0) m_focusedControl = 0;
+            float value01 = 0.0f;
+            const int delta = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1 : -1;
+            if (m_widget->OnStepControl(m_focusedControl, delta, value01)) {
+                m_hoveredControl = m_focusedControl;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        }
         case WM_ERASEBKGND:
             return 1;
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
+        case WM_SETTINGCHANGE:
+        case WM_SYSCOLORCHANGE:
+        case WM_THEMECHANGED:
             Relayout();
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
-            m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(),
-                                       m_pinned, m_hoveredControl == kPinControlId);
+            DrawPanelSurface();
             EndPaint(hwnd, &ps);
             return 0;
         }

@@ -2,9 +2,13 @@
 #include "Autostart.h"
 
 #include <commctrl.h>
+
 #include <algorithm>
+#include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cwchar>
 
 namespace {
 constexpr int kIdList = 100;
@@ -30,7 +34,8 @@ constexpr TypeEntry kTypes[] = {
     {WidgetType::QuickActions, L"Quick Actions", L"Quick Actions"},
     {WidgetType::Media, L"Media (auto-detect)", L"Media"},
     {WidgetType::Brightness, L"Brightness (monitors)", L"Brightness"},
-    {WidgetType::Lyrics, L"Lyrics (Spotify)", L"Lyrics"},
+    {WidgetType::Lyrics, L"Lyrics (auto-detect)", L"Lyrics"},
+    {WidgetType::Volume, L"Volume (audio output)", L"Volume"},
 };
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypes) / sizeof(kTypes[0]));
 
@@ -66,10 +71,26 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
     }
 
     m_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, kSettingsClassName, L"EdgeDeck Settings",
-                              WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                              CW_USEDEFAULT, CW_USEDEFAULT, 480, 400, nullptr, nullptr, hInstance,
-                              this);
+                             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT,
+                             CW_USEDEFAULT, 500, 500, nullptr, nullptr, hInstance, this);
     if (!m_hwnd) return false;
+
+    // Centred on the monitor the pointer is on, or the primary one, so the
+    // dialog does not open half off-screen on a multi-monitor setup.
+    POINT cursor{};
+    if (!GetCursorPos(&cursor)) cursor = POINT{0, 0};
+    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
+    RECT windowRect{};
+    GetWindowRect(m_hwnd, &windowRect);
+    MONITORINFO mi{sizeof(mi)};
+    if (GetMonitorInfo(monitor, &mi)) {
+        const int cx = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left) / 2;
+        const int cy = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top) / 2;
+        const int w = windowRect.right - windowRect.left;
+        const int h = windowRect.bottom - windowRect.top;
+        SetWindowPos(m_hwnd, HWND_TOP, cx - w / 2, cy - h / 2, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
 
     ShowWindow(m_hwnd, SW_SHOW);
     return true;
@@ -77,8 +98,8 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
 
 void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_font = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                          OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                          DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                         DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
     auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w,
                      int h, int id) {
@@ -90,52 +111,61 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     };
 
     make(L"STATIC", L"Tabs", 0, 12, 10, 100, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 180, 258,
-                   kIdList);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 360, kIdList);
 
-    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 296, 56, 24, kIdAdd);
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 296, 56, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 132, 296, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 168, 296, 42, 24, kIdDown);
+    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 398, 56, 24, kIdAdd);
+    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 398, 56, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 132, 398, 34, 24, kIdUp);
+    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 170, 398, 42, 24, kIdDown);
 
-    make(L"STATIC", L"Widget type:", 0, 210, 12, 140, 18, 0);
-    m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 210, 30,
-                        220, 200, kIdTypeCombo);
+    make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
+    m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 250,
+                       200, kIdTypeCombo);
     for (const TypeEntry& entry : kTypes) {
         SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.comboLabel));
     }
 
-    make(L"STATIC", L"Vertical position:", 0, 210, 64, 160, 18, 0);
-    m_positionTrackbar =
-        make(TRACKBAR_CLASSW, nullptr, WS_TABSTOP | TBS_HORZ, 210, 82, 180, 28, kIdTrackbar);
+    make(L"STATIC", L"Vertical position:", 0, 220, 64, 160, 18, 0);
+    m_positionTrackbar = make(TRACKBAR_CLASSW, nullptr, WS_TABSTOP | TBS_HORZ, 220, 82, 190, 28,
+                              kIdTrackbar);
     SendMessageW(m_positionTrackbar, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
-    m_positionLabel = make(L"STATIC", L"50%", 0, 396, 88, 44, 18, 0);
+    m_positionLabel = make(L"STATIC", L"50%", 0, 420, 88, 48, 18, 0);
 
-    make(L"STATIC", L"Tab width (px):", 0, 210, 118, 160, 18, 0);
-    m_tabWidthEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 136, 100, 22, kIdTabWidth);
+    make(L"STATIC", L"Tab width (px):", 0, 220, 118, 160, 18, 0);
+    m_tabWidthEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 220, 136, 90, 22,
+                          kIdTabWidth);
 
-    make(L"STATIC", L"Tab height (px):", 0, 210, 164, 160, 18, 0);
-    m_tabHeightEdit =
-        make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 182, 100, 22, kIdTabHeight);
+    make(L"STATIC", L"Tab height (px):", 0, 220, 164, 160, 18, 0);
+    m_tabHeightEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 220, 182, 90, 22,
+                           kIdTabHeight);
 
-    make(L"STATIC", L"Panel width (px):", 0, 210, 210, 160, 18, 0);
-    m_panelWidthEdit =
-        make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 228, 100, 22, kIdPanelWidth);
+    make(L"STATIC", L"Panel width (px):", 0, 220, 210, 160, 18, 0);
+    m_panelWidthEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 220, 228, 90, 22,
+                            kIdPanelWidth);
 
-    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 210,
-                             262, 220, 22, kIdAutostart);
-    SendMessageW(m_autostartCheck, BM_SETCHECK,
-                 Autostart::IsEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
+    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 262,
+                             240, 22, kIdAutostart);
+    SendMessageW(m_autostartCheck, BM_SETCHECK, Autostart::IsEnabled() ? BST_CHECKED : BST_UNCHECKED,
+                 0);
 
-    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 210, 296, 90, 26, kIdSave);
-    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 308, 296, 90, 26, kIdClose);
+    make(L"STATIC", L"Keyboard", 0, 12, 392, 100, 18, 0);
+    make(L"STATIC",
+         L"Ctrl+Alt+1..9  open and pin a panel\r\n"
+         L"Ctrl+Alt+Q       exit EdgeDeck\r\n"
+         L"Arrow keys / wheel  move and adjust inside an open panel\r\n"
+         L"Enter / Space    activate the focused control\r\n"
+         L"Escape           unpin and close the panel",
+         0, 12, 410, 96, 66, 0);
+
+    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 398, 70, 26, kIdSave);
+    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 398, 70, 26, kIdClose);
 }
 
 void SettingsWindow::RefreshList(int selectIndex) {
     SendMessageW(m_list, LB_RESETCONTENT, 0, 0);
     for (size_t i = 0; i < m_tabs.size(); ++i) {
         const wchar_t* typeName = kTypes[TypeIndex(m_tabs[i].widgetType)].listLabel;
-        wchar_t buf[64];
+        wchar_t buf[96];
         swprintf_s(buf, L"%zu: %s", i + 1, typeName);
         SendMessageW(m_list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(buf));
     }
@@ -150,7 +180,7 @@ void SettingsWindow::RefreshList(int selectIndex) {
 }
 
 void SettingsWindow::LoadSelectedIntoControls() {
-    bool hasSelection = m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_tabs.size());
+    const bool hasSelection = m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_tabs.size());
     EnableWindow(m_typeCombo, hasSelection);
     EnableWindow(m_positionTrackbar, hasSelection);
     EnableWindow(m_tabWidthEdit, hasSelection);
@@ -158,15 +188,14 @@ void SettingsWindow::LoadSelectedIntoControls() {
     EnableWindow(m_panelWidthEdit, hasSelection);
     EnableWindow(m_removeButton, hasSelection);
     EnableWindow(m_upButton, hasSelection && m_selectedIndex > 0);
-    EnableWindow(m_downButton,
-                 hasSelection && m_selectedIndex < static_cast<int>(m_tabs.size()) - 1);
+    EnableWindow(m_downButton, hasSelection && m_selectedIndex < static_cast<int>(m_tabs.size()) - 1);
 
     if (!hasSelection) return;
     const TabSettings& t = m_tabs[m_selectedIndex];
 
     SendMessageW(m_typeCombo, CB_SETCURSEL, TypeIndex(t.widgetType), 0);
 
-    int pos = static_cast<int>(std::lround(t.verticalRatio * 100.0f));
+    const int pos = static_cast<int>(std::lround(t.verticalRatio * 100.0f));
     SendMessageW(m_positionTrackbar, TBM_SETPOS, TRUE, pos);
     wchar_t pctBuf[16];
     swprintf_s(pctBuf, L"%d%%", pos);
@@ -187,20 +216,45 @@ void SettingsWindow::StoreControlsIntoSelected() {
 
     t.widgetType = TypeFromIndex(static_cast<int>(SendMessageW(m_typeCombo, CB_GETCURSEL, 0, 0)));
 
-    int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
+    const int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
     t.verticalRatio = std::clamp(pos, 0, 100) / 100.0f;
 
+    // Each field is parsed strictly and then written back into its own edit, so
+    // what the dialog shows always matches what it will save. The old code
+    // clamped the model and left the edit displaying the original text, which
+    // meant typing "abc" looked like it had been accepted and then quietly
+    // became 12.
+    auto readNumber = [](HWND edit, float& out) {
+        wchar_t buf[32];
+        GetWindowTextW(edit, buf, 32);
+        wchar_t* end = nullptr;
+        errno = 0;
+        const double value = wcstod(buf, &end);
+        return end != buf && *end == L'\0' && errno != ERANGE && value == value;
+    };
+
+    if (readNumber(m_tabWidthEdit, t.tabWidth)) {
+        t.tabWidth = std::clamp(t.tabWidth, ConfigLimits::kMinTabWidth, ConfigLimits::kMaxTabWidth);
+    }
+    if (readNumber(m_tabHeightEdit, t.tabHeight)) {
+        t.tabHeight =
+            std::clamp(t.tabHeight, ConfigLimits::kMinTabHeight, ConfigLimits::kMaxTabHeight);
+    }
+    if (readNumber(m_panelWidthEdit, t.panelWidth)) {
+        t.panelWidth =
+            std::clamp(t.panelWidth, ConfigLimits::kMinPanelWidth, ConfigLimits::kMaxPanelWidth);
+    }
+
+    ConfigLimits::Clamp(t);
+
     wchar_t buf[32];
-    GetWindowTextW(m_tabWidthEdit, buf, 32);
-    t.tabWidth = std::clamp(static_cast<float>(_wtof(buf)), 12.0f, 60.0f);
-    GetWindowTextW(m_tabHeightEdit, buf, 32);
-    t.tabHeight = std::clamp(static_cast<float>(_wtof(buf)), 40.0f, 200.0f);
-    GetWindowTextW(m_panelWidthEdit, buf, 32);
-    t.panelWidth = std::clamp(static_cast<float>(_wtof(buf)), 200.0f, 480.0f);
+    SetWindowTextW(m_tabWidthEdit, (swprintf_s(buf, L"%.0f", t.tabWidth), buf));
+    SetWindowTextW(m_tabHeightEdit, (swprintf_s(buf, L"%.0f", t.tabHeight), buf));
+    SetWindowTextW(m_panelWidthEdit, (swprintf_s(buf, L"%.0f", t.panelWidth), buf));
 }
 
 void SettingsWindow::OnSelectionChanged() {
-    int sel = static_cast<int>(SendMessageW(m_list, LB_GETCURSEL, 0, 0));
+    const int sel = static_cast<int>(SendMessageW(m_list, LB_GETCURSEL, 0, 0));
     if (sel == LB_ERR) return;
     m_selectedIndex = sel;
     LoadSelectedIntoControls();
@@ -223,7 +277,7 @@ void SettingsWindow::OnRemove() {
 
 void SettingsWindow::OnMove(int delta) {
     if (m_selectedIndex < 0) return;
-    int target = m_selectedIndex + delta;
+    const int target = m_selectedIndex + delta;
     if (target < 0 || target >= static_cast<int>(m_tabs.size())) return;
     StoreControlsIntoSelected();
     std::swap(m_tabs[m_selectedIndex], m_tabs[target]);
@@ -232,7 +286,7 @@ void SettingsWindow::OnMove(int delta) {
 
 void SettingsWindow::OnTrackbarChanged() {
     if (m_selectedIndex < 0) return;
-    int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
+    const int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
     wchar_t buf[16];
     swprintf_s(buf, L"%d%%", pos);
     SetWindowTextW(m_positionLabel, buf);
@@ -246,7 +300,8 @@ void SettingsWindow::OnSave() {
 }
 
 LRESULT CALLBACK SettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    SettingsWindow* self = reinterpret_cast<SettingsWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    SettingsWindow* self =
+        reinterpret_cast<SettingsWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (msg == WM_NCCREATE) {
         auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
         self = reinterpret_cast<SettingsWindow*>(cs->lpCreateParams);
@@ -259,14 +314,19 @@ LRESULT CALLBACK SettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
+            // m_hwnd is only assigned once CreateWindowExW returns to Create(),
+            // but WM_CREATE fires synchronously from inside that same call, so
+            // CreateControls (which parents children off m_hwnd) must use the
+            // hwnd handed to us here instead - it's already valid.
+            m_hwnd = hwnd;
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
             CreateControls(cs->hInstance);
             RefreshList(0);
             return 0;
         }
         case WM_COMMAND: {
-            WORD id = LOWORD(wParam);
-            WORD code = HIWORD(wParam);
+            const WORD id = LOWORD(wParam);
+            const WORD code = HIWORD(wParam);
             if (id == kIdList && code == LBN_SELCHANGE) {
                 StoreControlsIntoSelected();
                 OnSelectionChanged();
@@ -289,9 +349,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             return 0;
         }
         case WM_HSCROLL:
-            if (reinterpret_cast<HWND>(lParam) == m_positionTrackbar) {
-                OnTrackbarChanged();
-            }
+            if (reinterpret_cast<HWND>(lParam) == m_positionTrackbar) OnTrackbarChanged();
             return 0;
         case WM_CLOSE:
             DestroyWindow(hwnd);

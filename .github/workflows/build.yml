@@ -1,0 +1,31 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release -- /m
+
+      # The unit tests cover the LRC parser and the config file - the two pieces
+      # of EdgeDeck with no windowing in them, and therefore the only two that
+      # can be exercised without a desktop session.
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgeDeck
+          path: build/Release/EdgeDeck.exe
