@@ -14,6 +14,14 @@ namespace {
 
 using Microsoft::WRL::ComPtr;
 
+// DEVICE_STATEMASK_ACTIVE. The SDK only defines the _ALL aggregate, so the
+// individual bits are spelled out here; enumerating every state instead lists
+// several dozen endpoints that are unplugged or not present, none of which can
+// hand out a volume control.
+#ifndef DEVICE_STATEMASK_ACTIVE
+#define DEVICE_STATEMASK_ACTIVE 0x1
+#endif
+
 // Core Audio refuses to instantiate anything from a non-initialised apartment.
 // The app already runs CoInitializeEx(APARTMENTTHREADED) on the UI thread, but
 // a worker thread would not have it, and a future caller might be on one.
@@ -31,37 +39,65 @@ private:
     HRESULT m_hr = E_FAIL;
 };
 
-// Holds an open endpoint and its volume control. Declared in the header as an
-// opaque base class so no Core Audio type leaks into VolumeWidget.
-class ConcreteDevice : public DeviceHandle {
+// An open endpoint, scoped to a single call. Nothing here escapes the function
+// that built it, so there is no window in which an audio object outlives the
+// apartment that created it (see the note in VolumeControls.h).
+class Endpoint {
 public:
-    bool Initialise(IMMDevice* device) {
-        device_.Attach(device);
-        // IMMDevice::Activate takes a flags DWORD before the activation
-        // parameters. The interface id and the out-pointer are passed separately
-        // rather than through IID_PPV_ARGS, because that macro cannot be applied
-        // to a ComPtr member.
-        IAudioEndpointVolume* volume = nullptr;
-        const HRESULT hr = device->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, nullptr,
-                                            reinterpret_cast<void**>(&volume));
-        if (FAILED(hr) || !volume) return false;
-        volume_.Attach(volume);
-        return true;
+    // Finds `id` among the active render endpoints and opens its volume control.
+    // This walks the collection rather than asking the enumerator to look the id
+    // up directly, because <mmdeviceapi.h> in this SDK declares that vtable slot
+    // as GetDevice(pwstrId, ppDevice) - it drops the EDataFlow parameter the real
+    // IMMDeviceEnumerator::GetDeviceById takes, so calling it through the header
+    // would pass the wrong arguments. EnumAudioEndpoints and Item are declared
+    // correctly and cost the same in-process call.
+    bool Open(const std::wstring& id) {
+        ComPtr<IMMDeviceEnumerator> enumerator;
+        if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(enumerator.GetAddressOf()))) ||
+            !enumerator) {
+            return false;
+        }
+
+        ComPtr<IMMDeviceCollection> collection;
+        if (FAILED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATEMASK_ACTIVE,
+                                                  collection.GetAddressOf())) ||
+            !collection) {
+            return false;
+        }
+
+        UINT count = 0;
+        if (FAILED(collection->GetCount(&count))) return false;
+
+        for (UINT i = 0; i < count; ++i) {
+            ComPtr<IMMDevice> device;
+            if (FAILED(collection->Item(i, device.GetAddressOf())) || !device) continue;
+
+            LPWSTR raw = nullptr;
+            if (FAILED(device->GetId(&raw)) || !raw) continue;
+            const std::wstring candidate = raw;
+            CoTaskMemFree(raw);
+            if (candidate != id) continue;
+
+            // IMMDevice::Activate takes a flags DWORD before the activation
+            // parameters. The interface id and the out-pointer are passed
+            // separately rather than through IID_PPV_ARGS, because that macro
+            // cannot be applied to a ComPtr member.
+            IAudioEndpointVolume* volume = nullptr;
+            const HRESULT hr = device->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, nullptr,
+                                                reinterpret_cast<void**>(&volume));
+            if (FAILED(hr) || !volume) return false;
+            volume_.Attach(volume);
+            return true;
+        }
+        return false;
     }
+
     IAudioEndpointVolume* Volume() const { return volume_.Get(); }
 
 private:
-    ComPtr<IMMDevice> device_;
     ComPtr<IAudioEndpointVolume> volume_;
 };
-
-// DEVICE_STATEMASK_ACTIVE. The SDK only defines the _ALL aggregate, so the
-// individual bits are spelled out here; enumerating every state instead lists
-// several dozen endpoints that are unplugged or not present, none of which can
-// hand out a volume control.
-#ifndef DEVICE_STATEMASK_ACTIVE
-#define DEVICE_STATEMASK_ACTIVE 0x1
-#endif
 
 // PKEY_Device_FriendlyName, spelled out because <propsys.h> only declares it
 // behind a Windows-version guard, and this project targets one SDK. A
@@ -122,10 +158,8 @@ std::wstring FriendlyName(IMMDevice* device) {
 
 } // namespace
 
-bool RefreshDevices(std::vector<DeviceInfo>& out,
-                    std::vector<std::shared_ptr<DeviceHandle>>& handles) {
+bool RefreshDevices(std::vector<DeviceInfo>& out) {
     out.clear();
-    handles.clear();
 
     ComApartment apartment;
     if (!apartment.Ok()) {
@@ -182,7 +216,6 @@ bool RefreshDevices(std::vector<DeviceInfo>& out,
 
     struct Pending {
         DeviceInfo info;
-        std::shared_ptr<DeviceHandle> handle;
         bool isDefault = false;
     };
     std::vector<Pending> pending;
@@ -196,8 +229,11 @@ bool RefreshDevices(std::vector<DeviceInfo>& out,
         const std::wstring deviceId = id;
         CoTaskMemFree(id);
 
-        auto concrete = std::make_shared<ConcreteDevice>();
-        if (!concrete->Initialise(device.Get())) continue;
+        // Everything opened here is released before the loop body ends. The
+        // enumerator and the collection go with the function, so no audio object
+        // outlives its apartment.
+        Endpoint endpoint;
+        if (!endpoint.Open(deviceId)) continue;
 
         Pending p;
         p.info.id = deviceId;
@@ -206,10 +242,7 @@ bool RefreshDevices(std::vector<DeviceInfo>& out,
         p.isDefault = (!defaultKey.empty() && deviceId == defaultKey);
         p.info.isDefault = p.isDefault;
 
-        if (QueryState(concrete, p.info)) {
-            p.handle = concrete;
-            pending.push_back(std::move(p));
-        }
+        if (QueryState(deviceId, p.info)) pending.push_back(std::move(p));
     }
 
     // Default device first.
@@ -224,17 +257,19 @@ bool RefreshDevices(std::vector<DeviceInfo>& out,
         return static_cast<int>(a.isDefault) > static_cast<int>(b.isDefault);
     });
 
-    for (auto& p : pending) {
-        out.push_back(std::move(p.info));
-        handles.push_back(std::move(p.handle));
-    }
+    for (auto& p : pending) out.push_back(std::move(p.info));
     return true;
 }
 
-bool QueryState(const std::shared_ptr<DeviceHandle>& device, DeviceInfo& out) {
-    if (!device) return false;
-    auto* concrete = static_cast<ConcreteDevice*>(device.get());
-    IAudioEndpointVolume* volume = concrete->Volume();
+bool QueryState(const std::wstring& id, DeviceInfo& out) {
+    if (id.empty()) return false;
+
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    Endpoint endpoint;
+    if (!endpoint.Open(id)) return false;
+    IAudioEndpointVolume* volume = endpoint.Volume();
     if (!volume) return false;
 
     float level = 0.0f;
@@ -247,12 +282,17 @@ bool QueryState(const std::shared_ptr<DeviceHandle>& device, DeviceInfo& out) {
     return true;
 }
 
-bool SetVolume(const std::shared_ptr<DeviceHandle>& device, int percent, bool muted) {
-    if (!device) return false;
-    auto* concrete = static_cast<ConcreteDevice*>(device.get());
-    IAudioEndpointVolume* volume = concrete->Volume();
-    if (!volume) return false;
+bool SetVolume(const std::wstring& id, int percent, bool muted) {
+    if (id.empty()) return false;
     percent = std::clamp(percent, 0, 100);
+
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    Endpoint endpoint;
+    if (!endpoint.Open(id)) return false;
+    IAudioEndpointVolume* volume = endpoint.Volume();
+    if (!volume) return false;
 
     // Mute first: a muted device reports volume 0, so unmuting after setting
     // the level would leave the slider showing a value the user then has to set

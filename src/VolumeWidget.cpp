@@ -1,3 +1,4 @@
+#include "Diagnostics.h"
 #include "VolumeWidget.h"
 
 #include <algorithm>
@@ -106,11 +107,19 @@ bool VolumeWidget::Commit(int row, int percent, bool muted) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return false;
     Row& r = m_rows[row];
 
-    if (!VolumeControls::SetVolume(r.handle, percent, muted)) {
+    if (!VolumeControls::SetVolume(r.info.id, percent, muted)) {
         // The endpoint refused. Re-read rather than leave the panel claiming a
         // level the system is not using.
         VolumeControls::DeviceInfo actual;
-        if (VolumeControls::QueryState(r.handle, actual)) r.info = actual;
+        actual.id = r.info.id;
+        if (VolumeControls::QueryState(r.info.id, actual)) {
+            // Keep the name and default flag; only the live state is replaced.
+            const std::wstring name = r.info.name;
+            const bool isDefault = r.info.isDefault;
+            r.info = actual;
+            r.info.name = name;
+            r.info.isDefault = isDefault;
+        }
         return false;
     }
     r.info.percent = std::clamp(percent, 0, 100);
@@ -129,26 +138,25 @@ void VolumeWidget::Activate(int controlId, HWND /*ownerHwnd*/) {
 
 void VolumeWidget::Refresh() {
     std::vector<VolumeControls::DeviceInfo> infos;
-    std::vector<std::shared_ptr<VolumeControls::DeviceHandle>> handles;
-    VolumeControls::RefreshDevices(infos, handles);
+    VolumeControls::RefreshDevices(infos);
 
-    // Keep the drag going on the same device if it survived the re-read.
-    std::shared_ptr<VolumeControls::DeviceHandle> dragging;
+    // Keep the drag going on the same device if it survived the re-read. Rows
+    // are identified by endpoint id, which is stable for a given device.
+    std::wstring dragging;
     if (m_dragRow >= 0 && m_dragRow < static_cast<int>(m_rows.size())) {
-        dragging = m_rows[m_dragRow].handle;
+        dragging = m_rows[m_dragRow].info.id;
     }
 
     m_rows.clear();
-    for (size_t i = 0; i < infos.size(); ++i) {
+    for (const auto& info : infos) {
         Row r;
-        r.info = infos[i];
-        r.handle = handles[i];
+        r.info = info;
         m_rows.push_back(std::move(r));
     }
     m_hasLoaded = true;
 
     for (size_t i = 0; i < m_rows.size(); ++i) {
-        if (dragging && m_rows[i].handle == dragging) {
+        if (!dragging.empty() && m_rows[i].info.id == dragging) {
             m_dragRow = static_cast<int>(i);
             break;
         }
@@ -159,21 +167,25 @@ void VolumeWidget::OnPanelOpening(HWND /*ownerHwnd*/) { Refresh(); }
 
 void VolumeWidget::OnPanelVisibilityChanged(bool) {
     // Deliberately does nothing. OnPanelOpening already listed the endpoints a
-    // fraction of a second before the slide finished, and replacing every Core
-    // Audio handle again at that point churns the whole device collection to
-    // learn nothing new. Endpoints appearing or disappearing is a rare event
-    // next to a slide; OnTick is what keeps the levels honest in the meantime.
+    // fraction of a second before the slide finished, and listing them again at
+    // that point costs a full enumeration to learn nothing new. Endpoints
+    // appearing or disappearing is a rare event next to a slide; OnTick is what
+    // keeps the levels honest in the meantime.
 }
 
 void VolumeWidget::OnTick() {
-    // Only re-reads the state of endpoints that are already open. Re-enumerating
-    // the whole device collection twice a second would be several dozen COM
-    // round trips per tick for no benefit: devices appearing or disappearing is
-    // handled on panel open, and the per-device values are what change. This
-    // also keeps the panel in step with volume keys pressed in another app.
+    // Re-reads each listed endpoint individually. Re-enumerating the whole
+    // device collection twice a second would be several dozen COM round trips per
+    // tick for no benefit: devices appearing or disappearing is handled on panel
+    // open, and the per-device values are what change. This also keeps the panel
+    // in step with volume keys pressed in another app.
     for (Row& r : m_rows) {
         VolumeControls::DeviceInfo updated;
-        if (VolumeControls::QueryState(r.handle, updated)) {
+        updated.id = r.info.id;
+        if (VolumeControls::QueryState(r.info.id, updated)) {
+            // QueryState only fills in the live state, so carry the descriptive
+            // fields over rather than blanking the row.
+            updated.name = r.info.name;
             updated.isDefault = r.info.isDefault;
             r.info = std::move(updated);
         }

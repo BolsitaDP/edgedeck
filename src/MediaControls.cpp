@@ -1,3 +1,4 @@
+#include "Diagnostics.h"
 #include "MediaControls.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -14,6 +15,22 @@ using WinRTSession = winrt::Windows::Media::Control::GlobalSystemMediaTransportC
 using Manager = winrt::Windows::Media::Control::
     GlobalSystemMediaTransportControlsSessionManager;
 using winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+
+// The four delegate types the change subscription registers. They are named
+// because each registration is stored, and a stored registration has to own its
+// handler - see the comment on ChangeSubscription::Watched.
+using CurrentSessionHandler = winrt::Windows::Foundation::TypedEventHandler<
+    Manager, winrt::Windows::Media::Control::CurrentSessionChangedEventArgs>;
+using SessionsChangedHandler = winrt::Windows::Foundation::TypedEventHandler<
+    Manager, winrt::Windows::Media::Control::SessionsChangedEventArgs>;
+using PlaybackHandler =
+    winrt::Windows::Foundation::TypedEventHandler<WinRTSession,
+                                                  winrt::Windows::Media::Control::
+                                                      PlaybackInfoChangedEventArgs>;
+using MediaPropsHandler =
+    winrt::Windows::Foundation::TypedEventHandler<WinRTSession,
+                                                  winrt::Windows::Media::Control::
+                                                      MediaPropertiesChangedEventArgs>;
 
 class ConcreteSessionHandle : public SessionHandle {
 public:
@@ -86,6 +103,28 @@ public:
     }
 
 private:
+    // A registration is three objects that have to live and die together: the
+    // source, the token, and - the part that is easy to miss - the handler.
+    //
+    // C++/WinRT's add_* stores only a *weak* reference to the delegate. Passing
+    // a temporary lambda straight into add_ therefore leaves a live token
+    // pointing at a handler that died at the end of the statement, and the next
+    // time Windows raises the event it dereferences that corpse: an access
+    // violation a couple of dozen bytes into a null vtable, on a thread-pool
+    // thread, with no usable stack to walk. It showed up as a crash that had
+    // nothing to do with anything the user was doing.
+    //
+    // Holding the session here also guarantees the token stays valid: the
+    // session outlives the subscription anyway (MediaWidget keeps a handle per
+    // row), so tearing the registration down has to go through the session.
+    struct Watched {
+        WinRTSession session;
+        winrt::event_token playbackToken{};
+        winrt::event_token propertiesToken{};
+        PlaybackHandler playbackHandler{};
+        MediaPropsHandler propertiesHandler{};
+    };
+
     struct State {
         std::atomic<bool> alive{true};
         HWND notifyWindow = nullptr;
@@ -102,7 +141,12 @@ private:
         Manager manager{nullptr};
         winrt::event_token currentSessionToken{};
         winrt::event_token sessionsChangedToken{};
-        std::vector<winrt::event_token> sessionTokens;
+
+        // The handlers behind those two tokens, and the per-session registrations.
+        // All of it is cleared only after remove_ has run.
+        CurrentSessionHandler currentSessionHandler{};
+        SessionsChangedHandler sessionsChangedHandler{};
+        std::vector<Watched> watched;
 
         void Notify() const {
             if (!alive.load()) return;
@@ -113,13 +157,11 @@ private:
         }
     };
 
-    // Every handler is written as a variadic lambda taking (sender, args...).
-    // Spelling the two WinRT event-argument types out by hand is what makes these
-    // registrations fail to compile the moment the SDK renames one, and the
-    // bodies do not care about the arguments at all - they only need to know that
-    // something changed.
-    template <typename Handler>
-    static auto OnChange(std::weak_ptr<State> weak, Handler&&) {
+    // Handler types, spelled out because the registrations have to be stored
+    // somewhere with a name. The bodies do not care about the arguments at all -
+    // they only need to know that something changed - so each is a variadic
+    // lambda that forwards to Notify().
+    static auto OnChange(std::weak_ptr<State> weak) {
         return [weak](auto&&...) {
             if (auto state = weak.lock()) state->Notify();
         };
@@ -132,8 +174,17 @@ private:
     static void WatchSession(const std::shared_ptr<State>& state, WinRTSession session) {
         if (!session) return;
         auto weak = std::weak_ptr<State>(state);
-        state->sessionTokens.push_back(session.PlaybackInfoChanged(OnChange(weak, 0)));
-        state->sessionTokens.push_back(session.MediaPropertiesChanged(OnChange(weak, 0)));
+
+        // Build the handlers, register them, then move the whole set into the
+        // watched list. TypedEventHandler has no default constructor, so the
+        // entry is aggregate-initialised rather than filled in field by field.
+        PlaybackHandler playback(OnChange(weak));
+        MediaPropsHandler properties(OnChange(weak));
+        const auto playbackToken = session.PlaybackInfoChanged(playback);
+        const auto propertiesToken = session.MediaPropertiesChanged(properties);
+
+        state->watched.push_back(Watched{session, playbackToken, propertiesToken,
+                                         std::move(playback), std::move(properties)});
     }
 
     static winrt::fire_and_forget RegisterAsync(std::shared_ptr<State> state) {
@@ -141,8 +192,10 @@ private:
         Manager manager = co_await Manager::RequestAsync();
 
         auto weak = std::weak_ptr<State>(state);
-        auto currentToken = manager.CurrentSessionChanged(OnChange(weak, 0));
-        auto sessionsToken = manager.SessionsChanged(OnChange(weak, 0));
+        CurrentSessionHandler currentHandler(OnChange(weak));
+        SessionsChangedHandler sessionsHandler(OnChange(weak));
+        auto currentToken = manager.CurrentSessionChanged(currentHandler);
+        auto sessionsToken = manager.SessionsChanged(sessionsHandler);
 
         // Watch every session that exists right now, not just the current one:
         // a background app starting to play is exactly the change a panel that
@@ -157,7 +210,9 @@ private:
         }
         if (!stillWanted) {
             // Died while we were acquiring: drop the two manager registrations
-            // we just made and leave nothing behind.
+            // we just made and leave nothing behind. The handlers are locals, so
+            // they die with this frame - after the tokens, which is the order
+            // that matters.
             manager.CurrentSessionChanged(currentToken);
             manager.SessionsChanged(sessionsToken);
             co_return;
@@ -168,6 +223,8 @@ private:
             state->manager = std::move(manager);
             state->currentSessionToken = currentToken;
             state->sessionsChangedToken = sessionsToken;
+            state->currentSessionHandler = currentHandler;
+            state->sessionsChangedHandler = sessionsHandler;
             state->registered = true;
         }
     }
@@ -175,12 +232,27 @@ private:
     static winrt::fire_and_forget UnregisterAsync(std::shared_ptr<State> state) {
         co_await winrt::resume_background();
         std::lock_guard<std::mutex> lock(state->mutex);
-        if (!state->registered) co_return;
+        if (!state->registered) {
+            co_return;
+        }
+
+        // remove_ first, release the handlers second - never the other way
+        // round. Dropping a handler while its token is still live is precisely
+        // the dangling registration described on Watched.
         state->manager.CurrentSessionChanged(state->currentSessionToken);
         state->manager.SessionsChanged(state->sessionsChangedToken);
+
+        for (auto& w : state->watched) {
+            w.session.PlaybackInfoChanged(w.playbackToken);
+            w.session.MediaPropertiesChanged(w.propertiesToken);
+        }
+
+        // Only now, with nothing registered anywhere, can the handlers go.
+        state->watched.clear();
+        state->currentSessionHandler = nullptr;
+        state->sessionsChangedHandler = nullptr;
         state->currentSessionToken = {};
         state->sessionsChangedToken = {};
-        state->sessionTokens.clear();
         state->manager = nullptr;
         state->registered = false;
     }

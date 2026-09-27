@@ -44,9 +44,11 @@ public:
     bool OnStepControl(int controlId, int direction, float& outValue01) override;
 
 private:
+    // A row is a snapshot: the endpoint id plus what was true when the list was
+    // built. Every read or write reopens the endpoint from the id, so nothing
+    // here has a lifetime beyond the call it is passed to.
     struct Row {
         VolumeControls::DeviceInfo info;
-        std::shared_ptr<VolumeControls::DeviceHandle> handle;
     };
 
     static constexpr int kMuteButton = 1; // control id within a row: 0 = slider, 1 = mute
