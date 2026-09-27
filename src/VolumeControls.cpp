@@ -212,8 +212,17 @@ bool RefreshDevices(std::vector<DeviceInfo>& out,
         }
     }
 
-    std::stable_sort(pending.begin(), pending.end(),
-                     [](const Pending& a, const Pending& b) { return a.isDefault && !b.isDefault; });
+    // Default device first.
+    //
+    // The comparator has to be a strict weak ordering. `a.isDefault && !b.isDefault`
+    // looks equivalent and is not: it is not transitive, and both std::sort and
+    // std::stable_sort are entitled to walk off the ends of the range when handed
+    // a comparator like that. It does not fail loudly - it corrupts the heap, and
+    // the resulting access violation surfaces somewhere else entirely a few
+    // hundred milliseconds later, which is what made this so hard to attribute.
+    std::sort(pending.begin(), pending.end(), [](const Pending& a, const Pending& b) {
+        return static_cast<int>(a.isDefault) > static_cast<int>(b.isDefault);
+    });
 
     for (auto& p : pending) {
         out.push_back(std::move(p.info));

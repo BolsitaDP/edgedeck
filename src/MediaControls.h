@@ -52,6 +52,7 @@ public:
 // echoed back untouched, so the widget can tell "this is the list I am
 // currently showing" from "this is a list that has already been replaced".
 struct SessionList : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::MediaSessions; }
     std::uint64_t listGeneration = 0;
     std::vector<SessionInfo> infos;
     std::vector<std::shared_ptr<SessionHandle>> handles; // same size/order as infos
@@ -60,6 +61,7 @@ struct SessionList : AsyncEnvelope {
 // Reply to SendCommand. Carries the caller's `tag` plus the generation of the
 // list the command was issued against, for the same reason.
 struct CommandResult : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::MediaCommand; }
     int tag = 0;
     std::uint64_t listGeneration = 0;
 };
@@ -87,6 +89,7 @@ void SendCommand(std::shared_ptr<SessionHandle> session, Command command, int ta
 // answers this in-process from already-published state, so it costs nothing
 // like a full enumeration.
 struct NowPlaying : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::NowPlaying; }
     bool hasSession = false;
     bool isPlaying = false;
     std::wstring sourceId;

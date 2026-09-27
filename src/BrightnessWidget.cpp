@@ -173,6 +173,7 @@ void BrightnessWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     auto discard = [&] { delete envelope; };
 
     if (message == kRefreshMessage) {
+        if (envelope->Kind() != AsyncKind::Monitors) return discard();
         auto* list = static_cast<BrightnessControls::MonitorList*>(envelope);
         if (!m_requests.Accept(list->requestId) || list->listGeneration != m_listGeneration) {
             return discard();
@@ -198,6 +199,7 @@ void BrightnessWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     }
 
     if (message == kSetResultMessage) {
+        if (envelope->Kind() != AsyncKind::BrightnessWrite) return discard();
         auto* result = static_cast<BrightnessControls::SetResult*>(envelope);
         int row = result->row;
         bool sameList = result->listGeneration == m_listGeneration;

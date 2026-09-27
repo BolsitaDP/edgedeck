@@ -273,6 +273,7 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     }
 
     if (message == kRefreshMessage) {
+        if (envelope->Kind() != AsyncKind::MediaSessions) return discard();
         auto* list = static_cast<MediaControls::SessionList*>(envelope);
         if (!m_requests.Accept(list->requestId) || list->listGeneration != m_listGeneration) {
             return discard();
@@ -295,6 +296,7 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     }
 
     if (message == kCommandResultMessage) {
+        if (envelope->Kind() != AsyncKind::MediaCommand) return discard();
         auto* result = static_cast<MediaControls::CommandResult*>(envelope);
         int row = result->tag / kButtonsPerRow;
         int button = result->tag % kButtonsPerRow;
@@ -322,6 +324,7 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     }
 
     if (message == kNowPlayingMessage) {
+        if (envelope->Kind() != AsyncKind::NowPlaying) return discard();
         auto* now = static_cast<MediaControls::NowPlaying*>(envelope);
         if (m_nowPlayingRequestId != 0 && m_requests.Accept(now->requestId)) {
             m_nowPlayingRequestId = 0;

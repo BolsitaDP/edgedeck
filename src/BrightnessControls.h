@@ -33,12 +33,14 @@ public:
 };
 
 struct MonitorList : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::Monitors; }
     std::uint64_t listGeneration = 0;
     std::vector<MonitorInfo> infos;
     std::vector<std::shared_ptr<MonitorHandle>> handles; // same order; null when unsupported
 };
 
 struct SetResult : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::BrightnessWrite; }
     std::uint64_t listGeneration = 0;
     int row = 0;
     std::wstring devicePath; // the monitor the write was aimed at
