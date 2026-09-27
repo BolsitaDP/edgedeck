@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 
 namespace VolumeControls {
 namespace {
@@ -139,6 +140,32 @@ std::wstring FallbackName(const std::wstring& id) {
     return tail.empty() ? L"Speakers" : tail;
 }
 
+// Reads level and mute from an endpoint that is already open, straight into the
+// fields the caller cares about. Deliberately not routed through QueryState:
+// that takes an endpoint *id* and so has to walk the collection to find it, and
+// calling it from inside an enumeration pass re-walked the whole collection once
+// per device. That one detail is what made listing the endpoints cost 60ms.
+bool ReadState(IMMDevice* device, int& percent, bool& muted) {
+    IAudioEndpointVolume* volume = nullptr;
+    if (FAILED(device->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, nullptr,
+                                reinterpret_cast<void**>(&volume))) ||
+        !volume) {
+        return false;
+    }
+
+    float level = 0.0f;
+    BOOL isMuted = FALSE;
+    const bool ok = SUCCEEDED(volume->GetMasterVolumeLevelScalar(&level));
+    if (ok) {
+        percent = std::clamp(static_cast<int>(std::lround(level * 100.0f)), 0, 100);
+    }
+    if (SUCCEEDED(volume->GetMute(&isMuted))) {
+        muted = isMuted != FALSE;
+    }
+    volume->Release();
+    return ok;
+}
+
 std::wstring FriendlyName(IMMDevice* device) {
     ComPtr<IPropertyStore> store;
     if (!device || FAILED(device->OpenPropertyStore(STGM_READ, store.GetAddressOf())) || !store) {
@@ -153,6 +180,39 @@ std::wstring FriendlyName(IMMDevice* device) {
         name = value.pwszVal;
     }
     PropVariantClear(&value);
+    return name;
+}
+
+// Friendly names for endpoints already seen.
+//
+// OpenPropertyStore/GetValue is the expensive part of building the list, and for
+// an endpoint an app owns it is a cross-process round trip - around 60ms for a
+// typical seven-device machine, against roughly 4ms for the enumeration itself.
+// A name does not change while a device stays plugged in, so it is resolved
+// once per endpoint id and remembered. Keyed by id, so a device that disappears
+// and comes back is still found.
+std::wstring CachedFriendlyName(IMMDevice* device, const std::wstring& id) {
+    struct Entry {
+        std::wstring id;
+        std::wstring name;
+    };
+    static std::vector<Entry> cache;
+    static std::mutex cacheMutex;
+
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        for (const auto& entry : cache) {
+            if (entry.id == id) return entry.name;
+        }
+    }
+
+    std::wstring name = FriendlyName(device);
+
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    // Bound it: a machine that has hot-plugged many devices over a long session
+    // should not accumulate names forever.
+    if (cache.size() >= 64) cache.erase(cache.begin());
+    cache.push_back(Entry{id, name});
     return name;
 }
 
@@ -229,20 +289,19 @@ bool RefreshDevices(std::vector<DeviceInfo>& out) {
         const std::wstring deviceId = id;
         CoTaskMemFree(id);
 
-        // Everything opened here is released before the loop body ends. The
-        // enumerator and the collection go with the function, so no audio object
-        // outlives its apartment.
-        Endpoint endpoint;
-        if (!endpoint.Open(deviceId)) continue;
-
         Pending p;
         p.info.id = deviceId;
-        p.info.name = FriendlyName(device.Get());
+        p.info.name = CachedFriendlyName(device.Get(), deviceId);
         if (p.info.name.empty()) p.info.name = FallbackName(deviceId);
         p.isDefault = (!defaultKey.empty() && deviceId == defaultKey);
         p.info.isDefault = p.isDefault;
 
-        if (QueryState(deviceId, p.info)) pending.push_back(std::move(p));
+        // Read straight off the device already in hand. Everything opened here is
+        // released before the loop body ends, and the enumerator and collection go
+        // with the function, so no audio object outlives its apartment.
+        if (ReadState(device.Get(), p.info.percent, p.info.muted)) {
+            pending.push_back(std::move(p));
+        }
     }
 
     // Default device first.
@@ -258,6 +317,54 @@ bool RefreshDevices(std::vector<DeviceInfo>& out) {
     });
 
     for (auto& p : pending) out.push_back(std::move(p.info));
+    return true;
+}
+
+bool RefreshStates(std::vector<DeviceInfo>& devices) {
+    if (devices.empty()) return true;
+
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(enumerator.GetAddressOf()))) ||
+        !enumerator) {
+        return false;
+    }
+
+    ComPtr<IMMDeviceCollection> collection;
+    if (FAILED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATEMASK_ACTIVE,
+                                              collection.GetAddressOf())) ||
+        !collection) {
+        return false;
+    }
+    UINT count = 0;
+    if (FAILED(collection->GetCount(&count))) return false;
+
+    for (UINT i = 0; i < count; ++i) {
+        ComPtr<IMMDevice> device;
+        if (FAILED(collection->Item(i, device.GetAddressOf())) || !device) continue;
+
+        LPWSTR raw = nullptr;
+        if (FAILED(device->GetId(&raw)) || !raw) continue;
+        const std::wstring id = raw;
+        CoTaskMemFree(raw);
+
+        DeviceInfo* match = nullptr;
+        for (auto& candidate : devices) {
+            if (candidate.id == id) {
+                match = &candidate;
+                break;
+            }
+        }
+        // An endpoint in the collection that the panel is not showing is simply
+        // not ours to update; one that is missing from the collection keeps its
+        // last known state rather than flickering to zero.
+        if (!match) continue;
+
+        ReadState(device.Get(), match->percent, match->muted);
+    }
     return true;
 }
 
