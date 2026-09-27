@@ -55,7 +55,13 @@ Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\
 
 ## Apariencia
 
-El panel sigue el tema de Windows: usa la paleta oscura o clara según el ajuste del sistema, y cuando el **alto contraste** está activo toma directamente los colores de ventana, texto y botón del usuario en vez de una paleta propia. Todo se recalcula al recibir `WM_SETTINGCHANGE` / `WM_THEMECHANGED`, así que cambiar de tema no reinicia la app.
+El panel sigue el tema de Windows usando **los mismos colores que usa el propio sistema**: los grises de la rampa oscura/elevada (`#202020`, `#1A1A1A`, `#333333`), la neutra de respaldo de Mica en claro (`#F3F3F3`), y el **acento que haya elegido el usuario**, leído de `Themes\Personalize\AccentColor`.
+
+El acento se ajusta hacia blanco o negro hasta cumplir 3:1 de contraste contra el fondo del panel. Sin eso, un acento azul oscuro elegido por el usuario sería invisible como relleno de un slider sobre un panel oscuro; es la misma idea que aplicar Windows al modo oscuro, calculada en vez de tomada de un segundo valor del registro que no siempre existe.
+
+Cuando el **alto contraste** está activo se abandonan estos valores y se toman directamente los colores de ventana, texto y botón del usuario, que es justo para lo que existe ese modo.
+
+Cambiar el tema no reinicia la app: la paleta se recalcula al recibir `WM_SETTINGCHANGE` / `WM_THEMECHANGED` / `WM_SYSCOLORCHANGE`, y los pinceles que llevan el color hornearado se sueltan al detectarla. Antes esta lectura se hacía **en cada pintado** —una lectura del registro más un `SystemParametersInfo`, unas quince veces por frame de animación— y nunca se comprobaba el resultado, así que un fallo silencioso se traducía en caer siempre a la paleta clara.
 
 ## Notas técnicas
 
