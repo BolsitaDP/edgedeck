@@ -708,15 +708,6 @@ void Renderer::DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F 
                        m_primaryTextBrush.Get());
 }
 
-void Renderer::DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered, bool enabled) {
-    if (!m_target) return;
-    const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
-    m_target->FillRoundedRectangle(rr, m_controlBrush.Get());
-    if (hovered && enabled) m_target->FillRoundedRectangle(rr, m_hoverBrush.Get());
-    m_target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), GlyphFormat(), rect,
-                       enabled ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get());
-}
-
 ID2D1SolidColorBrush* Renderer::DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
     const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
     m_target->FillRoundedRectangle(rr, m_controlBrush.Get());

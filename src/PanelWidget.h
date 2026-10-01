@@ -38,14 +38,6 @@ public:
     // "icon" for a row that isn't backed by a real extracted app icon.
     virtual void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) = 0;
 
-    // Small square button with a centered symbol glyph; dimmed when disabled.
-    // Only for glyphs that a real installed font actually covers - anything
-    // else must be drawn as vectors (see the three below), because a missing
-    // glyph renders as a "tofu" box and there is no way to detect that from
-    // DirectWrite without measuring the glyph advances.
-    virtual void DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered,
-                                 bool enabled) = 0;
-
     // Transport controls, drawn as vector shapes. Segoe UI - the only font the
     // renderer names - has no glyph for U+23EE (previous), U+23ED (next) or
     // U+23F8 (pause), so all three are built from primitives; a play triangle

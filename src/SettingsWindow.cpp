@@ -224,13 +224,22 @@ void SettingsWindow::StoreControlsIntoSelected() {
     // clamped the model and left the edit displaying the original text, which
     // meant typing "abc" looked like it had been accepted and then quietly
     // became 12.
+    //
+    // readNumber *writes* the parsed value on success and reports whether it did.
+    // It used to only report validity, so the value typed into the box was thrown
+    // away and the caller's clamp applied the model's old number instead: the
+    // dialog silently discarded tab width, tab height and panel width. A rejected
+    // edit now leaves the model untouched, which is the behaviour the comment
+    // above describes.
     auto readNumber = [](HWND edit, float& out) {
         wchar_t buf[32];
         GetWindowTextW(edit, buf, 32);
         wchar_t* end = nullptr;
         errno = 0;
         const double value = wcstod(buf, &end);
-        return end != buf && *end == L'\0' && errno != ERANGE && value == value;
+        if (end == buf || *end != L'\0' || errno == ERANGE || value != value) return false;
+        out = static_cast<float>(value);
+        return true;
     };
 
     if (readNumber(m_tabWidthEdit, t.tabWidth)) {

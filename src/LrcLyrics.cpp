@@ -375,9 +375,43 @@ HttpResponse HttpsGet(const wchar_t* host, const std::wstring& path) {
     return resp;
 }
 
+// Hands the result to the UI thread exactly once, on every exit path.
+//
+// This exists because `co_return` skips whatever follows the try block, so an
+// early exit used to step straight over the post: the envelope was orphaned and
+// the widget sat on "Looking up lyrics..." for the rest of the session. Nearly
+// every outcome takes an early exit here - a cache hit, the negative cache, no
+// session, an HTTP failure, "no synced lyrics for this track" - so only a live
+// successful fetch ever completed. As a coroutine local it lives in the frame,
+// so the destructor runs when the coroutine finishes by any route, including
+// returning early or unwinding.
+class PostOnExit {
+public:
+    PostOnExit(HWND window, UINT message, Result* result) noexcept
+        : m_window(window), m_message(message), m_result(result) {}
+
+    ~PostOnExit() {
+        if (m_result) PostOrDelete(m_window, m_message, m_result);
+    }
+
+    PostOnExit(const PostOnExit&) = delete;
+    PostOnExit& operator=(const PostOnExit&) = delete;
+
+    // Give up ownership without posting, for a path that has already sent the
+    // result some other way. Unused today; here so the "posted twice" mistake is
+    // a one-liner if it ever is needed.
+    void Release() noexcept { m_result = nullptr; }
+
+private:
+    HWND m_window;
+    UINT m_message;
+    Result* m_result;
+};
+
 winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId) {
     auto* result = new Result();
     result->requestId = requestId;
+    PostOnExit post(notifyWindow, notifyMessage, result);
 
     try {
         co_await winrt::resume_background();
@@ -464,7 +498,7 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
         result->status = Status::NetworkError;
     }
 
-    PostOrDelete(notifyWindow, notifyMessage, result);
+    // The result is posted by post, on the way out of every path above.
 }
 
 } // namespace
