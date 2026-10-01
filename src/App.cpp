@@ -120,6 +120,11 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
                     L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
     }
 
+    // The theme may have changed in the same Save. The palette is cached and only
+    // re-read on demand, so without this the panels would keep painting in the
+    // old colours until something else happened to invalidate it.
+    PanelTheme::Refresh();
+
     // A tab only has to be rebuilt when its widget type changed. Everything
     // else - size, position, order of the untouched tabs - is applied in place,
     // so an open or pinned panel, its scroll position and any in-flight async

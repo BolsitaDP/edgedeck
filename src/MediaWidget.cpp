@@ -1,4 +1,5 @@
 #include "Diagnostics.h"
+#include "Renderer.h"
 #include "MediaWidget.h"
 
 #include <algorithm>
@@ -121,9 +122,14 @@ D2D1_COLOR_F BadgeColorFor(const std::wstring& name) {
     // HSL -> RGB by hand: D2D1 has no HSL helper, and going through HSL keeps
     // every generated colour at the same lightness and saturation, which is what
     // makes an arbitrary app name still look deliberate.
+    //
+    // The lightness follows the theme: a badge has to separate from the surface it
+    // sits on, and one value cannot do that for both a #F3F3F3 and a #202020
+    // panel. DrawBadge picks the letter colour from the result, so any lightness
+    // here stays readable.
     const float hue = static_cast<float>(hash % 360) / 360.0f;
-    const float saturation = 0.45f;
-    const float lightness = 0.45f;
+    const float saturation = PanelTheme::Current().dark ? 0.50f : 0.58f;
+    const float lightness = PanelTheme::Current().dark ? 0.54f : 0.44f;
 
     auto channel = [&](float p, float q, float t) {
         if (t < 0.0f) t += 1.0f;

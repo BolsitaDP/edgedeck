@@ -57,6 +57,8 @@ Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\
 
 El panel sigue el tema de Windows usando **los mismos colores que usa el propio sistema**: los grises de la rampa oscura/elevada (`#202020`, `#1A1A1A`, `#333333`), la neutra de respaldo de Mica en claro (`#F3F3F3`), y el **acento que haya elegido el usuario**, leído de `Themes\Personalize\AccentColor`.
 
+En Ajustes hay un desplegable **Theme** con *Follow Windows* (por defecto), *Always dark* y *Always light*, para cuando el ajuste del sistema y el panel que prefieres no coinciden — sistema claro con panel oscuro, o al revés. El alto contraste tiene prioridad sobre las dos opciones.
+
 El acento se ajusta hacia blanco o negro hasta cumplir 3:1 de contraste contra el fondo del panel. Sin eso, un acento azul oscuro elegido por el usuario sería invisible como relleno de un slider sobre un panel oscuro; es la misma idea que aplicar Windows al modo oscuro, calculada en vez de tomada de un segundo valor del registro que no siempre existe.
 
 Cuando el **alto contraste** está activo se abandonan estos valores y se toman directamente los colores de ventana, texto y botón del usuario, que es justo para lo que existe ese modo.
