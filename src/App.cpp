@@ -1,4 +1,5 @@
 #include "App.h"
+#include "Diagnostics.h"
 #include "Tab.h"
 #include "QuickActionsWidget.h"
 #include "MediaWidget.h"
@@ -20,6 +21,19 @@ constexpr UINT kTrayId = 102;
 // Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
 // with them, and a chord nothing else claims.
 constexpr int kExitHotkeyVk = 'Q';
+
+// Broadcast by the shell after it (re)builds the notification area, which it
+// does whenever Explorer restarts. Every icon is destroyed at that point and the
+// owning process has to add its own again - there is no way to opt out, and no
+// notification that it happened.
+//
+// The id is assigned by the shell at runtime, so it cannot be a switch case and
+// has to be compared by hand. Registering it twice returns the same value, so
+// there is nothing to guard.
+UINT TaskbarCreatedMessage() {
+    static const UINT msg = RegisterWindowMessageW(L"TaskbarCreated");
+    return msg;
+}
 
 // The user-configurable subset of a tab's layout, mapped onto Tab's full
 // geometry. Everything TabConfig carries that is not user-facing (corner
@@ -187,6 +201,13 @@ bool App::AddTrayIcon() {
     wcscpy_s(nid.szTip, L"EdgeDeck");
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    if (m_trayAdded) {
+        Diagnostics::Info("Tray: icon added");
+    } else {
+        // Usually means the notification area does not exist yet - Explorer has
+        // not started. TaskbarCreated will arrive and this is retried.
+        Diagnostics::Error("Tray: icon could not be added; waiting for the notification area");
+    }
     return m_trayAdded;
 }
 
@@ -248,6 +269,23 @@ void App::RequestExit() {
 // ---------------------------------------------------------------------------
 
 LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    // Before the switch, because the id is only known at runtime.
+    if (msg == TaskbarCreatedMessage()) {
+        // Explorer rebuilt the notification area and dropped our icon along with
+        // everyone else's. Re-add it, or the app keeps running with no way to be
+        // seen in the tray until it is restarted.
+        if (s_instance) {
+            // Delete before adding. NIM_ADD does not update an icon that is
+            // already registered under the same hWnd/uID - it fails - so a plain
+            // re-add only works when the shell really did drop the icon. The
+            // delete is a no-op in that case and keeps m_trayAdded honest either
+            // way, so the real delete on exit is never suppressed.
+            s_instance->RemoveTrayIcon();
+            s_instance->AddTrayIcon();
+        }
+        return 0;
+    }
+
     switch (msg) {
         case WM_HOTKEY:
             if (!s_instance) break;

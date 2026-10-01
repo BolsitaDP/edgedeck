@@ -27,7 +27,15 @@ bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
     // CreateRoundRectRgn's last two params are the rounding ellipse's
     // width/height (its diameter), not a radius - double it to match radiusPx.
     const int diameter = static_cast<int>(std::lround(radiusPx * 2.0f));
-    HRGN region = CreateRoundRectRgn(0, 0, widthPx + 1, heightPx + 1, diameter, diameter);
+
+    // Its right and bottom are *exclusive*, so (0, 0, widthPx, heightPx) already
+    // covers exactly widthPx x heightPx pixels. Adding 1 here made every window 1px
+    // larger than the layout asked for, and SetWindowRgn resizes the window to
+    // match the region, so GetClientRect then disagreed with Tab's own geometry
+    // for the life of the window - which is what the defensive comment in
+    // DrawPanel about the window being the authority on its own size was working
+    // around.
+    HRGN region = CreateRoundRectRgn(0, 0, widthPx, heightPx, diameter, diameter);
     if (!region) return false;
     if (!SetWindowRgn(hwnd, region, TRUE)) {
         DeleteObject(region);
