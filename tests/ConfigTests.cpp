@@ -179,6 +179,47 @@ void TestEmptyFileUsesDefaults() {
     CHECK(!Config::LoadOrDefault().empty());
 }
 
+void TestThemeModeRoundTrips() {
+    TEST("Config: the theme preference survives a save and load");
+    ScopedConfig guard;
+    for (ThemeMode mode : {ThemeMode::Follow, ThemeMode::Dark, ThemeMode::Light}) {
+        // Load before setting, not after: LoadOrDefault reads the [settings] section
+        // as a side effect and would overwrite a mode just set in memory. The real
+        // flow does the same - load once at startup, then the dialog sets and saves.
+        const std::vector<TabSettings> tabs = Config::LoadOrDefault();
+        Config::SetCurrentThemeMode(mode);
+        CHECK(Config::Save(tabs));
+        Config::SetCurrentThemeMode(ThemeMode::Follow);
+        Config::LoadOrDefault();
+        CHECK_EQ(static_cast<int>(Config::CurrentThemeMode()), static_cast<int>(mode));
+    }
+}
+
+void TestUnknownThemeFallsBackToFollow() {
+    TEST("Config: an unrecognised theme value falls back to following Windows");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"[settings]\ntheme=Ultraviolet\n[tab]\nwidget=Media\n");
+    Config::SetCurrentThemeMode(ThemeMode::Dark);
+    Config::LoadOrDefault();
+    CHECK_EQ(static_cast<int>(Config::CurrentThemeMode()),
+             static_cast<int>(ThemeMode::Follow));
+}
+
+void TestSettingsSectionDoesNotDisturbTabs() {
+    TEST("Config: the [settings] section is not mistaken for a tab");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"[settings]\ntheme=Dark\n[tab]\nwidget=Volume\nverticalRatio=0.5\n"
+                       L"[tab]\nwidget=Brightness\nverticalRatio=0.75\n");
+    Config::SetCurrentThemeMode(ThemeMode::Follow);
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{2});
+    CHECK_EQ(static_cast<int>(Config::CurrentThemeMode()), static_cast<int>(ThemeMode::Dark));
+    if (loaded.size() == 2) {
+        CHECK_EQ(static_cast<int>(loaded[0].widgetType), static_cast<int>(WidgetType::Volume));
+        CHECK_EQ(static_cast<int>(loaded[1].widgetType), static_cast<int>(WidgetType::Brightness));
+    }
+}
+
 } // namespace
 
 void RunConfigTests() {
@@ -189,4 +230,7 @@ void RunConfigTests() {
     TestTruncatedFileFallsBack();
     TestUnknownKeysIgnored();
     TestEmptyFileUsesDefaults();
+    TestThemeModeRoundTrips();
+    TestUnknownThemeFallsBackToFollow();
+    TestSettingsSectionDoesNotDisturbTabs();
 }

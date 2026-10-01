@@ -24,6 +24,7 @@ constexpr int kIdSave = 109;
 constexpr int kIdClose = 110;
 constexpr int kIdTrackbar = 111;
 constexpr int kIdAutostart = 112;
+constexpr int kIdThemeCombo = 113;
 
 struct TypeEntry {
     WidgetType type;
@@ -148,6 +149,18 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     SendMessageW(m_autostartCheck, BM_SETCHECK, Autostart::IsEnabled() ? BST_CHECKED : BST_UNCHECKED,
                  0);
 
+    // Following the system is the default and the reason the panel normally matches
+    // the rest of Windows; forcing either mode is for people whose system setting
+    // and preferred panel appearance disagree, which is not rare - plenty of
+    // people run a light system and still want the dark panel.
+    make(L"STATIC", L"Theme:", 0, 220, 292, 60, 18, 0);
+    m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 290,
+                        196, 120, kIdThemeCombo);
+    for (const wchar_t* label : {L"Follow Windows", L"Always dark", L"Always light"}) {
+        SendMessageW(m_themeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+    }
+    SendMessageW(m_themeCombo, CB_SETCURSEL, static_cast<WPARAM>(ThemeMode()), 0);
+
     make(L"STATIC", L"Keyboard", 0, 12, 392, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9  open and pin a panel\r\n"
@@ -242,6 +255,13 @@ void SettingsWindow::StoreControlsIntoSelected() {
         return true;
     };
 
+    // These per-field clamps and the ConfigLimits::Clamp below look redundant and
+    // are not. They differ in what they do to a value below the minimum:
+    // std::clamp raises it to the minimum, while Clamp resets it to the default.
+    // The per-field clamp runs first and so rescues what the user typed - typing 5
+    // as a tab width gives 12, the smallest allowed value, rather than silently
+    // becoming 26. Clamp then has nothing left to reset, and still covers the
+    // fields this dialog does not edit.
     if (readNumber(m_tabWidthEdit, t.tabWidth)) {
         t.tabWidth = std::clamp(t.tabWidth, ConfigLimits::kMinTabWidth, ConfigLimits::kMaxTabWidth);
     }
@@ -304,6 +324,13 @@ void SettingsWindow::OnTrackbarChanged() {
 void SettingsWindow::OnSave() {
     StoreControlsIntoSelected();
     Autostart::SetEnabled(SendMessageW(m_autostartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+
+    // Applied live rather than at next launch: someone who just picked a theme
+    // wants to see it, and the palette is cached and compared on every draw, so
+    // this is all it takes.
+    const LRESULT sel = SendMessageW(m_themeCombo, CB_GETCURSEL, 0, 0);
+    if (sel != CB_ERR) Config::SetCurrentThemeMode(static_cast<ThemeMode>(sel));
+
     if (m_onSave) m_onSave(m_tabs);
     DestroyWindow(m_hwnd);
 }

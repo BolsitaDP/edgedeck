@@ -88,6 +88,30 @@ std::vector<TabSettings> DefaultTabs() {
 
 namespace Config {
 
+const wchar_t* ThemeModeToString(ThemeMode mode) {
+    switch (mode) {
+        case ThemeMode::Dark: return L"Dark";
+        case ThemeMode::Light: return L"Light";
+        default: return L"Follow";
+    }
+}
+
+ThemeMode ThemeModeFromString(const std::wstring& s) {
+    if (s == L"Dark") return ThemeMode::Dark;
+    if (s == L"Light") return ThemeMode::Light;
+    return ThemeMode::Follow; // Follow, and anything unrecognised
+}
+
+namespace {
+// Held here so LoadOrDefault can pick up [settings] as a side effect without
+// changing its signature, and so Save can write the current value without the
+// caller having to thread it through.
+ThemeMode g_themeMode = ThemeMode::Follow;
+} // namespace
+
+ThemeMode CurrentThemeMode() { return g_themeMode; }
+void SetCurrentThemeMode(ThemeMode mode) { g_themeMode = mode; }
+
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
     DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
@@ -110,6 +134,7 @@ std::vector<TabSettings> LoadOrDefault() {
 
     TabSettings current;
     bool inTab = false;
+    bool inSettings = false;
 
     auto flush = [&] {
         if (!inTab) return;
@@ -128,13 +153,25 @@ std::vector<TabSettings> LoadOrDefault() {
             flush();
             current = TabSettings{};
             inTab = true;
+            inSettings = false;
+            continue;
+        }
+        if (line == L"[settings]") {
+            flush();
+            inTab = false;
+            inSettings = true;
             continue;
         }
 
         const size_t eq = line.find(L'=');
-        if (eq == std::wstring::npos || !inTab) continue;
+        if (eq == std::wstring::npos || (!inTab && !inSettings)) continue;
         const std::wstring key = line.substr(0, eq);
         const std::wstring value = line.substr(eq + 1);
+
+        if (inSettings) {
+            if (key == L"theme") g_themeMode = ThemeModeFromString(value);
+            continue;
+        }
 
         if (key == L"widget") {
             current.widgetType = WidgetTypeFromString(value);
@@ -166,6 +203,12 @@ bool Save(const std::vector<TabSettings>& tabs) {
         std::wofstream file(temp, std::ios::trunc);
         if (!file) return false;
         file.imbue(std::locale::classic());
+
+        // Globals first, in their own section. Written even when every value is
+        // the default, so the file says what it means rather than what was
+        // changed.
+        file << L"[settings]\n";
+        file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
 
         for (const auto& t : tabs) {
             file << L"[tab]\n";

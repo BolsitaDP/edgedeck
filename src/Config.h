@@ -41,13 +41,34 @@ inline void Clamp(TabSettings& s) {
 }
 } // namespace ConfigLimits
 
+// Which palette the panel uses. Follow is the default and the reason the panel
+// normally looks like part of Windows; the other two exist because a light
+// system with a preferred dark panel (or the reverse) is not an unusual want.
+enum class ThemeMode : int {
+    Follow = 0,
+    Dark = 1,
+    Light = 2,
+};
+
 // Tiny hand-rolled key=value file under %LOCALAPPDATA%\EdgeDeck\ - no JSON
 // library, written only when the user hits Save in the settings window.
 namespace Config {
 
+// The enum order matches the combo box order in the dialog, so the selected
+// index and the stored value are the same number.
+const wchar_t* ThemeModeToString(ThemeMode mode);
+ThemeMode ThemeModeFromString(const std::wstring& value);
+
 // Returns the saved tabs, or a default set if there is no readable file.
 // Every entry is clamped through ConfigLimits::Clamp before it is returned.
+// Also picks up the global [settings] section as a side effect.
 std::vector<TabSettings> LoadOrDefault();
+
+// The current theme preference, and the setter the dialog uses. Held in memory
+// and persisted by the next Save, which writes it alongside the tabs rather
+// than as a separate file write.
+ThemeMode CurrentThemeMode();
+void SetCurrentThemeMode(ThemeMode mode);
 
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab

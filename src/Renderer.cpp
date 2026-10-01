@@ -1,3 +1,4 @@
+#include "Config.h"
 #include "Diagnostics.h"
 #include "Renderer.h"
 
@@ -361,7 +362,14 @@ bool PanelTheme::Refresh() {
                      &themeBytes) != ERROR_SUCCESS) {
         appsUseLightTheme = 1;
     }
-    t.dark = (appsUseLightTheme == 0);
+    // A preference of Dark or Light overrides what the system reports. High contrast
+    // still wins over both, because honouring the user's chosen system colours is
+    // the entire purpose of that mode.
+    switch (Config::CurrentThemeMode()) {
+        case ThemeMode::Dark: t.dark = true; break;
+        case ThemeMode::Light: t.dark = false; break;
+        default: t.dark = (appsUseLightTheme == 0); break;
+    }
 
     if (t.highContrast) {
         // Whatever colours the user chose, honour them: use the system
@@ -462,11 +470,10 @@ bool Renderer::EnsureTarget() {
     // dimensions and gets clipped (or stretched) by the window. Rebuilding
     // whenever the client rect no longer matches is what keeps the two in step.
     if (m_target && m_widthPx == width && m_heightPx == height) return true;
-    if (m_target) {
-        Diagnostics::Info("Renderer: target was %ux%u, client is now %ux%u - rebuilding",
-                          m_widthPx, m_heightPx, width, height);
-        DiscardTarget();
-    }
+    // Rebuilding on a size change is the mechanism working, not an event worth a
+    // log line: a panel that resizes does this a few times, and the log is for
+    // things that went wrong.
+    if (m_target) DiscardTarget();
 
     ID2D1Factory* factory = D2DFactory();
     if (!factory) {
@@ -703,9 +710,21 @@ void Renderer::DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F 
     ComPtr<ID2D1SolidColorBrush> badgeBrush;
     if (FAILED(m_target->CreateSolidColorBrush(color, badgeBrush.GetAddressOf()))) return;
 
+    // The letter has to contrast with the *badge*, not with the panel. Borrowing
+    // the panel's text brush left it unreadable on roughly half the possible
+    // badge colours - white on a pale salmon badge, say - because the badge sits
+    // at a mid lightness either way while the panel text is near-black or white.
+    // Picking from the badge's own luminance is right for every hue, and it keeps
+    // the known-app brand colours rendering the way their designers intended.
+    const D2D1_COLOR_F letter =
+        Luminance(color) > 0.45f ? D2D1::ColorF(0.07f, 0.07f, 0.07f, 1.0f)
+                                 : D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
+    ComPtr<ID2D1SolidColorBrush> letterBrush;
+    if (FAILED(m_target->CreateSolidColorBrush(letter, letterBrush.GetAddressOf()))) return;
+
     m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, 6.0f, 6.0f), badgeBrush.Get());
     m_target->DrawText(letters, static_cast<UINT32>(wcslen(letters)), GlyphFormat(), rect,
-                       m_primaryTextBrush.Get());
+                       letterBrush.Get());
 }
 
 ID2D1SolidColorBrush* Renderer::DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
