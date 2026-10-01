@@ -121,7 +121,6 @@ public:
     void DrawLabelPair(D2D1_RECT_F rect, const wchar_t* primary,
                        const wchar_t* secondary) override;
     void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) override;
-    void DrawIconButton(D2D1_RECT_F rect, const wchar_t* glyph, bool hovered, bool enabled) override;
     void DrawPrevButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
     void DrawPlayButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
     void DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
