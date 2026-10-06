@@ -1,4 +1,5 @@
 #include "App.h"
+#include "Autostart.h"
 #include "Diagnostics.h"
 #include "Tab.h"
 #include "QuickActionsWidget.h"
@@ -83,6 +84,7 @@ bool App::Create(HINSTANCE hInstance) {
 
     if (!BuildTabsFrom(Config::LoadOrDefault(), hInstance)) return false;
     UpdateDisplayHotkeys();
+    RepairAutostart();
     AddTrayIcon();
     if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
     return true;
@@ -111,6 +113,25 @@ void App::ShowBalloon(const wchar_t* text) {
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
         Diagnostics::Error("Notice: the notification could not be shown (%s)",
                            Diagnostics::LastErrorText().c_str());
+    }
+}
+
+void App::RepairAutostart() {
+    // If the startup entry points at a file that is gone - the exe was moved, a
+    // build folder cleaned - every sign-in would fail without a word. This costs one
+    // registry read, and rewrites nothing unless the entry is actually broken; it
+    // never creates an entry the user did not ask for, and never takes over one that
+    // points at a different copy that still exists.
+    switch (Autostart::RepairPath(Autostart::Default(), Autostart::ThisExePath(),
+                                  Autostart::InstalledPath())) {
+        case Autostart::Repair::Repointed:
+            Diagnostics::Info("Autostart: the startup entry pointed at a missing file and was repaired");
+            break;
+        case Autostart::Repair::Failed:
+            Diagnostics::Error("Autostart: the startup entry points at a missing file and could not be repaired");
+            break;
+        default:
+            break;
     }
 }
 
@@ -172,7 +193,8 @@ void App::OpenSettings() {
     m_settingsWindow->Create(m_hInstance, Config::LoadOrDefault(),
                              [this](const std::vector<TabSettings>& settings) {
                                  ApplySettings(settings);
-                             });
+                             },
+                             [this](const wchar_t* problem) { ShowBalloon(problem); });
 }
 
 void App::ApplySettings(const std::vector<TabSettings>& settings) {

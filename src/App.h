@@ -58,6 +58,9 @@ private:
     void ApplySettings(const std::vector<TabSettings>& settings);
     bool BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hInstance);
 
+    // Fixes a Start-with-Windows entry whose file no longer exists.
+    void RepairAutostart();
+
     // Registers the display-layout shortcuts if a Displays tab exists and drops
     // them if it does not, so they track the tab list through Settings changes.
     void UpdateDisplayHotkeys();
