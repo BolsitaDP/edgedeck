@@ -110,6 +110,7 @@ namespace {
 // caller having to thread it through.
 ThemeMode g_themeMode = ThemeMode::Follow;
 std::wstring g_tvMonitor;
+bool g_fullscreenGuard = true;
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
 // case it was typed in.
@@ -126,6 +127,9 @@ void SetCurrentThemeMode(ThemeMode mode) { g_themeMode = mode; }
 
 std::wstring DisplayTvMonitor() { return g_tvMonitor; }
 void SetDisplayTvMonitor(const std::wstring& id) { g_tvMonitor = Upper(id); }
+
+bool FullscreenGuard() { return g_fullscreenGuard; }
+void SetFullscreenGuard(bool on) { g_fullscreenGuard = on; }
 
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
@@ -148,6 +152,7 @@ std::vector<TabSettings> LoadOrDefault() {
     if (!file) return DefaultTabs();
 
     g_tvMonitor.clear(); // re-read below if the file still names one
+    g_fullscreenGuard = true; // likewise: absent means the default
     TabSettings current;
     bool inTab = false;
     bool inSettings = false;
@@ -187,6 +192,10 @@ std::vector<TabSettings> LoadOrDefault() {
         if (inSettings) {
             if (key == L"theme") g_themeMode = ThemeModeFromString(value);
             if (key == L"tvMonitor") g_tvMonitor = Upper(value);
+            // Only an explicit "off" turns it off; anything unreadable keeps the safe default.
+            if (key == L"fullscreenGuard" && (value == L"0" || value == L"false")) {
+                g_fullscreenGuard = false;
+            }
             continue;
         }
 
@@ -227,6 +236,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
         file << L"[settings]\n";
         file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
         if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
+        file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
 
         for (const auto& t : tabs) {
             file << L"[tab]\n";

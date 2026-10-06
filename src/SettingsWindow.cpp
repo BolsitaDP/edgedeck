@@ -29,6 +29,7 @@ constexpr int kIdClose = 110;
 constexpr int kIdTrackbar = 111;
 constexpr int kIdAutostart = 112;
 constexpr int kIdThemeCombo = 113;
+constexpr int kIdFullscreenGuard = 114;
 
 struct TypeEntry {
     WidgetType type;
@@ -248,6 +249,13 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     }
     SendMessageW(m_themeCombo, CB_SETCURSEL, static_cast<WPARAM>(ThemeMode()), 0);
 
+    // Off lets a hover open panels over a game or a video; the keyboard shortcuts
+    // open them either way.
+    m_fullscreenCheck = make(L"BUTTON", L"Don't open over full-screen apps",
+                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 322, 250, 22, kIdFullscreenGuard);
+    SendMessageW(m_fullscreenCheck, BM_SETCHECK,
+                 Config::FullscreenGuard() ? BST_CHECKED : BST_UNCHECKED, 0);
+
     // A footer under the button row, across the full width. This used to sit in
     // the bottom-left corner at the same height as the Add / Remove / Up / Down
     // buttons, narrower than its own text, so it painted over them and the
@@ -432,6 +440,7 @@ void SettingsWindow::OnSave() {
     // this is all it takes.
     const LRESULT sel = SendMessageW(m_themeCombo, CB_GETCURSEL, 0, 0);
     if (sel != CB_ERR) Config::SetCurrentThemeMode(static_cast<ThemeMode>(sel));
+    Config::SetFullscreenGuard(SendMessageW(m_fullscreenCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     if (m_onSave) m_onSave(m_tabs);
     DestroyWindow(m_hwnd);

@@ -78,6 +78,14 @@ void SetCurrentThemeMode(ThemeMode mode);
 std::wstring DisplayTvMonitor();
 void SetDisplayTvMonitor(const std::wstring& id);
 
+// Whether hovering a tab is allowed to open its panel over a full-screen app (a
+// game, a video). On by default: the panel popping over a game because the pointer
+// brushed the screen edge is the surprise, and opening one deliberately with its
+// keyboard shortcut is never blocked. Held in memory and written by Save, like the
+// theme.
+bool FullscreenGuard();
+void SetFullscreenGuard(bool on);
+
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab
 // instead of three". Returns false if the file could not be committed.

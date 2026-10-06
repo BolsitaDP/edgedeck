@@ -247,8 +247,45 @@ void TestTvMonitorDefaultsToEmpty() {
     CHECK_EQ(Config::DisplayTvMonitor(), std::wstring());
 }
 
+void TestFullscreenGuardRoundTrip() {
+    TEST("Config: the full-screen guard defaults on, and only an explicit 'off' turns it off");
+    ScopedConfig guard;
+
+    ScopedConfig::Write(L"[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::FullscreenGuard()); // absent: the safe default
+
+    ScopedConfig::Write(L"[settings]\nfullscreenGuard=0\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(!Config::FullscreenGuard());
+
+    ScopedConfig::Write(L"[settings]\nfullscreenGuard=false\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(!Config::FullscreenGuard());
+
+    // Anything unreadable keeps the guard on rather than silently disabling it.
+    ScopedConfig::Write(L"[settings]\nfullscreenGuard=maybe\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::FullscreenGuard());
+
+    // A save and reload keeps it, either way round.
+    std::vector<TabSettings> tabs = {{WidgetType::Media, 0.5f, 26.0f, 76.0f, 320.0f}};
+    Config::SetFullscreenGuard(false);
+    CHECK(Config::Save(tabs));
+    Config::SetFullscreenGuard(true);
+    Config::LoadOrDefault();
+    CHECK(!Config::FullscreenGuard());
+
+    Config::SetFullscreenGuard(true);
+    CHECK(Config::Save(tabs));
+    Config::SetFullscreenGuard(false);
+    Config::LoadOrDefault();
+    CHECK(Config::FullscreenGuard());
+}
+
 void RunConfigTests() {
     TestRoundTrip();
+    TestFullscreenGuardRoundTrip();
     TestDisplaysWidgetAndTvMonitorRoundTrip();
     TestTvMonitorDefaultsToEmpty();
     TestLegacyAndUnknownTypes();

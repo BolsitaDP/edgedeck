@@ -1,4 +1,6 @@
+#include "Config.h"
 #include "Diagnostics.h"
+#include "Fullscreen.h"
 #include "Tab.h"
 #include "App.h"
 
@@ -317,10 +319,19 @@ LRESULT CALLBACK Tab::PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 // Hover / pin state machine
 // ---------------------------------------------------------------------------
 
-void Tab::OnEnter() {
+void Tab::OnEnter(bool userRequested) {
     KillTimer(m_tabHwnd, kTimerLeave);
 
     if (m_state == State::Hidden) {
+        // The tabs live on a screen edge the pointer reaches by accident all the
+        // time - in a game, the mouse is pushed against the right edge constantly.
+        // A panel opening over the game then is the surprise, so a hover does not
+        // open one while a full-screen app is in front of this monitor. Asked at
+        // this moment only, so there is nothing to poll, and the keyboard shortcut
+        // is a request, not a hover, and always goes through.
+        if (!userRequested && Config::FullscreenGuard() && Fullscreen::AppOnMonitor(m_monitor)) {
+            return;
+        }
         BeginOpen();
     } else if (m_state == State::Closing) {
         // Cursor came back before the close animation finished - reverse it.
@@ -412,7 +423,7 @@ void Tab::TogglePin() {
 
 void Tab::RequestOpen() {
     if (!m_panelHwnd) return;
-    OnEnter();
+    OnEnter(true);
     // A keyboard-opened panel has no cursor over it, so nothing would ever start
     // the leave countdown. Pin it instead, and let Escape close it.
     if (m_state != State::Hidden) {
