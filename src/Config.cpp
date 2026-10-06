@@ -61,6 +61,7 @@ const wchar_t* WidgetTypeToString(WidgetType type) {
         case WidgetType::Brightness: return L"Brightness";
         case WidgetType::Lyrics: return L"Lyrics";
         case WidgetType::Volume: return L"Volume";
+        case WidgetType::Displays: return L"Displays";
         default: return L"QuickActions";
     }
 }
@@ -72,6 +73,7 @@ WidgetType WidgetTypeFromString(const std::wstring& s) {
     if (s == L"Brightness") return WidgetType::Brightness;
     if (s == L"Lyrics") return WidgetType::Lyrics;
     if (s == L"Volume") return WidgetType::Volume;
+    if (s == L"Displays") return WidgetType::Displays;
     return WidgetType::QuickActions;
 }
 
@@ -107,10 +109,23 @@ namespace {
 // changing its signature, and so Save can write the current value without the
 // caller having to thread it through.
 ThemeMode g_themeMode = ThemeMode::Follow;
+std::wstring g_tvMonitor;
+
+// EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
+// case it was typed in.
+std::wstring Upper(std::wstring text) {
+    for (wchar_t& c : text) {
+        if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - L'a' + L'A');
+    }
+    return text;
+}
 } // namespace
 
 ThemeMode CurrentThemeMode() { return g_themeMode; }
 void SetCurrentThemeMode(ThemeMode mode) { g_themeMode = mode; }
+
+std::wstring DisplayTvMonitor() { return g_tvMonitor; }
+void SetDisplayTvMonitor(const std::wstring& id) { g_tvMonitor = Upper(id); }
 
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
@@ -132,6 +147,7 @@ std::vector<TabSettings> LoadOrDefault() {
     std::wifstream file = OpenRead(path);
     if (!file) return DefaultTabs();
 
+    g_tvMonitor.clear(); // re-read below if the file still names one
     TabSettings current;
     bool inTab = false;
     bool inSettings = false;
@@ -170,6 +186,7 @@ std::vector<TabSettings> LoadOrDefault() {
 
         if (inSettings) {
             if (key == L"theme") g_themeMode = ThemeModeFromString(value);
+            if (key == L"tvMonitor") g_tvMonitor = Upper(value);
             continue;
         }
 
@@ -209,6 +226,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
         // changed.
         file << L"[settings]\n";
         file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
+        if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
 
         for (const auto& t : tabs) {
             file << L"[tab]\n";

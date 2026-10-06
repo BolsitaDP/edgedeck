@@ -70,6 +70,14 @@ std::vector<TabSettings> LoadOrDefault();
 ThemeMode CurrentThemeMode();
 void SetCurrentThemeMode(ThemeMode mode);
 
+// Which monitor the Displays tab treats as the TV, as its EDID id (the vendor +
+// product code, e.g. "SAM7A08"). Empty - the default - means "the largest panel",
+// which is right for a 4K TV beside desktop monitors; set it by hand in
+// config.txt ([settings] tvMonitor=...) when that guess is wrong. Held in memory
+// like the theme and written back by Save so a Settings round trip keeps it.
+std::wstring DisplayTvMonitor();
+void SetDisplayTvMonitor(const std::wstring& id);
+
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab
 // instead of three". Returns false if the file could not be committed.

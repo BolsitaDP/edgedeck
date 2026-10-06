@@ -8,6 +8,11 @@ add_executable(EdgeDeckTests
     TestHarness.cpp
     LyricsTests.cpp
     ConfigTests.cpp
+    DisplayTests.cpp
+    LayeredTests.cpp
+    ${CMAKE_SOURCE_DIR}/src/DisplayTopology.cpp
+    ${CMAKE_SOURCE_DIR}/src/LayeredTarget.cpp
+    ${CMAKE_SOURCE_DIR}/src/Diagnostics.cpp
     ${CMAKE_SOURCE_DIR}/src/LrcLyrics.cpp
     ${CMAKE_SOURCE_DIR}/src/Config.cpp
     ${CMAKE_SOURCE_DIR}/src/AsyncResult.h
@@ -26,6 +31,7 @@ target_compile_definitions(EdgeDeckTests PRIVATE
 target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(EdgeDeckTests PRIVATE
+    d2d1
     user32
     gdi32
     shell32

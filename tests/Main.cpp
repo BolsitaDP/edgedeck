@@ -4,11 +4,17 @@
 
 void RunLyricsTests();
 void RunConfigTests();
+void RunDisplayTests();
+void RunLayeredTests();
 
 int wmain() {
     std::printf("EdgeDeck unit tests\n\n");
     RunLyricsTests();
     std::printf("\n");
     RunConfigTests();
+    std::printf("\n");
+    RunDisplayTests();
+    std::printf("\n");
+    RunLayeredTests();
     return testing::Summary();
 }

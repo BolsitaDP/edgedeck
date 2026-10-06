@@ -6,6 +6,7 @@
 #include "BrightnessWidget.h"
 #include "LyricsWidget.h"
 #include "VolumeWidget.h"
+#include "DisplayWidget.h"
 #include "SettingsWindow.h"
 
 #include <shellapi.h>
@@ -53,6 +54,7 @@ std::unique_ptr<PanelWidget> MakeWidget(WidgetType type) {
         case WidgetType::Brightness: return std::make_unique<BrightnessWidget>();
         case WidgetType::Lyrics: return std::make_unique<LyricsWidget>();
         case WidgetType::Volume: return std::make_unique<VolumeWidget>();
+        case WidgetType::Displays: return std::make_unique<DisplayWidget>();
         default: return std::make_unique<QuickActionsWidget>();
     }
 }

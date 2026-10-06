@@ -5,9 +5,17 @@
 #include <dwrite.h>
 #include <wrl/client.h>
 
+#include <memory>
 #include <string>
 
+#include "LayeredTarget.h"
 #include "PanelWidget.h"
+
+// How see-through a tab or panel is, out of 255. The old value of 235 washed out
+// the text along with the background; 246 keeps a hint of translucency while
+// staying legible over any wallpaper. Applied to the whole window, whichever way
+// it is composited.
+constexpr BYTE kSurfaceAlpha = 246;
 
 // Shared logical (96-DPI) layout constants for the panel's chrome (title +
 // pin button). Widgets own their own internal layout constants; this
@@ -51,9 +59,10 @@ struct PanelTheme {
     D2D1_COLOR_F controlBg{}; // slider track, button fill
     D2D1_COLOR_F accent{};    // the user's Windows accent, legible on panelBg
 
-    // A one-pixel inner outline. SetWindowRgn is a 1-bit mask, so the window edge
-    // is aliased against whatever is behind it; a deliberate border reads as a
-    // designed edge and hides the staircase.
+    // A one-pixel inner outline. On the per-pixel-alpha path it is the rim of a
+    // shape that is already antialiased; on the region fallback SetWindowRgn is a
+    // 1-bit mask, so the window edge is aliased against whatever is behind it, and
+    // a deliberate border reads as a designed edge and hides the staircase.
     D2D1_COLOR_F edge{};
 
     // The cached palette. Cheap by construction - a struct copy, no syscalls.
@@ -74,17 +83,22 @@ struct PanelTheme {
 // from WM_PAINT - there is no render loop. Implements IPanelPainter so widgets
 // can draw without owning any D2D resources themselves.
 //
-// Compositing note: this uses ID2D1HwndRenderTarget on a WS_EX_LAYERED window
-// with SetLayeredWindowAttributes, not a DIB plus UpdateLayeredWindow. Both
-// routes were built and measured. The per-pixel-alpha route is the one that
-// would give antialiased rounded corners - a SetWindowRgn region is a 1-bit
-// mask and its edges are visibly jagged at 125% scaling and above - but every
-// D2D surface available without a DXGI device (ID2D1HwndRenderTarget and
-// ID2D1DCRenderTarget both included) presents through GDI, which discards the
-// alpha channel. The result is a window that composites successfully and shows
-// nothing at all. Getting real per-pixel alpha means moving to
-// ID2D1DeviceContext + ID2D1Device1 over a DXGI device and blitting the bitmap
-// by hand, which is a much larger change than the corner quality is worth here.
+// Compositing: two ways to put a surface on a WS_EX_LAYERED window, and a window
+// uses exactly one of them for its whole life (IsLayered).
+//
+//  - Per-pixel alpha (preferred): Direct2D draws into a premultiplied DIB through
+//    a software ID2D1DCRenderTarget, and UpdateLayeredWindow presents it. The
+//    shape of the window is its alpha, so the rounded corners are antialiased at
+//    any scale. See LayeredTarget for why this is software and not D3D.
+//  - Region (fallback): an ID2D1HwndRenderTarget plus SetLayeredWindowAttributes
+//    and a SetWindowRgn rounded region. The region is a 1-bit mask, so its edge is
+//    staircased from 125% scaling up; kept for the case where the DC render target
+//    cannot be created.
+//
+// An ID2D1HwndRenderTarget composites through GDI, which drops the alpha channel,
+// so it cannot be the surface for the first route - which is what an earlier
+// attempt ran into. Everything the widgets and the paint code touch is an
+// ID2D1RenderTarget, so none of them know which route is in use.
 class Renderer : public IPanelPainter {
 public:
     Renderer() = default;
@@ -104,6 +118,17 @@ public:
 
     // Renders the whole surface. Returns false if the target could not be built.
     bool Composite();
+
+    // True when this window is on the per-pixel-alpha path. Fixed by
+    // AttachToWindow. Such a window must not carry a window region (a region clips
+    // the alpha away again) and must not call SetLayeredWindowAttributes (mutually
+    // exclusive with UpdateLayeredWindow).
+    bool IsLayered() const { return m_layeredMode; }
+
+    // Corner radius in logical (96-DPI) units, for the per-pixel-alpha path where
+    // the shape is drawn rather than cut. Ignored on the region path, whose radius
+    // is applied by Tab.
+    void SetCornerRadius(float logicalRadius) { m_cornerRadius = logicalRadius; }
 
     // Draws the small edge tab. w/h are logical (96-DPI) units.
     void DrawTab(bool hovered, float w, float h, const wchar_t* glyph);
@@ -139,7 +164,12 @@ private:
 
     // Picks up a new palette and drops the brushes that baked in the old one.
     void AdoptTheme();
+    // Paints the surface's background. On the region path that is a plain Clear;
+    // on the per-pixel-alpha path the surface is cleared to transparent and the
+    // rounded shape is filled, so the corners keep an alpha of zero.
+    void PaintBackground(float w, float h, D2D1_COLOR_F color);
     void FillRoundedPanel(float w, float h, float radius, D2D1_COLOR_F color);
+    void PresentLayered();
     void DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered);
     ID2D1SolidColorBrush* DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled);
     void DrawSpeaker(D2D1_RECT_F rect, ID2D1SolidColorBrush* brush);
@@ -149,7 +179,14 @@ private:
     float m_renderDpi = 96.0f;
     PanelTheme m_theme = PanelTheme::Current();
 
-    Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> m_target;
+    // m_target is whichever surface this window uses - the layered DC render
+    // target or the HWND render target - and ID2D1RenderTarget is all the drawing
+    // code ever touches. m_layered owns the first kind; it is null on the region
+    // path.
+    Microsoft::WRL::ComPtr<ID2D1RenderTarget> m_target;
+    std::unique_ptr<LayeredTarget> m_layered;
+    bool m_layeredMode = false;
+    float m_cornerRadius = 10.0f;
     UINT m_widthPx = 0;
     UINT m_heightPx = 0;
 

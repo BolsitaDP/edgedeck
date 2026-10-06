@@ -44,6 +44,8 @@ enum class AsyncKind : int {
     Monitors,
     BrightnessWrite,
     Lyrics,
+    Displays,     // which monitors are connected / switched on
+    DisplayApply, // the outcome of switching them
 };
 
 struct AsyncEnvelope {
