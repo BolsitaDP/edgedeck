@@ -46,6 +46,17 @@ private:
     void ApplyTheme();
     LRESULT OnControlColor(UINT msg, HDC dc, HWND control);
 
+    // The layout is written in logical (96-DPI) units and scaled here. The process
+    // is per-monitor DPI aware, so nothing is stretched for us: fixed pixels came
+    // out small and cramped from 125% up, and on a 4K TV beside a 100% monitor they
+    // were worse. Rounding is done on the edges, not the sizes, so two controls
+    // that touch in logical units touch in pixels too instead of overlapping by one.
+    int Scale(int logical) const { return MulDiv(logical, static_cast<int>(m_dpi), 96); }
+    HFONT MakeFont() const;
+    // Re-lays out for a new DPI - the window was dragged to a monitor with another
+    // scale - without recreating a single control.
+    void ApplyDpi(UINT dpi);
+
     HWND m_hwnd = nullptr;
     HWND m_list = nullptr;
     HWND m_typeCombo = nullptr;
@@ -63,6 +74,13 @@ private:
     HWND m_saveButton = nullptr;
     HWND m_closeButton = nullptr;
     HFONT m_font = nullptr;
+
+    struct Placement {
+        HWND hwnd;
+        int x, y, w, h; // logical units
+    };
+    std::vector<Placement> m_placements;
+    UINT m_dpi = 96;
 
     // Themed painting. Brushes exist only while the dark look is in use; with the
     // system look they stay null and every WM_CTLCOLOR* message falls through.
