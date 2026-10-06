@@ -222,8 +222,35 @@ void TestSettingsSectionDoesNotDisturbTabs() {
 
 } // namespace
 
+void TestDisplaysWidgetAndTvMonitorRoundTrip() {
+    TEST("Config: the Displays tab and the TV override survive a save and reload");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"");
+
+    Config::SetDisplayTvMonitor(L"sam7a08"); // typed in lower case on purpose
+    std::vector<TabSettings> tabs = {{WidgetType::Displays, 0.5f, 26.0f, 76.0f, 300.0f}};
+    CHECK(Config::Save(tabs));
+
+    Config::SetDisplayTvMonitor(L"");
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{1});
+    if (loaded.size() == 1) CHECK(loaded[0].widgetType == WidgetType::Displays);
+    CHECK_EQ(Config::DisplayTvMonitor(), std::wstring(L"SAM7A08"));
+}
+
+void TestTvMonitorDefaultsToEmpty() {
+    TEST("Config: with no tvMonitor line the TV is left to be detected");
+    ScopedConfig guard;
+    Config::SetDisplayTvMonitor(L"STALE");
+    ScopedConfig::Write(L"[settings]\ntheme=Dark\n[tab]\nwidget=Displays\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::DisplayTvMonitor(), std::wstring());
+}
+
 void RunConfigTests() {
     TestRoundTrip();
+    TestDisplaysWidgetAndTvMonitorRoundTrip();
+    TestTvMonitorDefaultsToEmpty();
     TestLegacyAndUnknownTypes();
     TestOutOfRangeValuesAreClamped();
     TestMalformedNumbersKeepDefaults();

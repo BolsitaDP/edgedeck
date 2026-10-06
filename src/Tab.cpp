@@ -14,15 +14,6 @@ namespace {
 // focus away from whatever the user is actually doing.
 const DWORD kWindowExStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
 
-// Whole-window alpha. The old value of 235 washed out the text along with the
-// background; 246 keeps a hint of translucency while staying legible over any
-// wallpaper.
-constexpr BYTE kWindowAlpha = 246;
-
-// Rounded corners come from a window region, which is a 1-bit mask: the edges
-// are visibly jagged at 125% scaling and above. Doing it properly needs
-// per-pixel alpha, which needs a DXGI-backed D2D device (see the note on the
-// Renderer class), so the region stays for now.
 bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
     // CreateRoundRectRgn's last two params are the rounding ellipse's
     // width/height (its diameter), not a radius - double it to match radiusPx.
@@ -42,6 +33,33 @@ bool ApplyRoundedRegion(HWND hwnd, int widthPx, int heightPx, float radiusPx) {
         return false;
     }
     return true; // ownership transferred to the window
+}
+
+// Rounded corners, by whichever means this window's renderer uses.
+//
+// On the per-pixel-alpha path the shape comes from the alpha in the rendered
+// bitmap, so there is no region to set and no constant window alpha to apply -
+// a region clips the alpha away again, and UpdateLayeredWindow and
+// SetLayeredWindowAttributes are mutually exclusive. The renderer, not a global
+// flag, is asked: it is the thing that decides how the window gets painted, and
+// a layered window nobody ever calls either function on is not shown at all.
+//
+// The fallback is the 1-bit region mask. Its edges are visibly jagged at 125%
+// scaling and above; that is exactly what the layered path exists to fix.
+void ApplyCornerTreatment(HWND hwnd, const Renderer& renderer, int widthPx, int heightPx,
+                          float radiusPx) {
+    if (!hwnd || widthPx <= 0 || heightPx <= 0) return;
+
+    if (renderer.IsLayered()) {
+        // A null region removes one. Setting it on a window that has none is a
+        // no-op, so this is safe to call on every layout. (GetWindowRgn is not the
+        // way to find out first: it copies, it does not hand over ownership.)
+        SetWindowRgn(hwnd, nullptr, FALSE);
+        return;
+    }
+
+    SetLayeredWindowAttributes(hwnd, 0, kSurfaceAlpha, LWA_ALPHA);
+    ApplyRoundedRegion(hwnd, widthPx, heightPx, radiusPx);
 }
 } // namespace
 
@@ -158,8 +176,9 @@ bool Tab::CreateWindows(HINSTANCE hInstance) {
         Diagnostics::Error("Tab: could not create text formats for the edge tab");
     }
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
-    SetLayeredWindowAttributes(m_tabHwnd, 0, kWindowAlpha, LWA_ALPHA);
-    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
+    m_tabRenderer.SetCornerRadius(m_config.cornerRadius);
+    ApplyCornerTreatment(m_tabHwnd, m_tabRenderer, tabWidth, tabHeight,
+                         m_config.cornerRadius * m_dpiScale);
 
     m_panelHwnd = CreateWindowExW(kWindowExStyle, kPanelClassName, L"EdgeDeck Panel", WS_POPUP,
                                    m_panelClosedXPx, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
@@ -169,9 +188,15 @@ bool Tab::CreateWindows(HINSTANCE hInstance) {
         Diagnostics::Error("Tab: could not create text formats for the panel");
     }
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
-    SetLayeredWindowAttributes(m_panelHwnd, 0, kWindowAlpha, LWA_ALPHA);
-    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx, m_config.cornerRadius * m_dpiScale);
+    m_panelRenderer.SetCornerRadius(m_config.cornerRadius);
+    ApplyCornerTreatment(m_panelHwnd, m_panelRenderer, m_panelWidthPx, m_panelHeightPx,
+                         m_config.cornerRadius * m_dpiScale);
 
+    // A per-pixel-alpha window shows whatever it was last given and nothing
+    // before that, so the tab is painted once before it is made visible rather
+    // than trusting a WM_PAINT to arrive for a window that has no content yet.
+    m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
+                          m_widget ? m_widget->TabGlyph() : L"?");
     ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
 
     // Park the panel just off the edge; it stays hidden until the first hover.
@@ -215,11 +240,14 @@ void Tab::Relayout() {
 
     m_tabRenderer.SetRenderDpi(static_cast<float>(m_dpi));
     m_panelRenderer.SetRenderDpi(static_cast<float>(m_dpi));
+    m_tabRenderer.SetCornerRadius(m_config.cornerRadius);
+    m_panelRenderer.SetCornerRadius(m_config.cornerRadius);
     m_tabRenderer.OnResize(static_cast<UINT>(tabWidth), static_cast<UINT>(tabHeight));
     m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
-    ApplyRoundedRegion(m_tabHwnd, tabWidth, tabHeight, m_config.cornerRadius * m_dpiScale);
-    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                       m_config.cornerRadius * m_dpiScale);
+    ApplyCornerTreatment(m_tabHwnd, m_tabRenderer, tabWidth, tabHeight,
+                         m_config.cornerRadius * m_dpiScale);
+    ApplyCornerTreatment(m_panelHwnd, m_panelRenderer, m_panelWidthPx, m_panelHeightPx,
+                         m_config.cornerRadius * m_dpiScale);
 
     m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
                           m_widget ? m_widget->TabGlyph() : L"?");
@@ -252,8 +280,8 @@ void Tab::ResizePanelToContent() {
     // its resting position.
     SetWindowPos(m_panelHwnd, nullptr, 0, 0, m_panelWidthPx, m_panelHeightPx,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    ApplyRoundedRegion(m_panelHwnd, m_panelWidthPx, m_panelHeightPx,
-                       m_config.cornerRadius * m_dpiScale);
+    ApplyCornerTreatment(m_panelHwnd, m_panelRenderer, m_panelWidthPx, m_panelHeightPx,
+                         m_config.cornerRadius * m_dpiScale);
     m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
 
     if (m_state == State::Open || m_state == State::Opening) DrawPanelSurface();
@@ -519,6 +547,19 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_ERASEBKGND:
             return 1; // avoid a redundant GDI fill before our D2D paint
         case WM_DISPLAYCHANGE:
+            // Monitors were added, removed or rearranged. The tab docks to the
+            // primary monitor, and which one that is can change under it - the
+            // Displays tab does exactly that when it switches to the TV alone - so
+            // forget the cached monitor and dock again, on whatever is primary now.
+            //
+            // An open panel that is not pinned is closed first. Relayout cancels
+            // its hover tracking, so a panel left open here would never see the
+            // cursor leave and would sit on screen until the next hover.
+            if (!m_pinned) BeginClose();
+            m_monitor = nullptr;
+            PanelTheme::Refresh();
+            Relayout();
+            return 0;
         case WM_DPICHANGED:
         case WM_SETTINGCHANGE:
         case WM_SYSCOLORCHANGE:

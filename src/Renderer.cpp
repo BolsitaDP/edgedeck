@@ -432,6 +432,9 @@ Renderer::~Renderer() { DiscardTarget(); }
 void Renderer::DiscardTarget() {
     ResetBrushes();
     m_target.Reset();
+    // A layered surface goes with it. The DIB and its render target are cheap to
+    // rebuild, and a half-valid one is not worth reasoning about.
+    m_layered.reset();
     m_widthPx = 0;
     m_heightPx = 0;
 }
@@ -449,6 +452,10 @@ void Renderer::ResetBrushes() {
 bool Renderer::AttachToWindow(HWND hwnd, bool rounded) {
     m_hwnd = hwnd;
     m_rounded = rounded;
+    // Decided once, here, because the choice also dictates how the window itself
+    // is set up (no region, no SetLayeredWindowAttributes) and that has to agree
+    // with the surface for as long as the window lives.
+    m_layeredMode = LayeredTarget::Available(D2DFactory());
     m_theme = PanelTheme::Current();
     return TitleFormat() && ItemFormat() && DetailFormat() && GlyphFormat() && ControlFormat();
 }
@@ -465,10 +472,10 @@ bool Renderer::EnsureTarget() {
     const UINT height = static_cast<UINT>(std::max<LONG>(0, rc.bottom - rc.top));
     if (width == 0 || height == 0) return false;
 
-    // An ID2D1HwndRenderTarget keeps the pixel size it was created with, so one
-    // left over from a previous window size keeps drawing into the old
-    // dimensions and gets clipped (or stretched) by the window. Rebuilding
-    // whenever the client rect no longer matches is what keeps the two in step.
+    // A target keeps the pixel size it was created with, so one left over from a
+    // previous window size keeps drawing into the old dimensions and gets clipped
+    // (or stretched). Resizing whenever the client rect no longer matches is what
+    // keeps the two in step.
     if (m_target && m_widthPx == width && m_heightPx == height) return true;
     // Rebuilding on a size change is the mechanism working, not an event worth a
     // log line: a panel that resizes does this a few times, and the log is for
@@ -481,14 +488,31 @@ bool Renderer::EnsureTarget() {
         return false;
     }
 
-    const HRESULT hr = factory->CreateHwndRenderTarget(
-        D2D1::RenderTargetProperties(), D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(width, height)),
-        m_target.ReleaseAndGetAddressOf());
-    if (FAILED(hr)) {
-        Diagnostics::Error("Renderer: CreateHwndRenderTarget(%ux%u) failed: 0x%08lX", width, height,
-                           static_cast<unsigned long>(hr));
-        m_target.Reset();
-        return false;
+    if (m_layeredMode) {
+        // No fallback to the region path from here: the window was set up for
+        // per-pixel alpha (no region, no constant alpha), so an HWND target on it
+        // would draw into a window that is never shown. Failing loudly is the
+        // honest option, and Resize has already logged why.
+        if (!m_layered) m_layered = std::make_unique<LayeredTarget>();
+        if (!m_layered->Resize(factory, width, height)) return false;
+        m_target = m_layered->Target();
+
+        // Grayscale text. ClearType needs to know what is behind it, and a surface
+        // with alpha does not - D2D would pick this on its own, but saying so keeps
+        // the look from changing with whatever it decides.
+        m_target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    } else {
+        Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hwndTarget;
+        const HRESULT hr = factory->CreateHwndRenderTarget(
+            D2D1::RenderTargetProperties(),
+            D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(width, height)),
+            hwndTarget.GetAddressOf());
+        if (FAILED(hr) || !hwndTarget) {
+            Diagnostics::Error("Renderer: CreateHwndRenderTarget(%ux%u) failed: 0x%08lX", width,
+                               height, static_cast<unsigned long>(hr));
+            return false;
+        }
+        m_target = hwndTarget;
     }
 
     m_target->SetDpi(m_renderDpi, m_renderDpi);
@@ -550,17 +574,27 @@ bool Renderer::Composite() {
 // Drawing
 // ---------------------------------------------------------------------------
 
-void Renderer::FillRoundedPanel(float w, float h, float /*radius*/, D2D1_COLOR_F color) {
-    // The window region already clips the surface to the rounded shape, so this
-    // only has to paint the background. Filling a rounded rect anyway keeps the
-    // code correct if the region ever goes away, and costs one call.
+void Renderer::FillRoundedPanel(float w, float h, float radius, D2D1_COLOR_F color) {
     ComPtr<ID2D1SolidColorBrush> brush;
     if (FAILED(m_target->CreateSolidColorBrush(color, brush.GetAddressOf()))) return;
-    m_target->FillRectangle(D2D1::RectF(0.0f, 0.0f, w, h), brush.Get());
+    m_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0.0f, 0.0f, w, h), radius, radius),
+                                   brush.Get());
 }
 
-// No radius parameter: the rounded shape comes from the window region (see the
-// note on the class), so the surface itself is a plain rectangle.
+void Renderer::PaintBackground(float w, float h, D2D1_COLOR_F color) {
+    if (!m_layeredMode) {
+        // The window region clips the surface to the rounded shape, so the surface
+        // itself is a plain rectangle.
+        m_target->Clear(color);
+        return;
+    }
+    // Here the surface *is* the window shape. Clearing it to the (opaque) panel
+    // colour would give every pixel an alpha of 255 and the corners would simply
+    // never be transparent - transparent first, then the rounded fill on top.
+    m_target->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    FillRoundedPanel(w, h, m_cornerRadius, color);
+}
+
 void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
     if (!EnsureTarget()) return;
 
@@ -571,7 +605,7 @@ void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
 
     m_target->BeginDraw();
     m_target->SetTransform(D2D1::Matrix3x2F::Identity());
-    m_target->Clear(hovered ? m_theme.tabHoverBg : m_theme.tabBg);
+    PaintBackground(w, h, hovered ? m_theme.tabHoverBg : m_theme.tabBg);
     DrawEdge(w, h);
 
     // Hovered, the tab is the same surface as the panel it opens, so the panel
@@ -583,14 +617,34 @@ void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
                            D2D1::RectF(0.0f, 0.0f, w, h), brush.Get());
     }
 
-    if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) DiscardTarget();
+    if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) {
+        DiscardTarget();
+        return;
+    }
+    PresentLayered();
+}
+
+// Forwards the rendered bitmap to the window. A no-op on the region path, where
+// the target presents itself.
+void Renderer::PresentLayered() {
+    if (m_layered && m_target) m_layered->Present(m_hwnd, kSurfaceAlpha);
 }
 
 // The 1px inner outline, drawn inset by half a pixel so the stroke lands fully
-// inside the window region instead of straddling its aliased edge.
+// inside the window shape instead of straddling its edge. On the layered path it
+// follows the rounded corners (the radius shrinks by the same half pixel, so the
+// stroke stays concentric with the fill); on the region path the corners are cut
+// by the region and a plain rectangle is what fits.
 void Renderer::DrawEdge(float w, float h) {
     if (!m_edgeBrush || w <= 1.0f || h <= 1.0f) return;
-    m_target->DrawRectangle(D2D1::RectF(0.5f, 0.5f, w - 0.5f, h - 0.5f), m_edgeBrush.Get(), 1.0f);
+    const D2D1_RECT_F inset = D2D1::RectF(0.5f, 0.5f, w - 0.5f, h - 0.5f);
+    if (m_layeredMode) {
+        const float radius = m_cornerRadius > 0.5f ? m_cornerRadius - 0.5f : 0.0f;
+        m_target->DrawRoundedRectangle(D2D1::RoundedRect(inset, radius, radius), m_edgeBrush.Get(),
+                                       1.0f);
+        return;
+    }
+    m_target->DrawRectangle(inset, m_edgeBrush.Get(), 1.0f);
 }
 
 void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered) {
@@ -614,7 +668,7 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
 
     m_target->BeginDraw();
     m_target->SetTransform(D2D1::Matrix3x2F::Identity());
-    m_target->Clear(m_theme.panelBg);
+    PaintBackground(w, h, m_theme.panelBg);
     DrawEdge(w, h);
 
     const D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(w);
@@ -642,7 +696,11 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
         widget->Draw(*this, w, h - PanelLayout::ChromeHeight - PanelLayout::BottomPadding);
     }
 
-    if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) DiscardTarget();
+    if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) {
+        DiscardTarget();
+        return;
+    }
+    PresentLayered();
 }
 
 void Renderer::DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered) {

@@ -36,6 +36,12 @@ add_executable(EdgeDeck WIN32
     src/VolumeWidget.h
     src/VolumeControls.cpp
     src/VolumeControls.h
+    src/DisplayWidget.cpp
+    src/DisplayWidget.h
+    src/DisplayControls.cpp
+    src/DisplayControls.h
+    src/DisplayTopology.cpp
+    src/DisplayTopology.h
     src/BrightnessControls.cpp
     src/BrightnessControls.h
     src/Autostart.cpp
@@ -47,6 +53,8 @@ add_executable(EdgeDeck WIN32
     src/Diagnostics.cpp
     src/Diagnostics.h
     src/Renderer.cpp
+    src/LayeredTarget.cpp
+    src/LayeredTarget.h
     src/Renderer.h
     src/Actions.cpp
     src/Actions.h

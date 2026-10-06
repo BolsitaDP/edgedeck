@@ -47,9 +47,12 @@ La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra
 - **Media (auto-detect)**: una fila por cada app con sesión de reproducción activa en Windows (Spotify, una pestaña de Chrome/Edge, VLC, etc). Cada fila muestra el badge de la app, el nombre, la pista, una barra de progreso y los botones Anterior / Reproducir-Pausa / Siguiente.
 - **Volume**: una fila por cada dispositivo de salida de audio, con slider de volumen y botón de silencio. Arrastrar un slider silenciado lo reactiva, que es lo que se espera del gesto.
 - **Brightness (monitors)**: una fila por monitor con su nombre real y un slider de brillo (clic o arrastre; se aplica al soltar). Usa DDC/CI (API de configuración de monitores de Windows), así que funciona con monitores externos que lo tengan activado; los que no lo soportan muestran "Brightness control not available". Los paneles integrados de portátiles no usan DDC/CI y por ahora no se controlan.
+- **Displays (switch monitors)**: tres botones para decidir qué monitores están encendidos: **Monitors 1 + 2** (los de escritorio), **TV only** y **All monitors**. El botón que corresponde a lo que está encendido en ese momento aparece marcado como *Active*. Usa la API de configuración de pantallas de Windows (CCD, la misma de Configuración > Pantalla), así que puede volver a encender un monitor apagado y Windows restaura la disposición que ya tenías. Al cambiar, el monitor principal puede ser otro (con "TV only" lo es la TV) y las pestañas se vuelven a acoplar al borde derecho del que haya quedado como principal; un panel abierto y no fijado se cierra.
+
+  La TV se detecta sola como el panel más grande, lo cual acierta con una TV 4K junto a monitores de escritorio. Si no acierta, se fija a mano en `config.txt`: `tvMonitor=SAM7A08` dentro de `[settings]`. El valor es el código de fabricante y producto del EDID del monitor, que aparece en el Administrador de dispositivos > Monitores > Detalles > Id. de hardware (`MONITOR\SAM7A08`). Si la TV está apagada o desconectada, los botones que dependen de ella salen deshabilitados con "TV not connected".
 - **Lyrics**: muestra la letra sincronizada de lo que sea que esté sonando (no solo Spotify - sigue al mismo "reproductor activo" que ya usa Windows para el resto del sistema). Las letras vienen de [LRCLIB](https://lrclib.net), una base de datos pública y gratuita hecha para esto, sin login ni API key.
 
-El valor por defecto trae una pestaña de Quick Actions, Media, Volume y Brightness; Lyrics se agrega desde Settings → Add si la quieres usar.
+El valor por defecto trae una pestaña de Quick Actions, Media, Volume y Brightness; Lyrics y Displays se agregan desde Settings → Add si los quieres usar.
 
 Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\lyrics_cache\`), así que no se vuelve a pedir por red la próxima vez que suene la misma canción. Los "no hay letra" también se cachean (con 7 días de caducidad), para no golpear un servicio público gratuito cada vez que se abre el panel. Al ser una base comunitaria, alguna canción muy nueva o poco común puede no tener letra sincronizada disponible todavía.
 
@@ -114,14 +117,30 @@ restaurar deja el resto del contenido desplazado exactamente el alto del chrome.
 Parece una sutileza, pero produce un fallo de layout que parece un error
 aritmético en el widget.
 
-**Esquinas redondeadas.** Se siguen recortando con `SetWindowRgn`, que es una
-máscara de 1 bit y por tanto escalonada a partir de 125% de escalado. Hacerlas
-correctas exige alfa por píxel, y toda superficie D2D disponible sin un dispositivo
-DXGI (`ID2D1HwndRenderTarget` e `ID2D1DCRenderTarget` incluidos) presenta a través
-de GDI, que descarta el canal alfa: se intentó, componiendo con
-`UpdateLayeredWindow`, y la ventana se componía sin mostrar nada. Solucionarlo de
-verdad pasa a `ID2D1DeviceContext` sobre `ID2D1Device1` con volcado manual del
-bitmap, que es un cambio bastante mayor que la calidad de las esquinas.
+**Cambiar de monitores.** Encender un monitor es `SetDisplayConfig`, que Windows retiene mientras los paneles se resincronizan (varios segundos con una TV en la cadena), así que corre en el pool de hilos y avisa con un único mensaje, igual que el resto de trabajos en segundo plano. Apagar monitores reescribe la disposición vigente sin los que sobran, de modo que los que se quedan no se mueven; encender uno le pasa a Windows solo las rutas, sin modos, y Windows rellena resolución y posición con lo que tiene guardado para esa combinación exacta de monitores. Los monitores se identifican por el código EDID (`SAM7A08`) y no por el LUID del adaptador o el id del destino, que cambian al reiniciar o recargar el driver. El planificador (`DisplayTopology`) no tiene ventanas y se prueba con topologías hechas a mano; la validación contra hardware se hace con `SDC_VALIDATE`, que comprueba la configuración sin aplicarla.
+
+**Esquinas redondeadas.** La forma de cada ventana es su propio canal alfa: Direct2D
+dibuja en un DIB de 32 bits premultiplicado mediante un `ID2D1DCRenderTarget` **de
+software**, y `UpdateLayeredWindow` lo entrega al compositor (`LayeredTarget`). Así
+las esquinas quedan suavizadas a cualquier escala; el recorte anterior con
+`SetWindowRgn` es una máscara de 1 bit y salía escalonado desde 125%. El pintado
+pone el fondo transparente y rellena el rectángulo redondeado encima: limpiar con el
+color opaco del panel daría alfa 255 en todos los píxeles y las esquinas nunca serían
+transparentes. La transparencia de todo el panel (246/255) va en el `BLENDFUNCTION`.
+
+Un detalle que costó descubrirlo: la conclusión de un intento anterior ("toda
+superficie D2D sin dispositivo DXGI pierde el alfa") era cierta para
+`ID2D1HwndRenderTarget`, que compone a través de GDI, pero no para un render target de
+DC enlazado a un DIB. Por eso no hace falta Direct3D, ni leer de vuelta de memoria de
+vídeo, ni cargar el driver de la GPU para una ventana de 300x200. Medido con dos
+pestañas, frente al camino de región: memoria de trabajo 19,6 MB en lugar de 34,5, memoria
+privada 5 MB en lugar de 42, 13 hilos en lugar de 24 y 200 handles en lugar de 334, con la
+CPU en el hover igual o menor. Si el render target de DC no se puede crear, cada
+ventana cae al camino anterior (región + `SetLayeredWindowAttributes`), que se decide
+una vez en `AttachToWindow` porque dicta también cómo se configura la ventana: una
+ventana en capas a la que nadie llama ni a `UpdateLayeredWindow` ni a
+`SetLayeredWindowAttributes` no se muestra. El texto es en escala de grises, no
+ClearType, porque una superficie con alfa no sabe qué hay detrás.
 
 **Registro.** Los fallos que antes eran invisibles (una superficie D2D que no se
 puede crear, un `config.txt` que no se puede escribir, una pestaña que no se puede
@@ -129,7 +148,11 @@ construir) se anotan en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log`, con rotura a
 `.old` al pasar de 512 KB.
 
 **Pruebas.** `tests/` cubre lo que no tiene ventanas: el parser LRC (fracciones,
-marcas repetidas, tags de metadatos, `offset`, orden) y el fichero de config
-(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas).
+marcas repetidas, tags de metadatos, `offset`, orden), el fichero de config
+(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas) y la
+lógica de la pestaña Displays (qué monitor es la TV, qué botón está activo o disponible, y
+la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes)
+y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
+escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
 Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son
 widgets y ventanas, y no hay forma de ejercitarlos sin sesión de escritorio.

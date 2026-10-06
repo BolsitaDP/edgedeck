@@ -37,6 +37,7 @@ constexpr TypeEntry kTypes[] = {
     {WidgetType::Brightness, L"Brightness (monitors)", L"Brightness"},
     {WidgetType::Lyrics, L"Lyrics (auto-detect)", L"Lyrics"},
     {WidgetType::Volume, L"Volume (audio output)", L"Volume"},
+    {WidgetType::Displays, L"Displays (switch monitors)", L"Displays"},
 };
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypes) / sizeof(kTypes[0]));
 
