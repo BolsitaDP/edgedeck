@@ -43,9 +43,11 @@ bool ParseProfile(const char* name, Profile& profile) {
 
 void PrintMonitors(const std::vector<Monitor>& monitors, const std::wstring& tvId) {
     for (const Monitor& m : monitors) {
-        wprintf(L"  id=%-10ls name=%-16ls active=%d native=%ux%u target=%u%ls\n", m.id.c_str(),
+        // gdi is the device a window-system monitor handle is matched on (empty while it is off):
+        // it is how a script finds a monitor's rectangle from its id.
+        wprintf(L"  id=%-10ls name=%-16ls active=%d native=%ux%u target=%u gdi=%ls%ls\n", m.id.c_str(),
                 m.name.c_str(), m.active ? 1 : 0, m.nativeWidth, m.nativeHeight, m.targetId,
-                m.id == tvId ? L"   <== TV" : L"");
+                m.gdiName.empty() ? L"-" : m.gdiName.c_str(), m.id == tvId ? L"   <== TV" : L"");
     }
 }
 

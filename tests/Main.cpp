@@ -9,6 +9,7 @@ void RunLayeredTests();
 void RunNoticeTests();
 void RunAutostartTests();
 void RunFullscreenTests();
+void RunPlacementTests();
 void RunCrashTests();
 
 int wmain() {
@@ -26,6 +27,8 @@ int wmain() {
     RunAutostartTests();
     std::printf("\n");
     RunFullscreenTests();
+    std::printf("\n");
+    RunPlacementTests();
     std::printf("\n");
     RunCrashTests();
     return testing::Summary();

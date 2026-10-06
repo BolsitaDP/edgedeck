@@ -1,6 +1,7 @@
 // Opens just the Settings window (no tabs, no hotkeys, no single-instance mutex), so it can be
 // inspected while the user's own EdgeDeck keeps running.
-// usage: settingsharness <follow|dark|light> <seconds> [drop] [flip] [dpi=N]
+// usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N]
+//   drop=N : open the Nth combo box's list (1 widget type, 2 monitor, 3 edge, 4 theme)
 //   dpi=N : after creation, send the window the WM_DPICHANGED a monitor at N DPI would, so the
 //           layout can be checked at other scales without changing the user's display settings.
 // Always prints a layout report: controls outside the client area, overlapping controls, and
@@ -129,9 +130,11 @@ int wmain(int argc, wchar_t** argv) {
     const wchar_t* mode = argc > 1 ? argv[1] : L"follow";
     const int seconds = argc > 2 ? _wtoi(argv[2]) : 8;
     bool drop = false, flip = false;
+    int dropIndex = 1;
     UINT simDpi = 0;
     for (int i = 3; i < argc; ++i) {
         if (wcscmp(argv[i], L"drop") == 0) drop = true;
+        else if (wcsncmp(argv[i], L"drop=", 5) == 0) { drop = true; dropIndex = _wtoi(argv[i] + 5); }
         else if (wcscmp(argv[i], L"flip") == 0) flip = true;
         else if (wcsncmp(argv[i], L"dpi=", 4) == 0) simDpi = static_cast<UINT>(_wtoi(argv[i] + 4));
     }
@@ -162,7 +165,14 @@ int wmain(int argc, wchar_t** argv) {
         // grown by the frame at that scale - the rectangle Windows would propose.
         RECT cur{};
         GetWindowRect(hwnd, &cur);
-        RECT r{0, 0, MulDiv(484, simDpi, 96), MulDiv(561, simDpi, 96)};
+        // The logical client size is read back from the window rather than written down here, so
+        // a change to the layout cannot leave this harness asking for a window of the old size.
+        RECT client{};
+        GetClientRect(hwnd, &client);
+        const UINT createdDpi = GetDpiForWindow(hwnd);
+        const int logicalW = MulDiv(client.right, 96, static_cast<int>(createdDpi));
+        const int logicalH = MulDiv(client.bottom, 96, static_cast<int>(createdDpi));
+        RECT r{0, 0, MulDiv(logicalW, simDpi, 96), MulDiv(logicalH, simDpi, 96)};
         AdjustWindowRectExForDpi(&r, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, FALSE,
                                  WS_EX_DLGMODALFRAME, simDpi);
         RECT suggested{cur.left, cur.top, cur.left + (r.right - r.left), cur.top + (r.bottom - r.top)};
@@ -174,15 +184,17 @@ int wmain(int argc, wchar_t** argv) {
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 
     if (drop) {
-        EnumChildWindows(hwnd, [](HWND child, LPARAM) -> BOOL {
+        // The dropdown-th combo box in tab order: 1 is the widget type, 2 the monitor, 3 the edge.
+        struct Pick { int remaining; } pick{dropIndex};
+        EnumChildWindows(hwnd, [](HWND child, LPARAM param) -> BOOL {
             wchar_t cls[32];
             GetClassNameW(child, cls, 32);
-            if (_wcsicmp(cls, L"ComboBox") == 0) {
-                SendMessageW(child, CB_SHOWDROPDOWN, TRUE, 0);
-                return FALSE;
-            }
-            return TRUE;
-        }, 0);
+            if (_wcsicmp(cls, L"ComboBox") != 0) return TRUE;
+            auto* p = reinterpret_cast<Pick*>(param);
+            if (--p->remaining > 0) return TRUE;
+            SendMessageW(child, CB_SHOWDROPDOWN, TRUE, 0);
+            return FALSE;
+        }, reinterpret_cast<LPARAM>(&pick));
     }
 
     bool flipped = false;

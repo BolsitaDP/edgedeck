@@ -1,6 +1,7 @@
 #include "DisplayTopology.h"
 
 #include <algorithm>
+#include <cwchar>
 
 namespace DisplayTopology {
 namespace {
@@ -56,6 +57,18 @@ std::wstring PathSegment(const std::wstring& devicePath, size_t index) {
     return devicePath.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
 }
 
+// The GDI name ("\\.\DISPLAY2") of the source an active path draws through - the same name
+// GetMonitorInfo reports for that monitor's handle.
+std::wstring SourceGdiName(const DISPLAYCONFIG_PATH_INFO& path) {
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+    source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    source.header.size = sizeof(source);
+    source.header.adapterId = path.sourceInfo.adapterId;
+    source.header.id = path.sourceInfo.id;
+    if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS) return L"";
+    return source.viewGdiDeviceName;
+}
+
 } // namespace
 
 std::vector<Monitor> Enumerate() {
@@ -72,7 +85,10 @@ std::vector<Monitor> Enumerate() {
             return SameLuid(m.adapter, key.adapter) && m.targetId == key.targetId;
         });
         if (existing != monitors.end()) {
-            existing->active = existing->active || IsActive(path);
+            if (IsActive(path)) {
+                existing->active = true;
+                existing->gdiName = SourceGdiName(path);
+            }
             continue;
         }
 
@@ -87,6 +103,7 @@ std::vector<Monitor> Enumerate() {
         m.adapter = key.adapter;
         m.targetId = key.targetId;
         m.active = IsActive(path);
+        if (m.active) m.gdiName = SourceGdiName(path);
         std::wstring devicePath = named ? target.monitorDevicePath : L"";
         m.id = PathSegment(devicePath, 1);
         if (m.id.empty()) m.id = L"TARGET" + std::to_wstring(key.targetId);
@@ -121,6 +138,39 @@ std::vector<Monitor> Enumerate() {
     std::sort(monitors.begin(), monitors.end(),
               [](const Monitor& a, const Monitor& b) { return a.id < b.id; });
     return monitors;
+}
+
+std::wstring GdiNameOf(const std::vector<Monitor>& monitors, const std::wstring& id) {
+    if (id.empty()) return L"";
+    for (const Monitor& m : monitors) {
+        if (m.id == id && m.active) return m.gdiName;
+    }
+    return L"";
+}
+
+HMONITOR FindHandle(const std::wstring& id) {
+    const std::wstring gdiName = GdiNameOf(Enumerate(), id);
+    if (gdiName.empty()) return nullptr;
+
+    struct Search {
+        const std::wstring* name;
+        HMONITOR found;
+    } search{&gdiName, nullptr};
+
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
+            auto* s = reinterpret_cast<Search*>(param);
+            MONITORINFOEXW info{};
+            info.cbSize = sizeof(info);
+            if (GetMonitorInfoW(monitor, &info) && _wcsicmp(info.szDevice, s->name->c_str()) == 0) {
+                s->found = monitor;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&search));
+    return search.found;
 }
 
 std::wstring ResolveTvId(const std::vector<Monitor>& monitors, const std::wstring& configuredId) {

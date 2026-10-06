@@ -308,8 +308,67 @@ void TestRestartAfterCrashRoundTrip() {
     Config::SetRestartAfterCrash(true);
 }
 
+void TestEdgeAndMonitorRoundTrip() {
+    TEST("Config: each tab's edge and monitor are saved and read back");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"");
+
+    std::vector<TabSettings> tabs(3);
+    tabs[0].widgetType = WidgetType::QuickActions;
+    tabs[1].widgetType = WidgetType::Media;
+    tabs[1].edge = ScreenEdge::Left;
+    tabs[2].widgetType = WidgetType::Volume;
+    tabs[2].edge = ScreenEdge::Left;
+    tabs[2].monitor = L"SAM0F9D";
+    CHECK(Config::Save(tabs));
+
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{3});
+    if (loaded.size() == 3) {
+        CHECK(loaded[0].edge == ScreenEdge::Right);
+        CHECK(loaded[0].monitor.empty());
+        CHECK(loaded[1].edge == ScreenEdge::Left);
+        CHECK(loaded[1].monitor.empty());
+        CHECK(loaded[2].edge == ScreenEdge::Left);
+        CHECK(loaded[2].monitor == L"SAM0F9D");
+    }
+}
+
+void TestOldConfigHasNoEdgeOrMonitor() {
+    TEST("Config: a file from before edge and monitor existed means 'right edge, primary monitor'");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"[tab]\nwidget=Media\nverticalRatio=0.4\ntabWidth=26\ntabHeight=76\n"
+                        L"panelWidth=320\n");
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{1});
+    if (!loaded.empty()) {
+        CHECK(loaded[0].edge == ScreenEdge::Right);
+        CHECK(loaded[0].monitor.empty());
+    }
+}
+
+void TestEdgeAndMonitorByHand() {
+    TEST("Config: a hand-edited edge is case-tolerant, junk is the right edge, ids are upper-cased");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"[tab]\nwidget=Media\nedge=Left\nmonitor=sam0f9d\n"
+                        L"[tab]\nwidget=Volume\nedge=top\n"
+                        L"[tab]\nwidget=Brightness\nedge=\nmonitor=\n");
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{3});
+    if (loaded.size() == 3) {
+        CHECK(loaded[0].edge == ScreenEdge::Left);
+        CHECK(loaded[0].monitor == L"SAM0F9D");
+        CHECK(loaded[1].edge == ScreenEdge::Right); // top is not an edge this app has
+        CHECK(loaded[2].edge == ScreenEdge::Right);
+        CHECK(loaded[2].monitor.empty());
+    }
+}
+
 void RunConfigTests() {
     TestRoundTrip();
+    TestEdgeAndMonitorRoundTrip();
+    TestOldConfigHasNoEdgeOrMonitor();
+    TestEdgeAndMonitorByHand();
     TestFullscreenGuardRoundTrip();
     TestRestartAfterCrashRoundTrip();
     TestDisplaysWidgetAndTvMonitorRoundTrip();

@@ -1,5 +1,6 @@
 #include "SettingsWindow.h"
 #include "Autostart.h"
+#include "DisplayTopology.h"
 #include "Renderer.h"
 
 #include <commctrl.h>
@@ -30,6 +31,8 @@ constexpr int kIdTrackbar = 111;
 constexpr int kIdAutostart = 112;
 constexpr int kIdThemeCombo = 113;
 constexpr int kIdFullscreenGuard = 114;
+constexpr int kIdMonitorCombo = 115;
+constexpr int kIdEdgeCombo = 116;
 
 struct TypeEntry {
     WidgetType type;
@@ -61,7 +64,11 @@ const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 
 // The client area in logical (96-DPI) units: what the controls below are laid out in.
 constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 561;
+constexpr int kClientHeight = 581;
+
+// The monitor list is wider than its combo box: a name, an id and "(not connected)" do not fit in
+// the box itself, and the open list is where the choosing is done.
+constexpr int kMonitorDropWidth = 330;
 
 COLORREF ToColorRef(const D2D1_COLOR_F& c) {
     auto channel = [](float v) {
@@ -97,6 +104,7 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
     m_tabs = std::move(initial);
     m_onSave = std::move(onSave);
     m_onProblem = std::move(onProblem);
+    BuildMonitorChoices();
 
     static bool classRegistered = false;
     if (!classRegistered) {
@@ -152,6 +160,33 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
     return true;
 }
 
+void SettingsWindow::BuildMonitorChoices() {
+    m_monitorChoices.clear();
+    m_monitorChoices.push_back({L"", L"Primary monitor"});
+
+    // Every monitor Windows knows of, switched on or not: a tab can be assigned to the TV while
+    // the TV is off, and docks to it whenever it is on.
+    for (const DisplayTopology::Monitor& m : DisplayTopology::Enumerate()) {
+        std::wstring label = m.name == m.id ? m.id : m.name + L" (" + m.id + L")";
+        if (!m.active) label += L" - off";
+        m_monitorChoices.push_back({m.id, std::move(label)});
+    }
+
+    // A monitor a tab is saved against but that is not plugged in right now stays selectable, so
+    // opening Settings and pressing Save does not quietly move the tab back to the primary one.
+    for (const TabSettings& t : m_tabs) {
+        if (t.monitor.empty() || MonitorChoiceIndex(t.monitor) >= 0) continue;
+        m_monitorChoices.push_back({t.monitor, t.monitor + L" (not connected)"});
+    }
+}
+
+int SettingsWindow::MonitorChoiceIndex(const std::wstring& id) const {
+    for (size_t i = 0; i < m_monitorChoices.size(); ++i) {
+        if (m_monitorChoices[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
 HFONT SettingsWindow::MakeFont() const {
     return CreateFontW(-Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
@@ -171,6 +206,8 @@ void SettingsWindow::ApplyDpi(UINT dpi) {
                      SWP_NOZORDER | SWP_NOACTIVATE);
         SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
     }
+    // A pixel width, so it follows the scale like everything else.
+    SendMessageW(m_monitorCombo, CB_SETDROPPEDWIDTH, static_cast<WPARAM>(Scale(kMonitorDropWidth)), 0);
     // Deleted only after every control has been handed the new one.
     if (previous) DeleteObject(previous);
 }
@@ -195,15 +232,15 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     };
 
     make(L"STATIC", L"Tabs", 0, 12, 10, 100, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 360, kIdList);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 380, kIdList);
 
-    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 398, 56, 24, kIdAdd);
+    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 418, 56, 24, kIdAdd);
     // Wide enough for their label with room to spare: "Remove" and "Down" had the
     // text within a pixel or two of the edges, which any other font, language or
     // scale turns into a clipped word.
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 398, 66, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 398, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 398, 50, 24, kIdDown);
+    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 418, 66, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 418, 34, 24, kIdUp);
+    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 418, 50, 24, kIdDown);
 
     make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 250,
@@ -230,7 +267,25 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_panelWidthEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 220, 228, 90, 22,
                             kIdPanelWidth);
 
-    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 262,
+    // Where this tab lives: which monitor and which edge of it. The monitor list is filled once,
+    // when the window opens (BuildMonitorChoices); the edge is fixed.
+    make(L"STATIC", L"Monitor:", 0, 220, 264, 58, 18, 0);
+    m_monitorCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 262,
+                          196, 160, kIdMonitorCombo);
+    for (const MonitorChoice& choice : m_monitorChoices) {
+        SendMessageW(m_monitorCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(choice.label.c_str()));
+    }
+    SendMessageW(m_monitorCombo, CB_SETDROPPEDWIDTH, static_cast<WPARAM>(Scale(kMonitorDropWidth)), 0);
+
+    make(L"STATIC", L"Edge:", 0, 220, 294, 58, 18, 0);
+    m_edgeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 292, 196,
+                       80, kIdEdgeCombo);
+    // The order is the ScreenEdge enum's, so the selected index and the stored value agree.
+    for (const wchar_t* label : {L"Right", L"Left"}) {
+        SendMessageW(m_edgeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+    }
+
+    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 326,
                              240, 22, kIdAutostart);
     // "Enabled" means it will really start - an entry that Task Manager switched
     // off shows as unticked, so ticking it and saving is what turns it back on.
@@ -241,8 +296,8 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // the rest of Windows; forcing either mode is for people whose system setting
     // and preferred panel appearance disagree, which is not rare - plenty of
     // people run a light system and still want the dark panel.
-    make(L"STATIC", L"Theme:", 0, 220, 292, 60, 18, 0);
-    m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 290,
+    make(L"STATIC", L"Theme:", 0, 220, 356, 60, 18, 0);
+    m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 354,
                         196, 120, kIdThemeCombo);
     for (const wchar_t* label : {L"Follow Windows", L"Always dark", L"Always light"}) {
         SendMessageW(m_themeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
@@ -252,7 +307,7 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // Off lets a hover open panels over a game or a video; the keyboard shortcuts
     // open them either way.
     m_fullscreenCheck = make(L"BUTTON", L"Don't open over full-screen apps",
-                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 322, 250, 22, kIdFullscreenGuard);
+                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 386, 250, 22, kIdFullscreenGuard);
     SendMessageW(m_fullscreenCheck, BM_SETCHECK,
                  Config::FullscreenGuard() ? BST_CHECKED : BST_UNCHECKED, 0);
 
@@ -261,16 +316,16 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // buttons, narrower than its own text, so it painted over them and the
     // buttons showed only their last letters. Statics are transparent to the
     // mouse, which is why the buttons still worked and nobody noticed.
-    make(L"STATIC", L"Keyboard", 0, 12, 440, 100, 18, 0);
+    make(L"STATIC", L"Keyboard", 0, 12, 460, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
          L"Ctrl+Alt+Shift+1/2/3: switch monitors (needs a Displays tab).\r\n"
          L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
          L"Enter or Space activate, and Escape unpins and closes it.",
-         0, 12, 460, 464, 82, 0);
+         0, 12, 480, 464, 82, 0);
 
-    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 398, 70, 26, kIdSave);
-    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 398, 70, 26, kIdClose);
+    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 418, 70, 26, kIdSave);
+    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 418, 70, 26, kIdClose);
 }
 
 void SettingsWindow::RefreshList(int selectIndex) {
@@ -298,6 +353,8 @@ void SettingsWindow::LoadSelectedIntoControls() {
     EnableWindow(m_tabWidthEdit, hasSelection);
     EnableWindow(m_tabHeightEdit, hasSelection);
     EnableWindow(m_panelWidthEdit, hasSelection);
+    EnableWindow(m_monitorCombo, hasSelection);
+    EnableWindow(m_edgeCombo, hasSelection);
     EnableWindow(m_removeButton, hasSelection);
     EnableWindow(m_upButton, hasSelection && m_selectedIndex > 0);
     EnableWindow(m_downButton, hasSelection && m_selectedIndex < static_cast<int>(m_tabs.size()) - 1);
@@ -320,6 +377,13 @@ void SettingsWindow::LoadSelectedIntoControls() {
     SetWindowTextW(m_tabHeightEdit, buf);
     swprintf_s(buf, L"%.0f", t.panelWidth);
     SetWindowTextW(m_panelWidthEdit, buf);
+
+    // Every saved monitor has an entry (BuildMonitorChoices adds the unplugged ones), so a miss
+    // can only mean the list was built before this tab existed; the primary monitor is the safe
+    // reading of that.
+    const int monitorIndex = MonitorChoiceIndex(t.monitor);
+    SendMessageW(m_monitorCombo, CB_SETCURSEL, monitorIndex >= 0 ? monitorIndex : 0, 0);
+    SendMessageW(m_edgeCombo, CB_SETCURSEL, t.edge == ScreenEdge::Left ? 1 : 0, 0);
 }
 
 void SettingsWindow::StoreControlsIntoSelected() {
@@ -327,6 +391,12 @@ void SettingsWindow::StoreControlsIntoSelected() {
     TabSettings& t = m_tabs[m_selectedIndex];
 
     t.widgetType = TypeFromIndex(static_cast<int>(SendMessageW(m_typeCombo, CB_GETCURSEL, 0, 0)));
+
+    const LRESULT monitorSel = SendMessageW(m_monitorCombo, CB_GETCURSEL, 0, 0);
+    if (monitorSel != CB_ERR && monitorSel < static_cast<LRESULT>(m_monitorChoices.size())) {
+        t.monitor = m_monitorChoices[static_cast<size_t>(monitorSel)].id;
+    }
+    t.edge = SendMessageW(m_edgeCombo, CB_GETCURSEL, 0, 0) == 1 ? ScreenEdge::Left : ScreenEdge::Right;
 
     const int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
     t.verticalRatio = std::clamp(pos, 0, 100) / 100.0f;

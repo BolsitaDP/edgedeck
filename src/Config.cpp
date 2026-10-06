@@ -77,6 +77,15 @@ WidgetType WidgetTypeFromString(const std::wstring& s) {
     return WidgetType::QuickActions;
 }
 
+const wchar_t* EdgeToString(ScreenEdge edge) {
+    return edge == ScreenEdge::Left ? L"left" : L"right";
+}
+
+// Anything unrecognised is the right edge, where every tab used to live.
+ScreenEdge EdgeFromString(const std::wstring& s) {
+    return (s == L"left" || s == L"Left") ? ScreenEdge::Left : ScreenEdge::Right;
+}
+
 std::vector<TabSettings> DefaultTabs() {
     return {
         {WidgetType::QuickActions, 0.14f, 26.0f, 76.0f, 300.0f},
@@ -217,6 +226,10 @@ std::vector<TabSettings> LoadOrDefault() {
             ParseFloat(value, current.tabHeight);
         } else if (key == L"panelWidth") {
             ParseFloat(value, current.panelWidth);
+        } else if (key == L"edge") {
+            current.edge = EdgeFromString(value);
+        } else if (key == L"monitor") {
+            current.monitor = Upper(value);
         }
         // An unknown key is ignored, which is what makes adding one later a
         // compatible change.
@@ -254,6 +267,8 @@ bool Save(const std::vector<TabSettings>& tabs) {
             file << L"tabWidth=" << t.tabWidth << L"\n";
             file << L"tabHeight=" << t.tabHeight << L"\n";
             file << L"panelWidth=" << t.panelWidth << L"\n";
+            file << L"edge=" << EdgeToString(t.edge) << L"\n";
+            if (!t.monitor.empty()) file << L"monitor=" << t.monitor << L"\n";
         }
         file.flush();
         if (!file) {

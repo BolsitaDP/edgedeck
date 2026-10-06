@@ -2,11 +2,12 @@
 
 #include <windows.h>
 #include <functional>
+#include <string>
 #include <vector>
 #include "Config.h"
 
 // Modeless comctl32 settings dialog: lets the user pick each tab's widget
-// type, vertical position, and size, then reorder/add/remove tabs. Built
+// type, monitor, edge, vertical position, and size, then reorder/add/remove tabs. Built
 // with plain Win32 common controls (not hand-rolled D2D) since this is a
 // rarely-opened, low-traffic secondary window - it costs nothing while
 // closed and comctl32 gives keyboard navigation for free via IsDialogMessage
@@ -28,6 +29,10 @@ private:
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     void CreateControls(HINSTANCE hInstance);
+    // Which monitors a tab can be put on: the primary one, every monitor Windows knows of, and
+    // any saved monitor that is not plugged in right now.
+    void BuildMonitorChoices();
+    int MonitorChoiceIndex(const std::wstring& id) const; // -1 when there is no such entry
     void RefreshList(int selectIndex);
     void LoadSelectedIntoControls();
     void StoreControlsIntoSelected();
@@ -65,6 +70,8 @@ private:
     HWND m_tabWidthEdit = nullptr;
     HWND m_tabHeightEdit = nullptr;
     HWND m_panelWidthEdit = nullptr;
+    HWND m_monitorCombo = nullptr;
+    HWND m_edgeCombo = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
     HWND m_upButton = nullptr;
@@ -92,6 +99,12 @@ private:
     COLORREF m_mutedColor = 0;
     COLORREF m_windowColor = 0;
     COLORREF m_controlColor = 0;
+
+    struct MonitorChoice {
+        std::wstring id; // empty = the primary monitor
+        std::wstring label;
+    };
+    std::vector<MonitorChoice> m_monitorChoices;
 
     std::vector<TabSettings> m_tabs;
     int m_selectedIndex = -1;
