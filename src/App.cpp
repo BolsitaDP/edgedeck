@@ -84,7 +84,34 @@ bool App::Create(HINSTANCE hInstance) {
     if (!BuildTabsFrom(Config::LoadOrDefault(), hInstance)) return false;
     UpdateDisplayHotkeys();
     AddTrayIcon();
+    if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
     return true;
+}
+
+void App::ShowBalloon(const wchar_t* text) {
+    if (!text || !*text) return;
+    if (!m_trayAdded || !m_utilityHwnd) {
+        // Explorer has not (re)created the notification area, so there is nothing
+        // to show it from. The log is all that is left.
+        Diagnostics::Error("Notice: no notification-area icon to show a message from");
+        return;
+    }
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = m_utilityHwnd;
+    nid.uID = kTrayId;
+    nid.uFlags = NIF_INFO;
+    // Quiet time is respected: a failed monitor switch is not worth breaking
+    // Focus Assist for. NOSOUND is not set because the user's own notification
+    // settings already decide that.
+    nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
+    wcscpy_s(nid.szInfoTitle, L"EdgeDeck");
+    wcsncpy_s(nid.szInfo, text, _TRUNCATE); // 255 characters at most
+    if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        Diagnostics::Error("Notice: the notification could not be shown (%s)",
+                           Diagnostics::LastErrorText().c_str());
+    }
 }
 
 void App::UpdateDisplayHotkeys() {
@@ -153,10 +180,8 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
         // Saving is the one operation whose failure the user would otherwise
         // never find out about: the tabs would move and then quietly revert on
         // the next launch.
-        MessageBoxW(nullptr,
-                    L"EdgeDeck could not write its settings file.\n\n"
-                    L"Your changes will apply for this session but will not be kept.",
-                    L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+        ShowBalloon(L"EdgeDeck could not write its settings file. Your changes will apply for "
+                    L"this session but will not be kept.");
     }
 
     // The theme may have changed in the same Save. The palette is cached and only
@@ -186,9 +211,7 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
     }
 
     if (!BuildTabsFrom(settings, m_hInstance)) {
-        MessageBoxW(nullptr, L"EdgeDeck could not rebuild its panels. The previous layout is still "
-                            L"in place.",
-                    L"EdgeDeck", MB_ICONERROR | MB_OK | MB_TOPMOST);
+        ShowBalloon(L"EdgeDeck could not rebuild its panels. The previous layout is still in place.");
         return;
     }
     // A Displays tab may have just been added or removed.
@@ -216,8 +239,13 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
     if (!m_utilityHwnd) return false;
 
     if (!RegisterHotKey(m_utilityHwnd, kExitHotkeyId, MOD_CONTROL | MOD_ALT, kExitHotkeyVk)) {
-        MessageBoxW(nullptr, L"EdgeDeck's exit shortcut (Ctrl+Alt+Q) is unavailable.",
-                    L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+        // Held until the tray icon exists. This used to be a MessageBox, raised
+        // here, before the message loop and before any tab: the app sat invisible
+        // behind a dialog until someone found and dismissed it. The tray menu
+        // still offers Exit, so the shortcut being taken is worth a note, not a stop.
+        m_startupNotice = L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. "
+                          L"You can still exit from the EdgeDeck icon in the notification area.";
+        Diagnostics::Error("Hotkey: Ctrl+Alt+Q is already taken by another program");
     }
 
     for (int i = 0; i < kOpenHotkeyCount; ++i) {

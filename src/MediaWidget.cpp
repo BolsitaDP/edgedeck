@@ -325,7 +325,7 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
         if (result->code == static_cast<int>(MediaControls::Result::Unsupported)) {
             text = L"This app does not support that control right now.";
         }
-        MessageBoxW(nullptr, text, L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+        ReportProblem(m_owner, text);
         return discard();
     }
 

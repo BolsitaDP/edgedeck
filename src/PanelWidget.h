@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "AsyncResult.h"
+
 // What kind of content a tab's panel shows. Used by the settings UI to offer
 // a type picker and by Config to persist/restore which widget a tab has.
 enum class WidgetType {
@@ -69,6 +71,12 @@ public:
     virtual void DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) = 0;
 };
 
+// The payload of PanelWidget::kNoticeMessage.
+struct NoticeEnvelope : AsyncEnvelope {
+    AsyncKind Kind() const override { return AsyncKind::Notice; }
+    std::wstring text;
+};
+
 // One tab hosts exactly one PanelWidget. This is deliberately 1:1 (not a
 // list of widgets per panel) - simpler hit-testing, simpler settings UI
 // ("pick a widget type for this tab"), and matches the product shape
@@ -85,6 +93,28 @@ public:
     static constexpr UINT kWidgetMessageLast = WM_APP + 199;
     static bool IsWidgetMessage(UINT message) {
         return message >= kWidgetMessageFirst && message <= kWidgetMessageLast;
+    }
+
+    // Posted to a tab window to put a short problem in front of the user. One
+    // past the widget range on purpose: Tab handles it itself, not the widget, so
+    // it has to stay out of what IsWidgetMessage forwards.
+    static constexpr UINT kNoticeMessage = WM_APP + 200;
+
+    // Reports a problem the user should know about - an action that failed, a
+    // monitor that is not connected - without a modal dialog. The tab decides how:
+    // in its panel's header while the panel is on screen, as a notification from the
+    // tray icon when nobody is looking at it (a keyboard shortcut, a panel that
+    // already closed). A modal MessageBox from a background reply froze whatever
+    // the user was doing and, at startup, held the whole app until dismissed.
+    //
+    // ownerHwnd is the tab window the widget was handed. With none there is nobody
+    // to tell, and posting to a null window would queue a thread message that
+    // nothing ever dispatches, leaking the envelope - so it is simply dropped.
+    static void ReportProblem(HWND ownerHwnd, std::wstring text) {
+        if (!ownerHwnd || text.empty()) return;
+        auto* notice = new NoticeEnvelope();
+        notice->text = std::move(text);
+        PostOrDelete(ownerHwnd, kNoticeMessage, notice);
     }
 
     virtual WidgetType Type() const = 0;

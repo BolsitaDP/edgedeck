@@ -46,6 +46,7 @@ enum class AsyncKind : int {
     Lyrics,
     Displays,     // which monitors are connected / switched on
     DisplayApply, // the outcome of switching them
+    Notice,       // a short message for the user, see PanelWidget::ReportProblem
 };
 
 struct AsyncEnvelope {
