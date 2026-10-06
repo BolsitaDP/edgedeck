@@ -49,11 +49,12 @@ IDWriteFactory* DWriteFactoryPtr() {
 // A trailing ellipsis would need a custom IDWriteInlineObject, which is a lot
 // of COM for a cosmetic detail, and DWRITE_TRIMMING's own `delimiter` field is
 // a *leading* marker (meant for path-style truncation), so it cannot do the job.
-IDWriteTextFormat* MakeFormat(float sizePx, DWRITE_FONT_WEIGHT weight, bool centered) {
+IDWriteTextFormat* MakeFormat(float sizePx, DWRITE_FONT_WEIGHT weight, bool centered,
+                              const wchar_t* family = L"Segoe UI") {
     if (!DWriteFactoryPtr()) return nullptr;
     ComPtr<IDWriteTextFormat> f;
     if (FAILED(DWriteFactoryPtr()->CreateTextFormat(
-            L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             sizePx, L"en-us", f.GetAddressOf()))) {
         return nullptr;
     }
@@ -82,6 +83,34 @@ IDWriteTextFormat* DetailFormat() {
     static IDWriteTextFormat* fmt = MakeFormat(11.5f, DWRITE_FONT_WEIGHT_REGULAR, false);
     return fmt;
 }
+// The system icon font, if there is one: Segoe Fluent Icons on Windows 11, Segoe MDL2
+// Assets before it (and still alongside it). The tab icons are code points of these
+// fonts. Looked up once; null when neither is installed, in which case tabs fall back
+// to their plain text glyph rather than drawing boxes.
+const wchar_t* IconFontFamily() {
+    static const wchar_t* family = []() -> const wchar_t* {
+        IDWriteFactory* factory = DWriteFactoryPtr();
+        if (!factory) return nullptr;
+        ComPtr<IDWriteFontCollection> fonts;
+        if (FAILED(factory->GetSystemFontCollection(fonts.GetAddressOf(), FALSE))) return nullptr;
+        for (const wchar_t* name : {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"}) {
+            UINT32 index = 0;
+            BOOL exists = FALSE;
+            if (SUCCEEDED(fonts->FindFamilyName(name, &index, &exists)) && exists) return name;
+        }
+        return nullptr;
+    }();
+    return family;
+}
+
+IDWriteTextFormat* IconFormat() {
+    static IDWriteTextFormat* fmt = [] {
+        const wchar_t* family = IconFontFamily();
+        return family ? MakeFormat(16.0f, DWRITE_FONT_WEIGHT_REGULAR, true, family) : nullptr;
+    }();
+    return fmt;
+}
+
 // A problem report in the header. The one text format that wraps: a title is a
 // word or two, but a notice is a sentence, and two lines of it fit the header
 // where one trimmed line would not say enough to be useful.
@@ -450,6 +479,8 @@ void Renderer::DiscardTarget() {
     m_heightPx = 0;
 }
 
+bool Renderer::IconFontAvailable() { return IconFormat() != nullptr; }
+
 void Renderer::ResetBrushes() {
     m_primaryTextBrush.Reset();
     m_secondaryTextBrush.Reset();
@@ -621,11 +652,15 @@ void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
 
     // Hovered, the tab is the same surface as the panel it opens, so the panel
     // reads as sliding out of the tab rather than appearing next to it.
+    // A code point from the private-use block is an icon-font glyph; anything else
+    // is plain text in the UI font.
+    const bool isIcon = glyph[0] >= 0xE000 && glyph[0] <= 0xF8FF && IconFormat() != nullptr;
     ComPtr<ID2D1SolidColorBrush> brush;
     if (SUCCEEDED(m_target->CreateSolidColorBrush(
             hovered ? m_theme.textPrimary : m_theme.textSecondary, brush.GetAddressOf()))) {
-        m_target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), GlyphFormat(),
-                           D2D1::RectF(0.0f, 0.0f, w, h), brush.Get());
+        m_target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)),
+                           isIcon ? IconFormat() : GlyphFormat(), D2D1::RectF(0.0f, 0.0f, w, h),
+                           brush.Get());
     }
 
     if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) {

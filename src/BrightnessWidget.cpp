@@ -22,6 +22,12 @@ D2D1_RECT_F TrackRect(int row, float width) {
 } // namespace
 
 const wchar_t* BrightnessWidget::TabGlyph() const { return L"\x263C"; } // ☀
+// U+E706, a sun.
+const wchar_t* BrightnessWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE706, 0};
+    return icon;
+}
+
 const wchar_t* BrightnessWidget::PanelTitle() const { return L"Brightness"; }
 
 float BrightnessWidget::PreferredContentHeight(float /*logicalWidth*/) const {

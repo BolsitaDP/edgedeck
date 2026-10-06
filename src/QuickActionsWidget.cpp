@@ -15,6 +15,12 @@ const wchar_t* QuickActionsWidget::TabGlyph() const {
     return kTabGlyph;
 }
 
+// U+E945, a lightning bolt. Numeric, like every glyph here, so the source stays ASCII.
+const wchar_t* QuickActionsWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE945, 0};
+    return icon;
+}
+
 const wchar_t* QuickActionsWidget::PanelTitle() const {
     return L"Quick Actions";
 }

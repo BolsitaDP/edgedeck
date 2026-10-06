@@ -162,6 +162,12 @@ MediaWidget::~MediaWidget() {
 }
 
 const wchar_t* MediaWidget::TabGlyph() const { return L"\x266A"; } // ♪
+// U+E8D6, a music note.
+const wchar_t* MediaWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE8D6, 0};
+    return icon;
+}
+
 const wchar_t* MediaWidget::PanelTitle() const { return L"Media"; }
 
 float MediaWidget::PreferredContentHeight(float /*logicalWidth*/) const {

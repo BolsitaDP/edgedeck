@@ -17,7 +17,15 @@ constexpr float kGrabSlack = 8.0f;
 constexpr int kStepPercent = 5;
 } // namespace
 
-const wchar_t* VolumeWidget::TabGlyph() const { return L"\x266A\xFE0E"; } // ♪︎
+// U+25C4, deliberately not a note: with Media's character, two tabs in the bar were
+// identical whenever the icon font is missing. This is only that fallback.
+const wchar_t* VolumeWidget::TabGlyph() const { return L"%C4"; }
+// U+E767, a speaker with sound waves.
+const wchar_t* VolumeWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE767, 0};
+    return icon;
+}
+
 const wchar_t* VolumeWidget::PanelTitle() const { return L"Volume"; }
 
 float VolumeWidget::RowTop(int row) const {

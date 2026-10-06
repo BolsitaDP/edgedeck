@@ -17,6 +17,12 @@ LyricsWidget::~LyricsWidget() {
 }
 
 const wchar_t* LyricsWidget::TabGlyph() const { return L"\x266B"; } // ♫
+// U+E90B, lines of text with a note: lyrics, not just music.
+const wchar_t* LyricsWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE90B, 0};
+    return icon;
+}
+
 const wchar_t* LyricsWidget::PanelTitle() const { return L"Lyrics"; }
 
 float LyricsWidget::PreferredContentHeight(float /*logicalWidth*/) const {

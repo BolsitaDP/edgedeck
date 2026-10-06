@@ -10,6 +10,7 @@ class QuickActionsWidget : public PanelWidget {
 public:
     WidgetType Type() const override { return WidgetType::QuickActions; }
     const wchar_t* TabGlyph() const override;
+    const wchar_t* TabIcon() const override;
     const wchar_t* PanelTitle() const override;
 
     float PreferredContentHeight(float logicalWidth) const override;
