@@ -14,6 +14,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 Es una aplicación de subsistema Windows: no abre consola ni aparece en la barra de tareas.
 
+El runtime de C/C++ va **dentro** del `.exe` (`/MT`), no en `MSVCP140.dll` ni `VCRUNTIME140*.dll`: esas DLL vienen del "Visual C++ Redistributable", que un Windows recién instalado no trae, y un `EdgeDeck.exe` copiado a una máquina así no arrancaría (error de DLL que falta). Así solo depende de DLL del propio sistema (`dumpbin /dependents EdgeDeck.exe` lo comprueba). Cuesta unos 300 KB más de disco y nada en memoria ni en CPU: medido contra el enlazado dinámico, mismo working set (20 MB), mismos hilos y handles, y 0 de CPU en reposo.
+
 ### Instalar
 
 No ejecutes EdgeDeck directamente desde `build/Release`: Windows no deja que una compilación sobrescriba un `.exe` que está en marcha, así que cada recompilación obligaba a cerrarlo antes. En su lugar:
