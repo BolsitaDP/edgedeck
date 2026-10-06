@@ -140,6 +140,20 @@ void DisplayWidget::Activate(int controlId, HWND ownerHwnd) {
                                   m_applyRequestId);
 }
 
+void DisplayWidget::OnShortcut(int controlId, HWND ownerHwnd) {
+    if (controlId < 0 || controlId >= kProfileCount) return;
+    if (m_applyRequestId != 0) return; // one switch at a time; Windows is still busy
+
+    // Nothing here can be trusted: the panel may never have been opened, or not
+    // since a monitor was plugged in or Win+P changed the layout. Read the monitors
+    // again, and act on that read - superseding any older one, which predates the
+    // key press.
+    m_owner = ownerHwnd;
+    RequestRefresh(ownerHwnd, true);
+    m_shortcutProfile = controlId;
+    m_shortcutRefreshId = m_refreshRequestId;
+}
+
 void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
     auto* envelope = reinterpret_cast<AsyncEnvelope*>(wParam);
     if (!envelope) return;
@@ -158,7 +172,19 @@ void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
         m_monitors = std::move(list->monitors);
         m_tvId = std::move(list->tvId);
         m_loaded = true;
-        return discard();
+
+        // If a shortcut asked for this very read, carry it out now that the state
+        // is fresh. Activate still applies its own rules - already active, not
+        // available - so a shortcut for the current layout simply does nothing.
+        const bool forShortcut = m_shortcutProfile >= 0 && list->requestId == m_shortcutRefreshId;
+        const int profile = m_shortcutProfile;
+        if (forShortcut) {
+            m_shortcutProfile = -1;
+            m_shortcutRefreshId = 0;
+        }
+        discard();
+        if (forShortcut) Activate(profile, m_owner);
+        return;
     }
 
     if (message == kApplyMessage) {

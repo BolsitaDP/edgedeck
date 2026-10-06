@@ -42,6 +42,7 @@ Los paneles nunca roban el foco de la aplicación que estés usando, así que se
 |---|---|
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | Abre y fija la pestaña correspondiente |
 | `Ctrl+Alt+Q` | Salir de EdgeDeck |
+| `Ctrl+Alt+Shift+1` / `2` / `3` | Cambiar de monitores sin abrir el panel: Monitors 1 + 2 / TV only / All monitors. Solo existen mientras haya una pestaña Displays |
 | Flechas | Mover el foco entre controles (izquierda/derecha también ajustan un slider) |
 | Rueda del ratón | Ajustar el control enfocado |
 | `Enter` / `Espacio` | Activar el control enfocado |
@@ -62,6 +63,8 @@ La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra
 - **Displays (switch monitors)**: tres botones para decidir qué monitores están encendidos: **Monitors 1 + 2** (los de escritorio), **TV only** y **All monitors**. El botón que corresponde a lo que está encendido en ese momento aparece marcado como *Active*. Usa la API de configuración de pantallas de Windows (CCD, la misma de Configuración > Pantalla), así que puede volver a encender un monitor apagado y Windows restaura la disposición que ya tenías. Al cambiar, el monitor principal puede ser otro (con "TV only" lo es la TV) y las pestañas se vuelven a acoplar al borde derecho del que haya quedado como principal; un panel abierto y no fijado se cierra.
 
   La TV se detecta sola como el panel más grande, lo cual acierta con una TV 4K junto a monitores de escritorio. Si no acierta, se fija a mano en `config.txt`: `tvMonitor=SAM7A08` dentro de `[settings]`. El valor es el código de fabricante y producto del EDID del monitor, que aparece en el Administrador de dispositivos > Monitores > Detalles > Id. de hardware (`MONITOR\SAM7A08`). Si la TV está apagada o desconectada, los botones que dependen de ella salen deshabilitados con "TV not connected".
+
+  Los tres botones también tienen atajo global, `Ctrl+Alt+Shift+1`, `2` y `3`, que cambian la disposición sin abrir el panel. Se registran solo mientras exista una pestaña Displays (quien no use el widget no reserva esas teclas) y se actualizan al guardar en Settings. Un atajo siempre vuelve a leer los monitores antes de actuar, porque el panel puede llevar horas sin abrirse y el estado que recuerda estar caduco (Win+P, un monitor enchufado después); y la orden queda ligada a esa lectura concreta, de modo que una respuesta descartada no puede ejecutarla más tarde. Si otro programa ya tiene esa combinación, solo se anota en el log.
 - **Lyrics**: muestra la letra sincronizada de lo que sea que esté sonando (no solo Spotify - sigue al mismo "reproductor activo" que ya usa Windows para el resto del sistema). Las letras vienen de [LRCLIB](https://lrclib.net), una base de datos pública y gratuita hecha para esto, sin login ni API key.
 
 El valor por defecto trae una pestaña de Quick Actions, Media, Volume y Brightness; Lyrics y Displays se agregan desde Settings → Add si los quieres usar.

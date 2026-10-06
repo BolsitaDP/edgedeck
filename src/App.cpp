@@ -82,8 +82,45 @@ bool App::Create(HINSTANCE hInstance) {
     if (!CreateUtilityWindow(hInstance)) return false;
 
     if (!BuildTabsFrom(Config::LoadOrDefault(), hInstance)) return false;
+    UpdateDisplayHotkeys();
     AddTrayIcon();
     return true;
+}
+
+void App::UpdateDisplayHotkeys() {
+    static_assert(kDisplayHotkeyCount == DisplayWidget::kProfileCount,
+                  "one shortcut per Displays layout");
+    if (!m_utilityHwnd) return;
+
+    // Unregister first, so this is the same call whether the tab is new, gone, or
+    // was there all along; unregistering a key that was never registered is a no-op.
+    for (int i = 0; i < kDisplayHotkeyCount; ++i) {
+        UnregisterHotKey(m_utilityHwnd, kDisplayHotkeyBase + i);
+    }
+
+    const bool hasDisplaysTab = std::any_of(m_tabs.begin(), m_tabs.end(), [](const auto& tab) {
+        return tab->WidgetType() == WidgetType::Displays;
+    });
+    if (!hasDisplaysTab) return;
+
+    for (int i = 0; i < kDisplayHotkeyCount; ++i) {
+        if (!RegisterHotKey(m_utilityHwnd, kDisplayHotkeyBase + i, MOD_CONTROL | MOD_ALT | MOD_SHIFT,
+                            '1' + i)) {
+            // Logged, not shown: another program owning a chord is not worth a
+            // dialog, and the tab's buttons still work.
+            Diagnostics::Error("Hotkey: Ctrl+Alt+Shift+%d is already taken by another program",
+                               i + 1);
+        }
+    }
+}
+
+void App::SwitchDisplays(int profileIndex) {
+    for (auto& tab : m_tabs) {
+        if (tab->WidgetType() == WidgetType::Displays) {
+            tab->ActivateShortcut(profileIndex);
+            return;
+        }
+    }
 }
 
 bool App::BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hInstance) {
@@ -152,7 +189,10 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
         MessageBoxW(nullptr, L"EdgeDeck could not rebuild its panels. The previous layout is still "
                             L"in place.",
                     L"EdgeDeck", MB_ICONERROR | MB_OK | MB_TOPMOST);
+        return;
     }
+    // A Displays tab may have just been added or removed.
+    UpdateDisplayHotkeys();
 }
 
 void App::OpenTabByIndex(size_t index) {
@@ -302,6 +342,9 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                        wParam < kOpenHotkeyBase + kOpenHotkeyCount) {
                 s_instance->OpenTabByIndex(
                     static_cast<size_t>(wParam - kOpenHotkeyBase));
+            } else if (wParam >= kDisplayHotkeyBase &&
+                       wParam < kDisplayHotkeyBase + kDisplayHotkeyCount) {
+                s_instance->SwitchDisplays(static_cast<int>(wParam - kDisplayHotkeyBase));
             }
             return 0;
         case WM_COMMAND:
@@ -344,6 +387,9 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                 s_instance->RemoveTrayIcon();
                 for (int i = 0; i < kOpenHotkeyCount; ++i) {
                     UnregisterHotKey(hwnd, kOpenHotkeyBase + i);
+                }
+                for (int i = 0; i < kDisplayHotkeyCount; ++i) {
+                    UnregisterHotKey(hwnd, kDisplayHotkeyBase + i);
                 }
                 UnregisterHotKey(hwnd, kExitHotkeyId);
             }

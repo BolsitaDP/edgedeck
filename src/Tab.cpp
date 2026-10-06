@@ -421,6 +421,14 @@ void Tab::RequestOpen() {
     }
 }
 
+void Tab::ActivateShortcut(int controlId) {
+    // The tab window, not the panel, is the widget's owner for async replies,
+    // which is also what a click on the panel passes.
+    if (!m_widget || !m_tabHwnd) return;
+    m_widget->OnShortcut(controlId, m_tabHwnd);
+    if (m_panelHwnd && IsWindowVisible(m_panelHwnd)) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+}
+
 void Tab::EndDrag() {
     if (!m_dragging) return;
     m_dragging = false; // first, so WM_CAPTURECHANGED from ReleaseCapture is a no-op

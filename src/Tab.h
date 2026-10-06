@@ -52,6 +52,10 @@ public:
     // Opens and pins the panel, for a keyboard shortcut that named this tab.
     void RequestOpen();
 
+    // Hands a keyboard shortcut for one of the widget's own controls to the
+    // widget, without opening the panel.
+    void ActivateShortcut(int controlId);
+
     // Which monitor this tab is laid out against. Defaults to the primary one.
     void SetMonitor(HMONITOR monitor);
     HMONITOR Monitor() const { return m_monitor; }
