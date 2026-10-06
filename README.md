@@ -18,7 +18,7 @@ Ejecuta `build/Release/EdgeDeck.exe`. Es una aplicación de subsistema Windows: 
 
 - Pasa el cursor sobre una pestaña para abrir su panel. Mientras el cursor siga sobre la pestaña o su panel, el panel permanece abierto, incluso si haces clic en algo de su interior. Se cierra solo cuando sacas el cursor (tras una breve espera).
 - Cada panel tiene un botón de chincheta arriba a la derecha. Al fijarla (chincheta azul y vertical) el panel queda abierto aunque muevas el mouse fuera o hagas clic en cualquier otro sitio, hasta que vuelvas a pulsarla (chincheta hueca e inclinada).
-- Clic derecho en cualquier pestaña → **Settings...** abre la ventana de configuración: tipo de widget por pestaña, posición vertical, tamaño de la pestaña y del panel, y la casilla **Start with Windows**. Los cambios se aplican al guardar y se escriben en `%LOCALAPPDATA%\EdgeDeck\config.txt`.
+- Clic derecho en cualquier pestaña → **Settings...** abre la ventana de configuración: tipo de widget por pestaña, posición vertical, tamaño de la pestaña y del panel, y la casilla **Start with Windows**. Los cambios se aplican al guardar y se escriben en `%LOCALAPPDATA%\EdgeDeck\config.txt`. La ventana sigue el tema de los paneles (incluido el desplegable *Theme*): barra de título, fondo y controles oscuros cuando el panel es oscuro, y el aspecto normal del sistema cuando es claro o Windows está en alto contraste.
 - Clic derecho → **Exit**, o `Ctrl+Alt+Q` desde cualquier lugar, cierra la aplicación.
 - EdgeDeck también vive en el **área de notificación**: clic izquierdo en el icono abre Settings, clic derecho abre el menú con Settings/Exit. Es la vía de escape cuando las pestañas quedan fuera de pantalla (p. ej. desconectas el monitor) o si no tienes ninguna pestaña.
 

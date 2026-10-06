@@ -33,6 +33,14 @@ private:
     void OnSave();
     void OnTrackbarChanged();
 
+    // Follows the panel's palette: a dark title bar, dark child controls and a
+    // dark background when the panel is dark, and the plain system look when it is
+    // light or when Windows is in high contrast (where the user's own colours are
+    // the point and must not be overridden). Safe to call again when the theme
+    // changes under an open window.
+    void ApplyTheme();
+    LRESULT OnControlColor(UINT msg, HDC dc, HWND control);
+
     HWND m_hwnd = nullptr;
     HWND m_list = nullptr;
     HWND m_typeCombo = nullptr;
@@ -50,6 +58,16 @@ private:
     HWND m_saveButton = nullptr;
     HWND m_closeButton = nullptr;
     HFONT m_font = nullptr;
+
+    // Themed painting. Brushes exist only while the dark look is in use; with the
+    // system look they stay null and every WM_CTLCOLOR* message falls through.
+    bool m_themed = false;
+    HBRUSH m_windowBrush = nullptr;  // dialog background
+    HBRUSH m_controlBrush = nullptr; // edit boxes and lists
+    COLORREF m_textColor = 0;
+    COLORREF m_mutedColor = 0;
+    COLORREF m_windowColor = 0;
+    COLORREF m_controlColor = 0;
 
     std::vector<TabSettings> m_tabs;
     int m_selectedIndex = -1;
