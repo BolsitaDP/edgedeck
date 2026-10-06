@@ -4,6 +4,7 @@
 
 #include <commctrl.h>
 #include <dwmapi.h>
+#include <shellscalingapi.h>
 #include <uxtheme.h>
 
 #include <algorithm>
@@ -57,6 +58,10 @@ WidgetType TypeFromIndex(int index) {
 
 const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 
+// The client area in logical (96-DPI) units: what the controls below are laid out in.
+constexpr int kClientWidth = 484;
+constexpr int kClientHeight = 561;
+
 COLORREF ToColorRef(const D2D1_COLOR_F& c) {
     auto channel = [](float v) {
         return static_cast<BYTE>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
@@ -104,43 +109,87 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
         classRegistered = true;
     }
 
-    m_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, kSettingsClassName, L"EdgeDeck Settings",
-                             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT,
-                             CW_USEDEFAULT, 500, 600, nullptr, nullptr, hInstance, this);
-    if (!m_hwnd) return false;
-
-    // Centred on the monitor the pointer is on, or the primary one, so the
-    // dialog does not open half off-screen on a multi-monitor setup.
+    // Opens on the monitor the pointer is on, or the primary one, so the dialog
+    // does not land half off-screen on a multi-monitor setup. That monitor's scale
+    // decides the size - and creating the window right there is what gives it that
+    // scale: a window takes the DPI of the monitor it is created on, so making it
+    // elsewhere and moving it afterwards would start it at the wrong one.
     POINT cursor{};
     if (!GetCursorPos(&cursor)) cursor = POINT{0, 0};
     HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
-    RECT windowRect{};
-    GetWindowRect(m_hwnd, &windowRect);
+
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) || dpiX == 0) dpiX = 96;
+    m_dpi = dpiX;
+
+    const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    const DWORD exStyle = WS_EX_DLGMODALFRAME;
+
+    // The size is stated for the client area and grown by the frame, which is what
+    // keeps the layout the same at every scale (the title bar and borders change
+    // size with DPI too, and by a different factor than the controls).
+    RECT outer{0, 0, Scale(kClientWidth), Scale(kClientHeight)};
+    AdjustWindowRectExForDpi(&outer, style, FALSE, exStyle, m_dpi);
+    const int width = outer.right - outer.left;
+    const int height = outer.bottom - outer.top;
+
+    int x = CW_USEDEFAULT;
+    int y = CW_USEDEFAULT;
     MONITORINFO mi{sizeof(mi)};
     if (GetMonitorInfo(monitor, &mi)) {
-        const int cx = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left) / 2;
-        const int cy = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top) / 2;
-        const int w = windowRect.right - windowRect.left;
-        const int h = windowRect.bottom - windowRect.top;
-        SetWindowPos(m_hwnd, HWND_TOP, cx - w / 2, cy - h / 2, 0, 0,
-                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - width) / 2;
+        y = std::max<int>(mi.rcWork.top,
+                          mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - height) / 2);
     }
+
+    m_hwnd = CreateWindowExW(exStyle, kSettingsClassName, L"EdgeDeck Settings", style, x, y, width,
+                             height, nullptr, nullptr, hInstance, this);
+    if (!m_hwnd) return false;
 
     ShowWindow(m_hwnd, SW_SHOW);
     return true;
 }
 
-void SettingsWindow::CreateControls(HINSTANCE hInstance) {
-    m_font = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                         DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+HFONT SettingsWindow::MakeFont() const {
+    return CreateFontW(-Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+}
 
+void SettingsWindow::ApplyDpi(UINT dpi) {
+    if (dpi == 0 || dpi == m_dpi) return;
+    m_dpi = dpi;
+
+    HFONT previous = m_font;
+    m_font = MakeFont();
+    for (const Placement& p : m_placements) {
+        const int left = Scale(p.x);
+        const int top = Scale(p.y);
+        SetWindowPos(p.hwnd, nullptr, left, top, Scale(p.x + p.w) - left, Scale(p.y + p.h) - top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
+    }
+    // Deleted only after every control has been handed the new one.
+    if (previous) DeleteObject(previous);
+}
+
+void SettingsWindow::CreateControls(HINSTANCE hInstance) {
+    m_font = MakeFont();
+
+    // x, y, w, h are logical units; each control's logical rectangle is kept so a
+    // DPI change can lay it out again.
     auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w,
                      int h, int id) {
-        HWND child = CreateWindowExW(0, cls, text, style | WS_CHILD | WS_VISIBLE, x, y, w, h,
-                                      m_hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
-                                      hInstance, nullptr);
-        if (child && m_font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
+        const int left = Scale(x);
+        const int top = Scale(y);
+        HWND child = CreateWindowExW(0, cls, text, style | WS_CHILD | WS_VISIBLE, left, top,
+                                      Scale(x + w) - left, Scale(y + h) - top, m_hwnd,
+                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInstance,
+                                      nullptr);
+        if (!child) return child;
+        if (m_font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
+        m_placements.push_back({child, x, y, w, h});
         return child;
     };
 
@@ -148,9 +197,12 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 360, kIdList);
 
     m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 398, 56, 24, kIdAdd);
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 398, 56, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 132, 398, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 170, 398, 42, 24, kIdDown);
+    // Wide enough for their label with room to spare: "Remove" and "Down" had the
+    // text within a pixel or two of the edges, which any other font, language or
+    // scale turns into a clipped word.
+    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 398, 66, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 398, 34, 24, kIdUp);
+    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 398, 50, 24, kIdDown);
 
     make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 250,
@@ -362,6 +414,7 @@ void SettingsWindow::OnTrackbarChanged() {
 
 void SettingsWindow::OnSave() {
     StoreControlsIntoSelected();
+
     const bool wantAutostart = SendMessageW(m_autostartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
     if (wantAutostart != m_autostartInitial) {
         // The result used to be thrown away, so a registry write that failed left the
@@ -450,6 +503,10 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             // CreateControls (which parents children off m_hwnd) must use the
             // hwnd handed to us here instead - it's already valid.
             m_hwnd = hwnd;
+            // What Windows says this window's DPI is, which is the one thing the
+            // controls must agree with (Create asked the monitor, and they match
+            // unless Windows placed the window somewhere else).
+            if (const UINT dpi = GetDpiForWindow(hwnd)) m_dpi = dpi;
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
             CreateControls(cs->hInstance);
             RefreshList(0);
@@ -478,6 +535,18 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                                       reinterpret_cast<HWND>(lParam));
             }
             break;
+        case WM_DPICHANGED: {
+            // Dragged to a monitor with a different scale. Windows proposes the
+            // rectangle that keeps the window the same physical size on both.
+            ApplyDpi(HIWORD(wParam));
+            const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+            if (suggested) {
+                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                             suggested->right - suggested->left, suggested->bottom - suggested->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            return 0;
+        }
         case WM_SETTINGCHANGE:
         case WM_THEMECHANGED:
         case WM_SYSCOLORCHANGE:
@@ -526,6 +595,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             m_windowBrush = nullptr;
             m_controlBrush = nullptr;
             m_themed = false;
+            m_placements.clear();
             m_hwnd = nullptr;
             return 0;
         default:
