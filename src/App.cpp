@@ -1,5 +1,6 @@
 #include "App.h"
 #include "Autostart.h"
+#include "CrashHandler.h"
 #include "Diagnostics.h"
 #include "Tab.h"
 #include "QuickActionsWidget.h"
@@ -75,6 +76,14 @@ App::~App() {
     s_instance = nullptr;
 }
 
+void App::NoteRestartedAfterCrash() {
+    Diagnostics::Info("Started after the previous copy crashed (see the Crash lines above)");
+    // Ahead of any other startup notice: it is the more important one, and a second balloon
+    // replaces the first, so the two are joined into one message.
+    const std::wstring crash = L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.";
+    m_startupNotice = m_startupNotice.empty() ? crash : crash + L" " + m_startupNotice;
+}
+
 bool App::Create(HINSTANCE hInstance) {
     s_instance = this;
     m_hInstance = hInstance;
@@ -82,7 +91,9 @@ bool App::Create(HINSTANCE hInstance) {
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
-    if (!BuildTabsFrom(Config::LoadOrDefault(), hInstance)) return false;
+    const std::vector<TabSettings> loaded = Config::LoadOrDefault();
+    CrashHandler::SetRestartEnabled(Config::RestartAfterCrash()); // the config is read now, not at install
+    if (!BuildTabsFrom(loaded, hInstance)) return false;
     UpdateDisplayHotkeys();
     RepairAutostart();
     AddTrayIcon();
@@ -265,8 +276,10 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
         // here, before the message loop and before any tab: the app sat invisible
         // behind a dialog until someone found and dismissed it. The tray menu
         // still offers Exit, so the shortcut being taken is worth a note, not a stop.
-        m_startupNotice = L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. "
-                          L"You can still exit from the EdgeDeck icon in the notification area.";
+        // Appended, not assigned: a restart after a crash may already have a note waiting.
+        if (!m_startupNotice.empty()) m_startupNotice += L" ";
+        m_startupNotice += L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. "
+                           L"You can still exit from the EdgeDeck icon in the notification area.";
         Diagnostics::Error("Hotkey: Ctrl+Alt+Q is already taken by another program");
     }
 

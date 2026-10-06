@@ -54,6 +54,8 @@ add_executable(EdgeDeck WIN32
     src/Fullscreen.h
     src/Autostart.cpp
     src/Autostart.h
+    src/CrashHandler.cpp
+    src/CrashHandler.h
     src/SettingsWindow.cpp
     src/SettingsWindow.h
     src/Config.cpp
@@ -106,6 +108,13 @@ if (MSVC)
     # character in a string literal or a comment is a non-issue rather than a
     # build that depends on the code page it happens to be compiled under.
     target_compile_options(EdgeDeck PRIVATE /W4 /permissive- /utf-8)
+
+    # A .pdb next to the exe, so that "EdgeDeck.exe+0x1A2B3C" from a crash line and the minidump
+    # beside it can be turned into a function and a line. Symbols live in the separate file;
+    # /OPT:REF and /OPT:ICF restore the dead-code removal that /DEBUG would otherwise switch off,
+    # so the executable itself is no bigger.
+    target_compile_options(EdgeDeck PRIVATE /Zi)
+    target_link_options(EdgeDeck PRIVATE /DEBUG /OPT:REF /OPT:ICF)
 
     # The manifest (DPI awareness, UTF-8 code page, supported OS, and the
     # Common-Controls v6 dependency) is merged into the executable by the

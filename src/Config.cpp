@@ -111,6 +111,7 @@ namespace {
 ThemeMode g_themeMode = ThemeMode::Follow;
 std::wstring g_tvMonitor;
 bool g_fullscreenGuard = true;
+bool g_restartAfterCrash = true;
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
 // case it was typed in.
@@ -130,6 +131,9 @@ void SetDisplayTvMonitor(const std::wstring& id) { g_tvMonitor = Upper(id); }
 
 bool FullscreenGuard() { return g_fullscreenGuard; }
 void SetFullscreenGuard(bool on) { g_fullscreenGuard = on; }
+
+bool RestartAfterCrash() { return g_restartAfterCrash; }
+void SetRestartAfterCrash(bool on) { g_restartAfterCrash = on; }
 
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
@@ -153,6 +157,7 @@ std::vector<TabSettings> LoadOrDefault() {
 
     g_tvMonitor.clear(); // re-read below if the file still names one
     g_fullscreenGuard = true; // likewise: absent means the default
+    g_restartAfterCrash = true;
     TabSettings current;
     bool inTab = false;
     bool inSettings = false;
@@ -196,6 +201,9 @@ std::vector<TabSettings> LoadOrDefault() {
             if (key == L"fullscreenGuard" && (value == L"0" || value == L"false")) {
                 g_fullscreenGuard = false;
             }
+            if (key == L"restartAfterCrash" && (value == L"0" || value == L"false")) {
+                g_restartAfterCrash = false;
+            }
             continue;
         }
 
@@ -237,6 +245,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
         file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
         if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
         file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
+        file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
 
         for (const auto& t : tabs) {
             file << L"[tab]\n";

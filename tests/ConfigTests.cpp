@@ -283,9 +283,35 @@ void TestFullscreenGuardRoundTrip() {
     CHECK(Config::FullscreenGuard());
 }
 
+void TestRestartAfterCrashRoundTrip() {
+    TEST("Config: restarting after a crash defaults on, and only an explicit 'off' turns it off");
+    ScopedConfig guard;
+
+    ScopedConfig::Write(L"[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::RestartAfterCrash());
+
+    ScopedConfig::Write(L"[settings]\nrestartAfterCrash=0\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(!Config::RestartAfterCrash());
+
+    ScopedConfig::Write(L"[settings]\nrestartAfterCrash=sometimes\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::RestartAfterCrash()); // unreadable: keep the default
+
+    std::vector<TabSettings> tabs = {{WidgetType::Media, 0.5f, 26.0f, 76.0f, 320.0f}};
+    Config::SetRestartAfterCrash(false);
+    CHECK(Config::Save(tabs));
+    Config::SetRestartAfterCrash(true);
+    Config::LoadOrDefault();
+    CHECK(!Config::RestartAfterCrash());
+    Config::SetRestartAfterCrash(true);
+}
+
 void RunConfigTests() {
     TestRoundTrip();
     TestFullscreenGuardRoundTrip();
+    TestRestartAfterCrashRoundTrip();
     TestDisplaysWidgetAndTvMonitorRoundTrip();
     TestTvMonitorDefaultsToEmpty();
     TestLegacyAndUnknownTypes();
