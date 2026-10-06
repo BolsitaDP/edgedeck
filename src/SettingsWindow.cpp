@@ -105,7 +105,7 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
 
     m_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, kSettingsClassName, L"EdgeDeck Settings",
                              WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT,
-                             CW_USEDEFAULT, 500, 580, nullptr, nullptr, hInstance, this);
+                             CW_USEDEFAULT, 500, 600, nullptr, nullptr, hInstance, this);
     if (!m_hwnd) return false;
 
     // Centred on the monitor the pointer is on, or the primary one, so the
@@ -201,9 +201,10 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     make(L"STATIC", L"Keyboard", 0, 12, 440, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
+         L"Ctrl+Alt+Shift+1/2/3: switch monitors (needs a Displays tab).\r\n"
          L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
          L"Enter or Space activate, and Escape unpins and closes it.",
-         0, 12, 460, 464, 62, 0);
+         0, 12, 460, 464, 82, 0);
 
     m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 398, 70, 26, kIdSave);
     m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 398, 70, 26, kIdClose);

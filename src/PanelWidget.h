@@ -120,6 +120,12 @@ public:
     // result back to themselves (see OnAsyncResult) target this handle.
     virtual void Activate(int controlId, HWND ownerHwnd) = 0;
 
+    // A global keyboard shortcut named this control. Unlike Activate, the panel
+    // is usually closed and has not been opened for a while, so a widget that
+    // reads its state when the panel opens (Displays) must read it again before
+    // acting rather than trust what it last saw. The default is a plain click.
+    virtual void OnShortcut(int controlId, HWND ownerHwnd) { Activate(controlId, ownerHwnd); }
+
     // Default no-op; only widgets with async work (e.g. MediaWidget)
     // override this. message/wParam come straight from the tab's WndProc, and
     // wParam is always an AsyncEnvelope* that the widget owns and must delete

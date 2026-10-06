@@ -27,6 +27,7 @@ public:
     int HitTest(float x, float y, float width, float contentHeight) const override;
     void SetHovered(int controlId) override { m_hoveredControl = controlId; }
     void Activate(int controlId, HWND ownerHwnd) override;
+    void OnShortcut(int controlId, HWND ownerHwnd) override;
     void OnAsyncResult(UINT message, WPARAM wParam) override;
     void OnPanelOpening(HWND ownerHwnd) override;
 
@@ -57,6 +58,14 @@ private:
     int m_hoveredControl = -1;
     int m_focusedControl = -1;
     HWND m_owner = nullptr;
+
+    // A shortcut pressed with the panel closed: which profile it asked for, and
+    // the id of the monitor read started on its behalf. The profile runs only
+    // when *that* read comes back - tying it to the id means a reply that was
+    // superseded and dropped can never leave it armed for some later, unrelated
+    // refresh (the next time the panel opens, say).
+    int m_shortcutProfile = -1;
+    std::uint64_t m_shortcutRefreshId = 0;
 
     RequestTracker m_requests;
     std::uint64_t m_refreshRequestId = 0;
