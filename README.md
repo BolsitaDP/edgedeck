@@ -85,11 +85,14 @@ Cambiar el tema no reinicia la app: la paleta se recalcula al recibir `WM_SETTIN
 
 ## Notas técnicas
 
-**Nada de polling en reposo.** No hay render loop ni sondeo del ratón: el hover usa `TrackMouseEvent` / `WM_MOUSELEAVE`. Solo hay temporizadores en tres casos concretos, y ninguno corre con los paneles cerrados:
+**Nada de polling en reposo.** No hay render loop ni sondeo del ratón: el hover usa `TrackMouseEvent` / `WM_MOUSELEAVE`. Solo hay temporizadores en cuatro casos concretos, y ninguno corre con los paneles cerrados:
 
 - la animación de apertura/cierre (15 ms mientras dura),
 - la breve espera antes de cerrar (320 ms),
-- un muestreo de 500 ms **solo mientras un panel está visible** y solo para widgets que lo piden. Existe únicamente para la posición de reproducción dentro de una pista, que es lo único que Windows no notifica por evento; Lyrics y Media lo usan, el resto no lo activa.
+- un muestreo de 500 ms **solo mientras un panel está visible** y solo para widgets que lo piden. Existe únicamente para la posición de reproducción dentro de una pista, que es lo único que Windows no notifica por evento; Lyrics y Media lo usan, el resto no lo activa,
+- los 6 s que un aviso de error permanece en la cabecera (una sola vez, y solo mientras hay un aviso).
+
+**Avisos de error sin ventanas modales.** Cuando algo falla (una acción rápida, un control de Media, un cambio de monitores) el widget lo informa con `PanelWidget::ReportProblem`, que envía un mensaje a la ventana de su pestaña y es `Tab` quien decide cómo mostrarlo. Con el panel a la vista, el aviso sustituye al título de la cabecera durante 6 s, en ámbar (o en el color de texto del usuario en alto contraste), con envoltura a dos líneas y recorte, sin cambiar el tamaño del panel ni tapar el contenido; sin panel a la vista (un atajo, un panel que ya se cerró) sale como notificación de Windows desde el icono de la bandeja. Antes eran `MessageBox` modales: congelaban lo que el usuario estuviera haciendo, y el del atajo de salida ocupado salía antes del bucle de mensajes, de modo que la aplicación quedaba invisible detrás de un diálogo que nadie veía. Ese aviso de arranque espera ahora a que exista el icono de la bandeja. Los tres diálogos de `main.cpp` (sin candado de instancia, sin COM, sin ventanas) se mantienen: son fallos fatales tras los que el proceso termina y no queda dónde mostrar nada.
 
 **Cambios por evento, no por sondeo.** Media se suscribe a los eventos de
 `GlobalSystemMediaTransportControlsSessionManager` (`CurrentSessionChanged`,
@@ -164,9 +167,10 @@ construir) se anotan en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log`, con rotura a
 
 **Pruebas.** `tests/` cubre lo que no tiene ventanas: el parser LRC (fracciones,
 marcas repetidas, tags de metadatos, `offset`, orden), el fichero de config
-(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas) y la
+(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas), la
 lógica de la pestaña Displays (qué monitor es la TV, qué botón está activo o disponible, y
-la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes)
+la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes),
+el envío de avisos de error entre widget y pestaña (texto intacto, sin fugas con un destinatario nulo o ya destruido)
 y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
 escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
 Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son

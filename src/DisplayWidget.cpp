@@ -200,8 +200,7 @@ void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
         using DisplayTopology::ApplyResult;
         if (result->outcome.result == ApplyResult::NotConnected) {
             discard();
-            MessageBoxW(nullptr, L"One of those monitors is not connected right now.", L"EdgeDeck",
-                        MB_ICONWARNING | MB_OK | MB_TOPMOST);
+            ReportProblem(m_owner, L"One of those monitors is not connected right now.");
             return;
         }
         if (result->outcome.result == ApplyResult::Failed) {
@@ -209,7 +208,7 @@ void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
             swprintf_s(text, L"Windows could not change the display layout (error %ld).",
                        result->outcome.error);
             discard();
-            MessageBoxW(nullptr, text, L"EdgeDeck", MB_ICONWARNING | MB_OK | MB_TOPMOST);
+            ReportProblem(m_owner, text);
             return;
         }
         return discard();

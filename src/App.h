@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Config.h"
@@ -38,6 +39,13 @@ public:
     void RequestExit();
     void OpenSettings();
 
+    // A message for the user that does not need an answer, shown by the
+    // notification-area icon. The non-modal way to say "that failed": a
+    // MessageBox from a background reply froze the user's work, and one raised
+    // before the message loop started held the whole app up behind a dialog
+    // nobody could see.
+    void ShowBalloon(const wchar_t* text);
+
     // Opens and pins the nth tab (0-based). Wired to Ctrl+Alt+1..9, which is
     // the keyboard route into every panel - the panels themselves never take
     // focus, so without this they would be mouse-only.
@@ -63,6 +71,10 @@ private:
     std::vector<std::unique_ptr<Tab>> m_tabs;
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     bool m_trayAdded = false;
+
+    // A problem found before the tray icon exists (the icon is added last, once the
+    // tabs are up), held until it can be shown.
+    std::wstring m_startupNotice;
 
     static constexpr int kExitHotkeyId = 1;
     // Ctrl+Alt+1..9 open the corresponding tab. Ids 2..10 so they cannot clash

@@ -10,6 +10,7 @@ add_executable(EdgeDeckTests
     ConfigTests.cpp
     DisplayTests.cpp
     LayeredTests.cpp
+    NoticeTests.cpp
     ${CMAKE_SOURCE_DIR}/src/DisplayTopology.cpp
     ${CMAKE_SOURCE_DIR}/src/LayeredTarget.cpp
     ${CMAKE_SOURCE_DIR}/src/Diagnostics.cpp

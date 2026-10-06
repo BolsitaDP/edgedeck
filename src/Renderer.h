@@ -134,8 +134,13 @@ public:
     void DrawTab(bool hovered, float w, float h, const wchar_t* glyph);
 
     // Draws the panel chrome (title + pin glyph + divider), then delegates
-    // the content area to the widget via IPanelPainter.
-    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered);
+    // the content area to the widget via IPanelPainter. A non-empty `notice`
+    // takes the title's place, in a warning colour, until the caller stops
+    // passing it: the header is the one spot that is always on screen with the
+    // panel, so a problem report there needs no extra room and cannot hide the
+    // content it is about.
+    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered,
+                   const wchar_t* notice = nullptr);
 
     // 1px inner outline. Called after Clear in both DrawTab and DrawPanel.
     void DrawEdge(float w, float h);

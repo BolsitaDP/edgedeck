@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <string>
 
 #include "PanelWidget.h"
 #include "Renderer.h"
@@ -91,6 +92,10 @@ private:
     int CurrentPanelX() const;
 
     void UpdateTickTimer();
+
+    // Shows a widget's problem report: in the panel's header while the panel is
+    // on screen, otherwise as a tray notification (nobody is looking at the tab).
+    void ShowNotice(const std::wstring& text);
     void MovePanelTo(int x);
     void ClampPanelY();
     void DrawPanelSurface();
@@ -133,6 +138,9 @@ private:
     int m_panelHeightPx = 0;
     float m_panelHeightLogical = 0.0f;
 
+    // The notice currently replacing the panel title; empty when there is none.
+    std::wstring m_notice;
+
     ULONGLONG m_animStartTick = 0;
     int m_animFromX = 0;
     int m_animToX = 0;
@@ -140,7 +148,12 @@ private:
     static constexpr UINT_PTR kTimerAnim = 1;
     static constexpr UINT_PTR kTimerLeave = 2;
     static constexpr UINT_PTR kTimerTick = 3;
+    static constexpr UINT_PTR kTimerNotice = 4;
     static constexpr UINT kAnimIntervalMs = 15;
+
+    // How long a notice stays in the header. One-shot, and only armed while a
+    // notice is showing, so a quiet EdgeDeck still has no timers at all.
+    static constexpr UINT kNoticeMs = 6000;
 
     // How often a visible panel samples the one thing Windows offers no event
     // for: the playback position inside a track. Runs only while a panel is

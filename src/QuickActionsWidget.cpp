@@ -38,7 +38,7 @@ int QuickActionsWidget::HitTest(float x, float y, float width, float /*contentHe
     return idx;
 }
 
-void QuickActionsWidget::Activate(int controlId, HWND /*ownerHwnd*/) {
+void QuickActionsWidget::Activate(int controlId, HWND ownerHwnd) {
     bool succeeded = true;
     switch (controlId) {
         case 0: succeeded = Actions::OpenNotepad(); break;
@@ -47,8 +47,7 @@ void QuickActionsWidget::Activate(int controlId, HWND /*ownerHwnd*/) {
         default: return;
     }
     if (!succeeded) {
-        MessageBoxW(nullptr, L"Windows could not complete this action.", L"EdgeDeck",
-                    MB_ICONERROR | MB_OK | MB_TOPMOST);
+        ReportProblem(ownerHwnd ? ownerHwnd : m_owner, L"Windows could not complete this action.");
     }
 }
 

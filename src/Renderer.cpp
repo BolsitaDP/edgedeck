@@ -82,6 +82,17 @@ IDWriteTextFormat* DetailFormat() {
     static IDWriteTextFormat* fmt = MakeFormat(11.5f, DWRITE_FONT_WEIGHT_REGULAR, false);
     return fmt;
 }
+// A problem report in the header. The one text format that wraps: a title is a
+// word or two, but a notice is a sentence, and two lines of it fit the header
+// where one trimmed line would not say enough to be useful.
+IDWriteTextFormat* NoticeFormat() {
+    static IDWriteTextFormat* fmt = [] {
+        IDWriteTextFormat* f = MakeFormat(11.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, true);
+        if (f) f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        return f;
+    }();
+    return fmt;
+}
 IDWriteTextFormat* GlyphFormat() {
     static IDWriteTextFormat* fmt = MakeFormat(13.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, true);
     return fmt;
@@ -647,7 +658,8 @@ void Renderer::DrawEdge(float w, float h) {
     m_target->DrawRectangle(inset, m_edgeBrush.Get(), 1.0f);
 }
 
-void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered) {
+void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered,
+                         const wchar_t* notice) {
     if (!EnsureTarget()) return;
 
     // The window is the authority on its own size. Tab's idea of the panel
@@ -676,11 +688,26 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
                                               PanelLayout::ChromeHeight);
     const wchar_t* title = widget ? widget->PanelTitle() : L"EdgeDeck";
 
-    // The title is chrome, not content, so it is drawn in the secondary tone. The
-    // rows below then carry the brightest text on the panel and the eye lands on
-    // the data first, which is the whole point of the panel.
-    m_target->DrawText(title, static_cast<UINT32>(wcslen(title)), TitleFormat(), titleRect,
-                       m_secondaryTextBrush.Get());
+    if (notice && *notice) {
+        // Amber on a dark panel, a darker amber on a light one - both clear 4.5:1
+        // against their panel - and in high contrast the user's own text colour,
+        // which is the only one guaranteed legible there. Clipped to the header so
+        // a third line is cut off rather than drawn over the content below.
+        const D2D1_COLOR_F warning = m_theme.highContrast ? m_theme.textPrimary
+                                     : m_theme.dark       ? D2D1::ColorF(1.0f, 0.78f, 0.36f, 1.0f)
+                                                          : D2D1::ColorF(0.62f, 0.34f, 0.0f, 1.0f);
+        ComPtr<ID2D1SolidColorBrush> warningBrush;
+        if (SUCCEEDED(m_target->CreateSolidColorBrush(warning, warningBrush.GetAddressOf()))) {
+            m_target->DrawText(notice, static_cast<UINT32>(wcslen(notice)), NoticeFormat(), titleRect,
+                               warningBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+    } else {
+        // The title is chrome, not content, so it is drawn in the secondary tone.
+        // The rows below then carry the brightest text on the panel and the eye
+        // lands on the data first, which is the whole point of the panel.
+        m_target->DrawText(title, static_cast<UINT32>(wcslen(title)), TitleFormat(), titleRect,
+                           m_secondaryTextBrush.Get());
+    }
 
     DrawPin(pinRect, pinned, pinHovered);
 

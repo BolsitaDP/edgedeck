@@ -494,10 +494,29 @@ int Tab::CurrentPanelX() const {
     return r.left;
 }
 
+void Tab::ShowNotice(const std::wstring& text) {
+    if (text.empty()) return;
+
+    const bool panelOnScreen = m_panelHwnd && (m_state == State::Open || m_state == State::Opening);
+    if (!panelOnScreen) {
+        // A shortcut, or a panel that closed before the reply arrived: there is no
+        // header to put it in, and silence would look like nothing happened.
+        if (m_owner) m_owner->ShowBalloon(text.c_str());
+        return;
+    }
+
+    m_notice = text;
+    // SetTimer on a timer that is already pending restarts it, so a second
+    // problem gets its full time rather than inheriting what was left.
+    SetTimer(m_tabHwnd, kTimerNotice, kNoticeMs, nullptr);
+    DrawPanelSurface();
+}
+
 void Tab::DrawPanelSurface() {
     if (!m_panelHwnd || !m_widget) return;
     m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(), m_pinned,
-                              m_hoveredControl == kPinControlId);
+                              m_hoveredControl == kPinControlId,
+                              m_notice.empty() ? nullptr : m_notice.c_str());
     if (m_state == State::Open) MovePanelTo(m_panelOpenXPx);
 }
 
@@ -607,12 +626,32 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 }
                 return 0;
             }
+            if (wParam == kTimerNotice) {
+                KillTimer(hwnd, kTimerNotice);
+                m_notice.clear();
+                if (m_panelHwnd && IsWindowVisible(m_panelHwnd)) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+                return 0;
+            }
             break;
+        }
+        case PanelWidget::kNoticeMessage: {
+            // The envelope is ours to free whatever it holds, so it is deleted on
+            // every path.
+            auto* envelope = reinterpret_cast<AsyncEnvelope*>(wParam);
+            if (!envelope) return 0;
+            std::wstring text;
+            if (envelope->Kind() == AsyncKind::Notice) {
+                text = static_cast<NoticeEnvelope*>(envelope)->text;
+            }
+            delete envelope;
+            ShowNotice(text);
+            return 0;
         }
         case WM_DESTROY: {
             KillTimer(hwnd, kTimerAnim);
             KillTimer(hwnd, kTimerLeave);
             KillTimer(hwnd, kTimerTick);
+            KillTimer(hwnd, kTimerNotice);
             if (m_panelHwnd) {
                 DestroyWindow(m_panelHwnd);
                 m_panelHwnd = nullptr;

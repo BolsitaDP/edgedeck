@@ -18,6 +18,7 @@ public:
     int HitTest(float x, float y, float width, float contentHeight) const override;
     void SetHovered(int controlId) override { m_hovered = controlId; }
     void Activate(int controlId, HWND ownerHwnd) override;
+    void OnPanelOpening(HWND ownerHwnd) override { m_owner = ownerHwnd; }
 
     std::wstring AccessibleSummary() const override;
     std::wstring AccessibleControlText(int controlId) const override;
@@ -32,4 +33,8 @@ public:
 private:
     int m_hovered = -1;
     int m_focused = -1;
+    // The tab window, remembered from when the panel opened. The keyboard route
+    // activates a row with no window to hand over, and a failure has to be
+    // reported to somebody.
+    HWND m_owner = nullptr;
 };
