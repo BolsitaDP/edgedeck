@@ -12,7 +12,19 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Ejecuta `build/Release/EdgeDeck.exe`. Es una aplicación de subsistema Windows: no abre consola ni aparece en la barra de tareas.
+Es una aplicación de subsistema Windows: no abre consola ni aparece en la barra de tareas.
+
+### Instalar
+
+No ejecutes EdgeDeck directamente desde `build/Release`: Windows no deja que una compilación sobrescriba un `.exe` que está en marcha, así que cada recompilación obligaba a cerrarlo antes. En su lugar:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Build
+```
+
+Compila, copia el resultado a `%LOCALAPPDATA%\EdgeDeck\bin\EdgeDeck.exe`, apunta a esa copia el acceso directo del escritorio (y la entrada de "Start with Windows", si está activada) y lo vuelve a abrir. Como la copia en marcha ya no es la salida del build, **compilar a secas con CMake no la toca**; solo cierra y reabre EdgeDeck cuando ejecutas el script, que es cuando quieres la versión nueva. La configuración vive en `%LOCALAPPDATA%\EdgeDeck\config.txt` y el script no la toca. Opciones: `-NoLaunch` (no abrirlo al terminar), `-CreateShortcut` (crear el acceso directo si no existe) y `-Configuration` (por defecto `Release`).
+
+EdgeDeck solo admite una instancia a la vez, así que una copia abierta desde `build/Release` mientras la instalada está en marcha se cierra sola al arrancar.
 
 ## Uso
 
