@@ -71,6 +71,7 @@ private:
     HWND m_downButton = nullptr;
     HWND m_autostartCheck = nullptr;
     HWND m_themeCombo = nullptr;
+    HWND m_fullscreenCheck = nullptr;
     HWND m_saveButton = nullptr;
     HWND m_closeButton = nullptr;
     HFONT m_font = nullptr;

@@ -44,6 +44,8 @@ add_executable(EdgeDeck WIN32
     src/DisplayTopology.h
     src/BrightnessControls.cpp
     src/BrightnessControls.h
+    src/Fullscreen.cpp
+    src/Fullscreen.h
     src/Autostart.cpp
     src/Autostart.h
     src/SettingsWindow.cpp

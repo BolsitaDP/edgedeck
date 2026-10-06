@@ -81,7 +81,10 @@ private:
     // async refresh). No-op if the height hasn't actually changed.
     void ResizePanelToContent();
 
-    void OnEnter();
+    // userRequested: the open was asked for outright (a keyboard shortcut), not
+    // implied by the pointer passing over the tab. Only an implied open is held
+    // back by the full-screen guard.
+    void OnEnter(bool userRequested = false);
     void OnLeave();
     void BeginOpen();
     void BeginClose();
