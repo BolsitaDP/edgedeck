@@ -53,6 +53,12 @@ D2D1_RECT_F NameRect(D2D1_RECT_F row) {
 } // namespace
 
 const wchar_t* DisplayWidget::TabGlyph() const { return kTabGlyph; }
+// U+E7F4, a monitor.
+const wchar_t* DisplayWidget::TabIcon() const {
+    static constexpr wchar_t icon[] = {0xE7F4, 0};
+    return icon;
+}
+
 const wchar_t* DisplayWidget::PanelTitle() const { return L"Displays"; }
 
 float DisplayWidget::PreferredContentHeight(float /*logicalWidth*/) const {

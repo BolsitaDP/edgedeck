@@ -196,7 +196,7 @@ bool Tab::CreateWindows(HINSTANCE hInstance) {
     // before that, so the tab is painted once before it is made visible rather
     // than trusting a WM_PAINT to arrive for a window that has no content yet.
     m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
-                          m_widget ? m_widget->TabGlyph() : L"?");
+                          TabGlyphToDraw());
     ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
 
     // Park the panel just off the edge; it stays hidden until the first hover.
@@ -250,7 +250,7 @@ void Tab::Relayout() {
                          m_config.cornerRadius * m_dpiScale);
 
     m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
-                          m_widget ? m_widget->TabGlyph() : L"?");
+                          TabGlyphToDraw());
     if (panelOpen) DrawPanelSurface();
     UpdateTickTimer();
     m_inRelayout = false;
@@ -419,6 +419,14 @@ void Tab::RequestOpen() {
         m_pinned = true;
         InvalidateRect(m_panelHwnd, nullptr, FALSE);
     }
+}
+
+const wchar_t* Tab::TabGlyphToDraw() const {
+    if (!m_widget) return L"?";
+    // The icon when the system icon font is there, the widget's plain text glyph
+    // when it is not (or when the widget has no icon).
+    const wchar_t* icon = m_widget->TabIcon();
+    return (icon && Renderer::IconFontAvailable()) ? icon : m_widget->TabGlyph();
 }
 
 void Tab::ActivateShortcut(int controlId) {
@@ -605,7 +613,7 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
-                                  m_widget ? m_widget->TabGlyph() : L"?");
+                                  TabGlyphToDraw());
             EndPaint(hwnd, &ps);
             return 0;
         }

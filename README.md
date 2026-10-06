@@ -81,6 +81,8 @@ Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\
 
 ## Apariencia
 
+Cada pestaña lleva su icono de la fuente de iconos del sistema (**Segoe Fluent Icons** en Windows 11, **Segoe MDL2 Assets** antes y también ahora): un rayo para Quick Actions, una nota para Media, un altavoz para Volume, un sol para Brightness, líneas con una nota para Lyrics y un monitor para Displays. Antes eran caracteres de texto sueltos (≡ ♪ ☼ ♫ □) y Media y Volume acababan con la misma nota. Cada widget declara el icono como punto de código (`TabIcon`) y conserva su glifo de texto como respaldo (`TabGlyph`): si la máquina no tiene ninguna de las dos fuentes, la pestaña lo dibuja en lugar de cuadrados vacíos, y el respaldo de Volume ya no coincide con el de Media. El renderizador usa la fuente de iconos para cualquier glifo del bloque de uso privado (U+E000..U+F8FF).
+
 El panel sigue el tema de Windows usando **los mismos colores que usa el propio sistema**: los grises de la rampa oscura/elevada (`#202020`, `#1A1A1A`, `#333333`), la neutra de respaldo de Mica en claro (`#F3F3F3`), y el **acento que haya elegido el usuario**, leído de `Themes\Personalize\AccentColor`.
 
 En Ajustes hay un desplegable **Theme** con *Follow Windows* (por defecto), *Always dark* y *Always light*, para cuando el ajuste del sistema y el panel que prefieres no coinciden — sistema claro con panel oscuro, o al revés. El alto contraste tiene prioridad sobre las dos opciones.

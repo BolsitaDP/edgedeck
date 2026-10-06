@@ -130,7 +130,12 @@ public:
     // is applied by Tab.
     void SetCornerRadius(float logicalRadius) { m_cornerRadius = logicalRadius; }
 
-    // Draws the small edge tab. w/h are logical (96-DPI) units.
+    // True when the system icon font is installed, so a widget's TabIcon can be
+    // drawn; otherwise tabs use their text TabGlyph.
+    static bool IconFontAvailable();
+
+    // Draws the small edge tab. w/h are logical (96-DPI) units. A glyph in the
+    // private-use range is drawn with the icon font, anything else as text.
     void DrawTab(bool hovered, float w, float h, const wchar_t* glyph);
 
     // Draws the panel chrome (title + pin glyph + divider), then delegates

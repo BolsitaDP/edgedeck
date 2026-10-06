@@ -93,6 +93,9 @@ private:
 
     void UpdateTickTimer();
 
+    // What the edge tab shows: the widget's icon if the icon font exists, else its glyph.
+    const wchar_t* TabGlyphToDraw() const;
+
     // Shows a widget's problem report: in the panel's header while the panel is
     // on screen, otherwise as a tray notification (nobody is looking at the tab).
     void ShowNotice(const std::wstring& text);

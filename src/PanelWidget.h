@@ -124,6 +124,14 @@ public:
     // (the slide animation already communicates state).
     virtual const wchar_t* TabGlyph() const = 0;
 
+    // The same identity as a code point of the system icon font (Segoe Fluent Icons,
+    // or Segoe MDL2 Assets before Windows 11), which is what the tab shows when the
+    // font is there. TabGlyph stays as the fallback for a machine without either,
+    // and the two do not have to match in meaning, only in being distinct from the
+    // other tabs: the old text characters could not be - Media and Volume ended up
+    // with the same note. Null means "no icon, use TabGlyph".
+    virtual const wchar_t* TabIcon() const { return nullptr; }
+
     // Header text drawn in the panel's chrome.
     virtual const wchar_t* PanelTitle() const = 0;
 
