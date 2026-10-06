@@ -11,6 +11,8 @@ add_executable(EdgeDeckTests
     DisplayTests.cpp
     LayeredTests.cpp
     NoticeTests.cpp
+    AutostartTests.cpp
+    ${CMAKE_SOURCE_DIR}/src/Autostart.cpp
     ${CMAKE_SOURCE_DIR}/src/DisplayTopology.cpp
     ${CMAKE_SOURCE_DIR}/src/LayeredTarget.cpp
     ${CMAKE_SOURCE_DIR}/src/Diagnostics.cpp
@@ -33,6 +35,7 @@ target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(EdgeDeckTests PRIVATE
     d2d1
+    advapi32
     user32
     gdi32
     shell32

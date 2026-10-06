@@ -7,6 +7,7 @@ void RunConfigTests();
 void RunDisplayTests();
 void RunLayeredTests();
 void RunNoticeTests();
+void RunAutostartTests();
 
 int wmain() {
     std::printf("EdgeDeck unit tests\n\n");
@@ -19,5 +20,7 @@ int wmain() {
     RunLayeredTests();
     std::printf("\n");
     RunNoticeTests();
+    std::printf("\n");
+    RunAutostartTests();
     return testing::Summary();
 }

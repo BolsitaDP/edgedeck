@@ -52,7 +52,15 @@ Los widgets exponen texto accesible para lectores de pantalla (`PanelWidget::Acc
 
 ## Inicio con Windows
 
-La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra el valor `EdgeDeck` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` con la ruta del ejecutable actual. Como la app no tiene consola ni ventana, arranca de forma invisible al iniciar sesión. Si mueves el `.exe`, desmarca y vuelve a marcar la casilla para actualizar la ruta.
+La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra el valor `EdgeDeck` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Como la app no tiene consola ni ventana, arranca de forma invisible al iniciar sesión. Está pensada para que no falle en silencio:
+
+- **"Activado" significa que de verdad arranca.** El Administrador de tareas (pestaña Inicio) no borra la entrada al desactivarla: escribe una marca en `...\Explorer\StartupApproved\Run` y la deja donde estaba. Mirar solo la entrada hacía que Settings dijera "activado" mientras Windows la ignoraba. Ahora esa casilla sale desmarcada, y marcarla y guardar la vuelve a activar de verdad (quita la marca).
+- **Solo se toca el registro si cambias la casilla.** Antes cada Save reescribía la entrada con la ruta del `.exe` que estuviera corriendo, así que guardar desde una copia de pruebas se la quedaba, y volvía a escribir una entrada que el usuario había apagado.
+- **Lo que falla se avisa.** El resultado se relee tras escribir, y si Windows no acepta el cambio sale una notificación en lugar de quedarse la casilla marcada y nada en Windows.
+- **Se repara sola si la ruta desaparece.** Al arrancar, si la entrada apunta a un fichero que ya no existe (se movió el `.exe`, se limpió una carpeta de compilación), se reescribe apuntando a la copia instalada (`%LOCALAPPDATA%\EdgeDeck\bin`), o si no existe a la que está corriendo. No crea una entrada que no pediste, no toca la marca del Administrador de tareas (que quiera arrancar o no es decisión del usuario) y no se apropia de una entrada que apunta a **otra copia que sí existe**: así una copia de desarrollo convive con la instalada.
+- Al activarla se prefiere la copia instalada por `scripts/install.ps1`, porque su ruta no cambia al recompilar.
+
+Lo que esto no hace: si EdgeDeck se cierra por un fallo, no se reinicia hasta el siguiente inicio de sesión (la entrada Run no es un servicio ni un vigilante).
 
 ## Widgets
 
@@ -170,7 +178,8 @@ marcas repetidas, tags de metadatos, `offset`, orden), el fichero de config
 (ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas), la
 lógica de la pestaña Displays (qué monitor es la TV, qué botón está activo o disponible, y
 la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes),
-el envío de avisos de error entre widget y pestaña (texto intacto, sin fugas con un destinatario nulo o ya destruido)
+el envío de avisos de error entre widget y pestaña (texto intacto, sin fugas con un destinatario nulo o ya destruido),
+la lógica del autoarranque (entrada desactivada en el Administrador de tareas, reparación de la ruta, qué entradas se respetan; contra una clave de registro de pruebas, nunca las entradas reales)
 y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
 escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
 Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son

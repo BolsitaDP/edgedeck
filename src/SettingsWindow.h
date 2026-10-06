@@ -14,8 +14,13 @@
 class SettingsWindow {
 public:
     using SaveCallback = std::function<void(const std::vector<TabSettings>&)>;
+    // Something the window itself could not do (changing the startup entry), said
+    // without a dialog: the window is closing as it is reported, so the owner shows
+    // it somewhere that outlives it. Optional.
+    using ProblemCallback = std::function<void(const wchar_t*)>;
 
-    bool Create(HINSTANCE hInstance, std::vector<TabSettings> initial, SaveCallback onSave);
+    bool Create(HINSTANCE hInstance, std::vector<TabSettings> initial, SaveCallback onSave,
+                ProblemCallback onProblem = {});
     HWND Hwnd() const { return m_hwnd; }
 
 private:
@@ -72,4 +77,11 @@ private:
     std::vector<TabSettings> m_tabs;
     int m_selectedIndex = -1;
     SaveCallback m_onSave;
+    ProblemCallback m_onProblem;
+
+    // What the startup checkbox showed when the window opened. Saving only touches
+    // the startup entry when the box was actually changed: writing it on every Save
+    // rewrote the entry with whatever exe was running, so saving from a test copy
+    // took autostart over, and re-wrote an entry the user had switched off.
+    bool m_autostartInitial = false;
 };

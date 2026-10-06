@@ -87,9 +87,10 @@ BOOL CALLBACK ThemeChild(HWND child, LPARAM dark) {
 } // namespace
 
 bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initial,
-                             SaveCallback onSave) {
+                             SaveCallback onSave, ProblemCallback onProblem) {
     m_tabs = std::move(initial);
     m_onSave = std::move(onSave);
+    m_onProblem = std::move(onProblem);
 
     static bool classRegistered = false;
     if (!classRegistered) {
@@ -178,8 +179,10 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 262,
                              240, 22, kIdAutostart);
-    SendMessageW(m_autostartCheck, BM_SETCHECK, Autostart::IsEnabled() ? BST_CHECKED : BST_UNCHECKED,
-                 0);
+    // "Enabled" means it will really start - an entry that Task Manager switched
+    // off shows as unticked, so ticking it and saving is what turns it back on.
+    m_autostartInitial = Autostart::IsEnabled();
+    SendMessageW(m_autostartCheck, BM_SETCHECK, m_autostartInitial ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // Following the system is the default and the reason the panel normally matches
     // the rest of Windows; forcing either mode is for people whose system setting
@@ -359,7 +362,17 @@ void SettingsWindow::OnTrackbarChanged() {
 
 void SettingsWindow::OnSave() {
     StoreControlsIntoSelected();
-    Autostart::SetEnabled(SendMessageW(m_autostartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    const bool wantAutostart = SendMessageW(m_autostartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    if (wantAutostart != m_autostartInitial) {
+        // The result used to be thrown away, so a registry write that failed left the
+        // box ticked in the user's mind and nothing in Windows.
+        if (!Autostart::SetEnabled(wantAutostart) && m_onProblem) {
+            m_onProblem(wantAutostart ? L"Could not turn on Start with Windows: Windows would not "
+                                        L"accept the startup entry."
+                                      : L"Could not turn off Start with Windows: Windows would not "
+                                        L"let the startup entry be removed.");
+        }
+    }
 
     // Applied live rather than at next launch: someone who just picked a theme
     // wants to see it, and the palette is cached and compared on every draw, so
