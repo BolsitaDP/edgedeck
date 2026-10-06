@@ -32,6 +32,10 @@ public:
     App();
     ~App();
 
+    // Call before Create when this copy was started because the previous one crashed: the
+    // user is told once, from the tray, instead of finding out from a log.
+    void NoteRestartedAfterCrash();
+
     bool Create(HINSTANCE hInstance);
     static int RunMessageLoop();
 

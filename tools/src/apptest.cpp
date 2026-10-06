@@ -2,11 +2,18 @@
 // copy) and lets a script inject problem reports into its first tab by dropping trig*.txt files:
 // the file's text is posted exactly as a widget's ReportProblem would. A file named quit.txt exits.
 //
-// usage: apptest <trigger-folder>
+// It also installs the crash handler exactly as WinMain does, and can be made to crash on purpose,
+// so the whole path - log line, dump, restart - can be tested against a process that may die:
+//   crash.txt      a real access violation (a write through a null pointer)
+//   terminate.txt  an uncaught exception, as std::terminate sees it
+//
+// usage: apptest <trigger-folder> [flags a restart adds: --restarted-after-crash --previous-pid=N]
 #include "App.h"
+#include "CrashHandler.h"
 #include "PanelWidget.h"
 
 #include <commctrl.h>
+#include <exception>
 #include <objbase.h>
 #include <windows.h>
 
@@ -42,6 +49,11 @@ static std::wstring ReadUtf8(const std::wstring& path) {
 }
 
 int wmain(int argc, wchar_t** argv) {
+    // The same three steps as WinMain, in the same order.
+    CrashHandler::Install();
+    const CrashHandler::StartupInfo startup = CrashHandler::ParseCommandLine(GetCommandLineW());
+    CrashHandler::WaitForPrevious(startup);
+
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
@@ -52,6 +64,7 @@ int wmain(int argc, wchar_t** argv) {
     int exitCode = 1;
     {
         App app;
+        if (startup.restartedAfterCrash) app.NoteRestartedAfterCrash();
         if (!app.Create(GetModuleHandleW(nullptr))) return 2;
         EnumWindows(FindTab, 0);
 
@@ -73,6 +86,17 @@ int wmain(int argc, wchar_t** argv) {
                     PanelWidget::ReportProblem(g_tab, text);
                 } while (FindNextFileW(h, &fd));
                 FindClose(h);
+            }
+            // Deleted before the crash, so a restarted copy that watches the same folder does not
+            // find the trigger still there and crash again.
+            if (GetFileAttributesW((dir + L"\\crash.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\crash.txt").c_str());
+                volatile int* nowhere = nullptr;
+                *nowhere = 1; // EXCEPTION_ACCESS_VIOLATION
+            }
+            if (GetFileAttributesW((dir + L"\\terminate.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\terminate.txt").c_str());
+                std::terminate();
             }
             if (GetFileAttributesW((dir + L"\\quit.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\quit.txt").c_str());

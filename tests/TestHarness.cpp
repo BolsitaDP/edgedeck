@@ -21,6 +21,7 @@ std::string Show(int v) { return std::to_string(v); }
 std::string Show(long long v) { return std::to_string(v); }
 std::string Show(size_t v) { return std::to_string(v); }
 std::string Show(bool v) { return v ? "true" : "false"; }
+std::string Show(const std::string& v) { return "\"" + v + "\""; }
 
 std::string Show(const std::wstring& v) {
     if (v.empty()) return "\"\"";

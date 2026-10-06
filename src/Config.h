@@ -86,6 +86,11 @@ void SetDisplayTvMonitor(const std::wstring& id);
 bool FullscreenGuard();
 void SetFullscreenGuard(bool on);
 
+// Whether a crash starts a fresh copy of EdgeDeck (once; see CrashHandler). On by default, and
+// only an explicit "off" turns it off. Config-only: [settings] restartAfterCrash=0.
+bool RestartAfterCrash();
+void SetRestartAfterCrash(bool on);
+
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab
 // instead of three". Returns false if the file could not be committed.

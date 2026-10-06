@@ -103,6 +103,14 @@ for ($attempt = 0; $attempt -lt 20 -and -not $copied; $attempt++) {
 if (-not $copied) { throw "Could not write $installedExe. Is something still holding it open?" }
 Write-Host "Installed: $installedExe"
 
+# The symbols that go with exactly this executable. A crash line and its minidump say where in
+# EdgeDeck.exe it stopped; only the .pdb of the SAME build can say which function that is, and
+# the next build would overwrite the one in build\Release.
+$builtPdb = [IO.Path]::ChangeExtension($builtExe, '.pdb')
+if (Test-Path -LiteralPath $builtPdb) {
+    Copy-Item -LiteralPath $builtPdb -Destination (Join-Path $installDir 'EdgeDeck.pdb') -Force -ErrorAction SilentlyContinue
+}
+
 # --- 4. shortcut and autostart ------------------------------------------------------------
 $shell = New-Object -ComObject WScript.Shell
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'EdgeDeck.lnk'

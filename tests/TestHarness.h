@@ -26,6 +26,7 @@ std::string Show(long long v);
 std::string Show(size_t v);
 std::string Show(bool v);
 std::string Show(const std::wstring& v);
+std::string Show(const std::string& v);
 
 } // namespace testing
 

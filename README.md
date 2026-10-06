@@ -176,6 +176,38 @@ puede crear, un `config.txt` que no se puede escribir, una pestaña que no se pu
 construir) se anotan en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log`, con rotura a
 `.old` al pasar de 512 KB.
 
+**Cierres inesperados.** Una utilidad residente que cae sin decir nada es lo peor: simplemente
+desaparece, el log no dice por qué y no vuelve hasta el siguiente inicio de sesión. `CrashHandler`
+se instala lo primero de `WinMain` (lo que falle antes sería invisible) y, ante una excepción sin
+capturar o un `std::terminate`, deja tres cosas:
+
+- **Una línea en el log**: `Crash: access violation (0xC0000005) at EdgeDeck.exe+0x1A2B3C, thread 4812,
+  up 931 s, build 0x6702F1A4`. El desplazamiento es respecto al módulo; el `build` es la marca de
+  tiempo del enlazador, que identifica qué compilación fue.
+- **Un minidump** en `%LOCALAPPDATA%\EdgeDeck\crashes\` (unos 80 KB: hilos, pilas y módulos; se
+  conservan los 5 más recientes). Se abre en Visual Studio o WinDbg junto al `.pdb` de la misma
+  compilación, y `scripts\install.ps1` copia ese `.pdb` junto al `.exe` instalado precisamente
+  porque la siguiente compilación sobrescribiría el de `build\Release`. `dbghelp.dll` solo se
+  carga en el momento del fallo, nunca en una ejecución sana.
+- **Un reinicio**, una sola vez: una copia que arranca por un fallo y vuelve a caer en menos de un
+  minuto **no** se reinicia otra vez (evita el bucle típico de algo que falla al arrancar, como una
+  configuración dañada). La copia nueva espera (hasta 10 s) a que la anterior termine, porque
+  todavía tiene el candado de instancia única, y avisa una vez desde la bandeja. Se desactiva con
+  `restartAfterCrash=0` en `[settings]`.
+
+Lo que ocurre *durante* el fallo no reserva memoria: el montón puede estar dañado (el último fallo
+arreglado fue justo una corrupción de montón), así que todo va en búferes de la pila o estáticos y
+solo se llama a funciones de Win32 (por eso no usa `Diagnostics`, que reserva memoria y toma un
+cerrojo). La línea del log se escribe **antes** que el volcado y que el reinicio: es lo único que
+debe sobrevivir aunque lo demás falle. Una trampa que costó encontrar: lanzar una excepción
+desde dentro del manejador de `std::terminate` no funciona, el CRT lo trata como fatal y aborta con
+un *fail-fast* (`0xC0000409`) antes de que llegue ningún filtro, así que el manejador fabrica el
+registro de excepción y llama directamente a la lógica del filtro. También se reserva pila para el
+manejador, para poder informar de un desbordamiento de pila.
+
+Lo que no puede ver: un `__fastfail` real (de la CRT o de WinRT) se salta todos los manejadores por
+diseño, y que algo mate el proceso desde fuera (Administrador de tareas, `taskkill`) no es un fallo.
+
 **Pruebas.** `tests/` cubre lo que no tiene ventanas: el parser LRC (fracciones,
 marcas repetidas, tags de metadatos, `offset`, orden), el fichero de config
 (ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas), la
@@ -183,6 +215,7 @@ lógica de la pestaña Displays (qué monitor es la TV, qué botón está activo
 la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes),
 el envío de avisos de error entre widget y pestaña (texto intacto, sin fugas con un destinatario nulo o ya destruido),
 la lógica del autoarranque (entrada desactivada en el Administrador de tareas, reparación de la ruta, qué entradas se respetan; contra una clave de registro de pruebas, nunca las entradas reales),
+la parte pura del manejo de fallos (el formato exacto de la línea del log, cuándo se reinicia y cuándo no, los argumentos de la copia nueva, la poda de volcados),
 la geometría de "hay una app a pantalla completa delante" (maximizado normal, juego sin bordes, otro monitor, con las coordenadas negativas de un escritorio de varias pantallas) y la configuración que la desactiva,
 y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
 escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
