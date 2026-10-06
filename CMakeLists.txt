@@ -83,6 +83,8 @@ target_link_libraries(EdgeDeck PRIVATE
     shcore
     windowsapp
     comctl32
+    uxtheme
+    dwmapi
     dxva2
     advapi32
     winhttp
