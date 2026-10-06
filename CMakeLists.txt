@@ -14,6 +14,12 @@ endif()
 # have no windowing in them.
 option(EDGEDECK_BUILD_TESTS "Build the EdgeDeck unit tests" ON)
 
+# Developer test tools (tools/README.md): a display-switching CLI, harnesses that host the
+# Settings window or the whole App, and plain windows to test against. They need a desktop
+# session and real monitors, so nothing runs them in CI; CI only builds them, which is what
+# keeps them in step with the code they call.
+option(EDGEDECK_BUILD_TOOLS "Build the developer test tools" OFF)
+
 add_executable(EdgeDeck WIN32
     src/main.cpp
     src/App.cpp
@@ -113,4 +119,9 @@ endif()
 if (EDGEDECK_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# After the EdgeDeck target exists: the tools read its source list instead of repeating it.
+if (EDGEDECK_BUILD_TOOLS)
+    add_subdirectory(tools)
 endif()

@@ -12,8 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The developer tools (tools/) are built too, never run: they call into the real
+      # code, so a signature that changes under them should fail here, not the next time
+      # someone needs one.
       - name: Configure
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DEDGEDECK_BUILD_TOOLS=ON
 
       - name: Build
         run: cmake --build build --config Release -- /m

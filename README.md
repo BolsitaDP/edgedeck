@@ -187,4 +187,9 @@ la geometría de "hay una app a pantalla completa delante" (maximizado normal, j
 y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
 escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
 Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son
-widgets y ventanas, y no hay forma de ejercitarlos sin sesión de escritorio.
+widgets y ventanas, que no se pueden ejercitar sin sesión de escritorio: para eso están las
+**herramientas de prueba manuales** de [`tools/`](tools/README.md) (maquetación de Settings a
+varias escalas, la protección de pantalla completa, los avisos de error, el cambio de monitores
+y los atajos, comparación de rendimiento entre compilaciones). Se compilan en CI pero no se ejecutan
+allí, y varias mueven el cursor real o conmutan monitores, así que su README es lo primero que hay
+que leer.
