@@ -9,6 +9,13 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# The C and C++ runtime is linked into the executable (/MT) instead of loaded from
+# MSVCP140.dll / VCRUNTIME140*.dll. Those come from the "Visual C++ Redistributable", which
+# a clean Windows install does not have: a copy of EdgeDeck.exe on such a machine would
+# fail to start with a missing-DLL dialog. Set before any target so that the tests and the
+# tools are built the same way as the product.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Pure-logic code (the LRC parser, the config reader/writer) is compiled a second
 # time into a small console-free test binary, so CI can cover the parts that
 # have no windowing in them.
