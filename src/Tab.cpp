@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "Diagnostics.h"
+#include "DisplayTopology.h"
 #include "Fullscreen.h"
 #include "Tab.h"
 #include "App.h"
@@ -100,30 +101,42 @@ void Tab::UnregisterClasses() {
 
 bool Tab::Create(HINSTANCE hInstance) { return ComputeLayout() && CreateWindows(hInstance); }
 
-void Tab::SetMonitor(HMONITOR monitor) {
-    if (m_monitor == monitor) return;
-    m_monitor = monitor;
-    Relayout();
+HMONITOR Tab::ResolveMonitor() {
+    if (!m_config.monitorId.empty()) {
+        if (HMONITOR chosen = DisplayTopology::FindHandle(m_config.monitorId)) {
+            if (m_monitorMissing) {
+                m_monitorMissing = false;
+                Diagnostics::Info("Tab: monitor %ls is back, docking to it again",
+                                  m_config.monitorId.c_str());
+            }
+            return chosen;
+        }
+        // Not plugged in, or switched off by the Displays tab: not an error. The tab stays
+        // reachable on the primary monitor and goes back when this one is on again.
+        if (!m_monitorMissing) {
+            m_monitorMissing = true;
+            Diagnostics::Info("Tab: monitor %ls is not on the desktop, docking to the primary one",
+                              m_config.monitorId.c_str());
+        }
+    } else {
+        m_monitorMissing = false;
+    }
+    return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
 }
 
 bool Tab::ComputeLayout() {
-    HMONITOR monitor =
-        m_monitor ? m_monitor : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR monitor = ResolveMonitor();
     m_monitor = monitor;
 
     MONITORINFO mi{sizeof(mi)};
     if (!GetMonitorInfo(monitor, &mi)) return false;
+    m_monitorRectPx = mi.rcMonitor;
 
     UINT dpiX = 96;
     UINT dpiY = 96;
     if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) dpiX = 96;
     m_dpi = dpiX;
     m_dpiScale = static_cast<float>(dpiX) / 96.0f;
-
-    const int monRight = mi.rcMonitor.right;
-    const int monTop = mi.rcMonitor.top;
-    const int monBottom = mi.rcMonitor.bottom;
-    const int monHeight = monBottom - monTop;
 
     const int tabWpx = static_cast<int>(std::lround(m_config.tabWidth * m_dpiScale));
     const int tabHpx = static_cast<int>(std::lround(m_config.tabHeight * m_dpiScale));
@@ -145,25 +158,30 @@ bool Tab::ComputeLayout() {
     m_panelWidthPx = static_cast<int>(std::lround(m_config.panelWidth * m_dpiScale));
     m_panelHeightPx = static_cast<int>(std::lround(m_panelHeightLogical * m_dpiScale));
 
-    // Right-edge placement (the only edge this app supports for now).
-    const int tabX = monRight - tabWpx;
-    const int tabY = monTop + static_cast<int>((monHeight - tabHpx) * m_config.verticalRatio);
-    m_tabRectPx = {tabX, tabY, tabX + tabWpx, tabY + tabHpx};
+    Placement::Input in;
+    in.monitor = mi.rcMonitor;
+    in.edge = m_config.edge;
+    in.tabWidth = tabWpx;
+    in.tabHeight = tabHpx;
+    in.panelWidth = m_panelWidthPx;
+    in.panelHeight = m_panelHeightPx;
+    in.verticalRatio = m_config.verticalRatio;
+    const Placement::Result placed = Placement::Compute(in);
+    m_tabRectPx = placed.tab;
+    m_panelYPx = placed.panelY;
+    m_panelOpenXPx = placed.panelOpenX;     // resting position, beside the tab
+    m_panelClosedXPx = placed.panelClosedX; // fully outside the edge until it slides in
 
-    ClampPanelY();
-
-    m_panelOpenXPx = tabX - m_panelWidthPx; // resting position, left of the tab
-    m_panelClosedXPx = monRight;            // fully outside the edge until it slides in
+    // The slide starts outside the monitor. If another monitor is there, the panel would be seen
+    // on it for the first frames, so it has to be clipped (ClipSlideTo).
+    const RECT closed{m_panelClosedXPx, m_panelYPx, m_panelClosedXPx + m_panelWidthPx,
+                      m_panelYPx + m_panelHeightPx};
+    m_slideNeedsClip = MonitorFromRect(&closed, MONITOR_DEFAULTTONULL) != nullptr;
     return true;
 }
 
 void Tab::ClampPanelY() {
-    MONITORINFO mi{sizeof(mi)};
-    if (!m_monitor || !GetMonitorInfo(m_monitor, &mi)) return;
-    const int centerY = (m_tabRectPx.top + m_tabRectPx.bottom) / 2;
-    const int wanted = centerY - m_panelHeightPx / 2;
-    const int lowest = static_cast<int>(mi.rcMonitor.bottom) - m_panelHeightPx;
-    m_panelYPx = std::clamp<int>(wanted, static_cast<int>(mi.rcMonitor.top), lowest);
+    m_panelYPx = Placement::PanelY(m_tabRectPx, m_panelHeightPx, m_monitorRectPx);
 }
 
 bool Tab::CreateWindows(HINSTANCE hInstance) {
@@ -250,6 +268,9 @@ void Tab::Relayout() {
                          m_config.cornerRadius * m_dpiScale);
     ApplyCornerTreatment(m_panelHwnd, m_panelRenderer, m_panelWidthPx, m_panelHeightPx,
                          m_config.cornerRadius * m_dpiScale);
+    // On the layered path that call removed any region, the slide clip included.
+    m_panelClipped = false;
+    ClipSlideTo(panelOpen ? m_panelOpenXPx : m_panelClosedXPx);
 
     m_tabRenderer.DrawTab(m_tabHovered, m_config.tabWidth, m_config.tabHeight,
                           TabGlyphToDraw());
@@ -284,6 +305,8 @@ void Tab::ResizePanelToContent() {
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     ApplyCornerTreatment(m_panelHwnd, m_panelRenderer, m_panelWidthPx, m_panelHeightPx,
                          m_config.cornerRadius * m_dpiScale);
+    m_panelClipped = false; // the call above removed it; a slide in flight is clipped again now
+    ClipSlideTo(CurrentPanelX());
     m_panelRenderer.OnResize(static_cast<UINT>(m_panelWidthPx), static_cast<UINT>(m_panelHeightPx));
 
     if (m_state == State::Open || m_state == State::Opening) DrawPanelSurface();
@@ -385,6 +408,10 @@ void Tab::BeginOpen() {
     m_state = State::Opening;
     SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
 
+    // Parked outside the edge, the panel is shown a moment before the first animation tick moves
+    // it; with a monitor beyond that edge it would flash on that monitor. Clip it first.
+    ClipSlideTo(m_animFromX);
+
     // The panel has to be shown before it can be painted: InvalidateRect on a
     // hidden window never produces a WM_PAINT, so without this the slide would
     // animate an empty rectangle. SW_SHOWNOACTIVATE keeps the WS_EX_NOACTIVATE
@@ -473,12 +500,54 @@ void Tab::UpdateTickTimer() {
     }
 }
 
+void Tab::ClipSlideTo(int x) {
+    // The rounded-region fallback (no per-pixel alpha) already owns the window region; replacing
+    // it would square the corners, and that path is the rare one. There the slide is not clipped.
+    if (!m_panelHwnd || !m_panelRenderer.IsLayered()) return;
+
+    auto removeClip = [&] {
+        if (!m_panelClipped) return;
+        SetWindowRgn(m_panelHwnd, nullptr, FALSE);
+        m_panelClipped = false;
+    };
+
+    if (!m_slideNeedsClip) {
+        removeClip(); // the layout changed and no monitor is beyond the edge any more
+        return;
+    }
+
+    const RECT shown =
+        Placement::VisiblePart(x, m_panelYPx, m_panelWidthPx, m_panelHeightPx, m_monitorRectPx);
+    const bool whole = shown.left == 0 && shown.top == 0 && shown.right == m_panelWidthPx &&
+                       shown.bottom == m_panelHeightPx;
+    if (whole) {
+        removeClip(); // fully on its own monitor: nothing to cut
+        return;
+    }
+    // An empty rectangle is a valid, empty region: nothing of the panel shows yet.
+    HRGN region = CreateRectRgn(shown.left, shown.top, shown.right, shown.bottom);
+    if (!region) return;
+    if (SetWindowRgn(m_panelHwnd, region, FALSE)) {
+        m_panelClipped = true; // the window owns the region now
+    } else {
+        DeleteObject(region);
+    }
+}
+
 void Tab::MovePanelTo(int x) {
     if (!m_panelHwnd || !IsWindowVisible(m_panelHwnd)) return;
+    // The window and its clip cannot change in the same instant, and the frame between the two
+    // calls must never show the panel on the neighbouring monitor. Moving in, the new (larger)
+    // clip applied to the old position would let a sliver out, so the move goes first and the
+    // old, tighter clip holds meanwhile. Moving out it is the other way round: the new, tighter
+    // clip is set first and the window then follows it.
+    const bool movingIn = m_state == State::Opening;
+    if (!movingIn) ClipSlideTo(x);
     // Reposition only (SWP_NOSIZE): a slide costs one cheap call per frame
     // instead of a full relayout of a topmost layered window.
     SetWindowPos(m_panelHwnd, nullptr, x, m_panelYPx, 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    if (movingIn) ClipSlideTo(x);
 }
 
 void Tab::StepAnimation() {
@@ -593,16 +662,16 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_ERASEBKGND:
             return 1; // avoid a redundant GDI fill before our D2D paint
         case WM_DISPLAYCHANGE:
-            // Monitors were added, removed or rearranged. The tab docks to the
-            // primary monitor, and which one that is can change under it - the
-            // Displays tab does exactly that when it switches to the TV alone - so
-            // forget the cached monitor and dock again, on whatever is primary now.
+            // Monitors were added, removed or rearranged. The tab docks to its
+            // configured monitor, or to the primary one, and either can change under
+            // it - the Displays tab does exactly that when it switches to the TV
+            // alone - so dock again: Relayout looks the monitor up afresh, which is
+            // also what puts a tab back on a monitor that has just been switched on.
             //
             // An open panel that is not pinned is closed first. Relayout cancels
             // its hover tracking, so a panel left open here would never see the
             // cursor leave and would sit on screen until the next hover.
             if (!m_pinned) BeginClose();
-            m_monitor = nullptr;
             PanelTheme::Refresh();
             Relayout();
             return 0;

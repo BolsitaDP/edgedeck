@@ -44,6 +44,8 @@ UINT TaskbarCreatedMessage() {
 TabConfig MakeTabConfig(const TabSettings& s) {
     TabConfig config;
     config.verticalRatio = s.verticalRatio;
+    config.edge = s.edge;
+    config.monitorId = s.monitor;
     config.tabWidth = s.tabWidth;
     config.tabHeight = s.tabHeight;
     config.panelWidth = s.panelWidth;

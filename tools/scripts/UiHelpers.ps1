@@ -172,10 +172,12 @@ function Start-TestApp {
     .SYNOPSIS  Starts apptest.exe (the real App in-process) against a scratch config.
     .PARAMETER Tabs      Widget names: QuickActions, Media, Volume, Brightness, Lyrics, Displays.
     .PARAMETER Settings  Lines written under [settings], e.g. @('theme=Dark','fullscreenGuard=0').
+    .PARAMETER TabExtra  Extra lines for each tab, parallel to -Tabs (one string per tab, lines
+                         separated by `n), e.g. @('edge=left', 'edge=left`nmonitor=SAM0F9D').
     .OUTPUTS   An object with Process, Scratch, AppData, Trigger and Log.
     #>
     param([string[]]$Tabs = @('QuickActions'), [string[]]$Settings = @('theme=Dark'), [string]$ToolsDir,
-          [double]$StartupSeconds = 3)
+          [double]$StartupSeconds = 3, [string[]]$TabExtra = @())
     $scratch = New-ScratchDir
     $appdata = Join-Path $scratch 'appdata'
     $trigger = Join-Path $scratch 'trig'
@@ -186,6 +188,7 @@ function Start-TestApp {
         $ratio = if ($Tabs.Count -eq 1) { 0.5 } else { 0.1 + 0.8 * $i / ($Tabs.Count - 1) }
         $text += "[tab]`nwidget=$($Tabs[$i])`nverticalRatio=$($ratio.ToString([Globalization.CultureInfo]::InvariantCulture))`n" +
                  "tabWidth=26`ntabHeight=76`npanelWidth=320`n"
+        if ($i -lt $TabExtra.Count -and $TabExtra[$i]) { $text += $TabExtra[$i] + "`n" }
     }
     Set-Content -Path "$appdata\EdgeDeck\config.txt" -Value $text -Encoding ASCII
 

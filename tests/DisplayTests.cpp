@@ -289,9 +289,55 @@ void TestTopologyFailsForAMissingTarget() {
     CHECK(!PlanTopology(all, {Key(9999)}, out));
 }
 
+void TestGdiNameOfIsTheBridgeToAHandle() {
+    TEST("Displays: an EDID id maps to the GDI device of that monitor, if it is on");
+    std::vector<Monitor> desk = Desk(true, true, false);
+    desk[0].gdiName = L"\\\\.\\DISPLAY2"; // the ultrawide
+    desk[1].gdiName = L"\\\\.\\DISPLAY1"; // the 1080p monitor
+    CHECK(GdiNameOf(desk, L"GSM7768") == L"\\\\.\\DISPLAY2");
+    CHECK(GdiNameOf(desk, L"SAM0F9D") == L"\\\\.\\DISPLAY1");
+
+    // The TV is plugged in but switched off, so it has no device to draw through: a tab
+    // configured for it cannot dock there, and the caller falls back to the primary monitor.
+    CHECK(GdiNameOf(desk, L"SAM7A08").empty());
+    // Not plugged in at all, and no id at all, are the same answer.
+    CHECK(GdiNameOf(desk, L"XXX0000").empty());
+    CHECK(GdiNameOf(desk, L"").empty());
+}
+
+void TestGdiNameOfIgnoresAStaleName() {
+    TEST("Displays: a switched-off monitor is not found even if a name was left on it");
+    std::vector<Monitor> desk = Desk(true, false, false);
+    desk[1].gdiName = L"\\\\.\\DISPLAY1";
+    CHECK(GdiNameOf(desk, L"SAM0F9D").empty());
+}
+
+void TestFindHandleAgainstTheRealDesktop() {
+    TEST("Displays: every active monitor's id finds a real handle, an unknown one finds none");
+    // Runs against whatever desktop the test runs on. On a headless runner there is nothing to
+    // enumerate, and the loop is empty: what is left to check then is only the "no" answers.
+    for (const Monitor& m : Enumerate()) {
+        if (!m.active) {
+            CHECK(FindHandle(m.id) == nullptr);
+            continue;
+        }
+        HMONITOR handle = FindHandle(m.id);
+        CHECK(handle != nullptr);
+        MONITORINFOEXW info{};
+        info.cbSize = sizeof(info);
+        CHECK(handle && GetMonitorInfoW(handle, &info));
+        if (handle) CHECK(_wcsicmp(info.szDevice, m.gdiName.c_str()) == 0);
+    }
+    CHECK(FindHandle(L"NOSUCH0") == nullptr);
+    CHECK(FindHandle(L"") == nullptr);
+}
+
 } // namespace
 
 void RunDisplayTests() {
+    TestGdiNameOfIsTheBridgeToAHandle();
+    TestGdiNameOfIgnoresAStaleName();
+    TestFindHandleAgainstTheRealDesktop();
     TestTvIsTheLargestPanel();
     TestTvOverrideAndEdgeCases();
     TestProfileSets();

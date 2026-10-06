@@ -6,6 +6,7 @@
 #include <string>
 
 #include "PanelWidget.h"
+#include "Placement.h"
 #include "Renderer.h"
 
 class App;
@@ -16,6 +17,10 @@ class App;
 // overlapping.
 struct TabConfig {
     float verticalRatio = 0.5f; // 0 = top of monitor, 1 = bottom
+    ScreenEdge edge = ScreenEdge::Right;
+    // EDID id of the monitor to dock to; empty is the primary monitor. If that monitor is not on
+    // the desktop the tab docks to the primary one until it is (see ResolveMonitor).
+    std::wstring monitorId;
     float tabWidth = 26.0f;
     float tabHeight = 76.0f;
     float panelWidth = 300.0f;
@@ -57,10 +62,6 @@ public:
     // widget, without opening the panel.
     void ActivateShortcut(int controlId);
 
-    // Which monitor this tab is laid out against. Defaults to the primary one.
-    void SetMonitor(HMONITOR monitor);
-    HMONITOR Monitor() const { return m_monitor; }
-
     // Re-lays out for a new configuration without replacing the widget, so an
     // open or pinned panel and any in-flight async work survive the change.
     void ApplyConfig(const TabConfig& config);
@@ -74,6 +75,10 @@ private:
     LRESULT HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     bool ComputeLayout();
+    // The monitor the tab is docked to: the configured one if it is on the desktop, otherwise the
+    // primary one. Looked up afresh on every layout, so a monitor that is switched back on takes
+    // its tabs back at the next display change.
+    HMONITOR ResolveMonitor();
     bool CreateWindows(HINSTANCE hInstance);
     void Relayout();
     // Re-sizes the panel window to match the widget's current
@@ -103,6 +108,11 @@ private:
     // on screen, otherwise as a tray notification (nobody is looking at the tab).
     void ShowNotice(const std::wstring& text);
     void MovePanelTo(int x);
+    // While the panel is still outside its edge it is on whatever monitor lies beyond - with a
+    // monitor there, the slide would be seen emerging from it. A window region cuts the panel to
+    // the monitor it belongs to for the duration of the slide. A no-op (and no region) when no
+    // other monitor is beyond this edge, which is the common case.
+    void ClipSlideTo(int x);
     void ClampPanelY();
     void DrawPanelSurface();
 
@@ -134,6 +144,10 @@ private:
     float m_dpiScale = 1.0f;
     UINT m_dpi = 96;
     HMONITOR m_monitor = nullptr;
+    RECT m_monitorRectPx{};     // the monitor above, as of the last layout
+    bool m_monitorMissing = false; // the configured monitor is not on the desktop (logged once)
+    bool m_slideNeedsClip = false; // another monitor lies beyond the edge the panel slides from
+    bool m_panelClipped = false;   // the panel window currently carries a slide-clip region
 
     // Physical-pixel geometry, in screen coordinates.
     RECT m_tabRectPx{};

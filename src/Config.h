@@ -2,9 +2,11 @@
 
 #include <windows.h>
 
+#include <string>
 #include <vector>
 
 #include "PanelWidget.h"
+#include "Placement.h"
 
 // The user-configurable subset of a tab's layout. Tab's own TabConfig also
 // carries fixed constants (corner radius, animation timing) that aren't
@@ -15,6 +17,13 @@ struct TabSettings {
     float tabWidth = 26.0f;
     float tabHeight = 76.0f;
     float panelWidth = 300.0f;
+
+    // Which screen edge, and which monitor. The monitor is its EDID id ("GSM7768", the same one
+    // the Displays tab uses); empty means the primary monitor, whichever that is at the moment.
+    // A monitor that is unplugged or switched off is not an error: the tab sits on the primary one
+    // until the monitor is back, and the setting is kept.
+    ScreenEdge edge = ScreenEdge::Right;
+    std::wstring monitor;
 };
 
 // Range limits, in one place so the settings UI, the loader and Tab all agree.

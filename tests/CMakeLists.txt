@@ -14,7 +14,9 @@ add_executable(EdgeDeckTests
     AutostartTests.cpp
     CrashTests.cpp
     FullscreenTests.cpp
+    PlacementTests.cpp
     ${CMAKE_SOURCE_DIR}/src/Fullscreen.cpp
+    ${CMAKE_SOURCE_DIR}/src/Placement.cpp
     ${CMAKE_SOURCE_DIR}/src/Autostart.cpp
     ${CMAKE_SOURCE_DIR}/src/CrashHandler.cpp
     ${CMAKE_SOURCE_DIR}/src/DisplayTopology.cpp

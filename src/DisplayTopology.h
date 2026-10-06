@@ -21,6 +21,9 @@ struct Monitor {
     // attached the second one gets the connector appended so they stay distinct.
     std::wstring id;
     std::wstring name; // friendly name from the EDID, "LG ULTRAWIDE"
+    // The GDI device this monitor is currently drawn through ("\\.\DISPLAY2"), which is what ties
+    // an EDID id to a window-system monitor handle. Empty while the monitor is switched off.
+    std::wstring gdiName;
     LUID adapter{};
     UINT32 targetId = 0;
     bool active = false; // part of the desktop right now
@@ -41,7 +44,15 @@ enum class Profile {
 // not depend on which ones happen to be active.
 std::vector<Monitor> Enumerate();
 
+// The window-system handle of the monitor with this EDID id, or null if it is not plugged in or
+// not part of the desktop at the moment. Costs a display-configuration query, so ask when a
+// layout is being computed, not on a hot path.
+HMONITOR FindHandle(const std::wstring& id);
+
 // --- pure logic -----------------------------------------------------------
+
+// The GDI device name of the active monitor with this id; empty if there is none, or it is off.
+std::wstring GdiNameOf(const std::vector<Monitor>& monitors, const std::wstring& id);
 
 // Which monitor is the TV. A non-empty configuredId wins outright (even if that
 // monitor is unplugged - then the TV profiles are simply unavailable). With no
