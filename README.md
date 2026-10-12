@@ -228,7 +228,7 @@ la colocación de pestaña y panel en cada borde (con un monitor a la izquierda 
 la geometría de "hay una app a pantalla completa delante" (maximizado normal, juego sin bordes, otro monitor, con las coordenadas negativas de un escritorio de varias pantallas) y la configuración que la desactiva,
 y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
 escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
-Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`). El resto son
+Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`), contra una carpeta temporal en lugar de `%LOCALAPPDATA%` (antes guardaban y restauraban el `config.txt` y el log reales de una instalación, lo cual es correcto hasta que una ejecución se interrumpe a medias). El resto son
 widgets y ventanas, que no se pueden ejercitar sin sesión de escritorio: para eso están las
 **herramientas de prueba manuales** de [`tools/`](tools/README.md) (maquetación de Settings a
 varias escalas, la protección de pantalla completa, los avisos de error, el cambio de monitores
