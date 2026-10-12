@@ -28,6 +28,17 @@
     Create the desktop shortcut if there is none. An existing one is always repointed; a
     missing one is left missing unless this is given, in case it was deleted on purpose.
 
+.PARAMETER EnableAutostart
+    Turn "Start with Windows" on: create the startup entry (or repoint it) and clear the mark
+    Task Manager leaves when someone disables it, so the entry means what it says. Without
+    this switch an entry is only ever repointed, never created, so that installing does not
+    undo a choice made in Settings.
+
+.PARAMETER AllowSandbox
+    Go ahead although this PowerShell runs inside a packaged app (see the check below). What it
+    writes under %LOCALAPPDATA% and HKCU then goes to that app's private copy, which Windows
+    does not read at sign-in; only useful for trying the script out.
+
 .PARAMETER Configuration
     Build configuration to install. Default: Release.
 
@@ -39,6 +50,8 @@ param(
     [switch]$Build,
     [switch]$NoLaunch,
     [switch]$CreateShortcut,
+    [switch]$EnableAutostart,
+    [switch]$AllowSandbox,
     [string]$Configuration = 'Release'
 )
 
@@ -49,6 +62,37 @@ $buildDir = Join-Path $repo 'build'
 $builtExe = Join-Path $buildDir "$Configuration\EdgeDeck.exe"
 $installDir = Join-Path $env:LOCALAPPDATA 'EdgeDeck\bin'
 $installedExe = Join-Path $installDir 'EdgeDeck.exe'
+
+# --- 0. is what this writes going to be seen by Windows? -----------------------------------
+# A PowerShell started from inside a packaged (MSIX) app - the Claude desktop app's terminal, for
+# one - has its writes under %LOCALAPPDATA% and in HKCU redirected into that app's private store.
+# Nothing fails: the copy "succeeds", the Run entry "is created", and at the next sign-in Windows
+# finds no executable and no entry, so EdgeDeck simply does not start. That is exactly how this
+# once went unnoticed for days. Detected by writing a marker file and looking for it where the
+# redirect keeps its files.
+function Test-RedirectedAppData {
+    $packages = Join-Path (Split-Path -Parent $env:LOCALAPPDATA) 'Local\Packages'
+    if (-not (Test-Path -LiteralPath $packages)) { return $false }
+    $name = "edgedeck-redirect-probe-$([guid]::NewGuid().ToString('N')).tmp"
+    $marker = Join-Path $env:LOCALAPPDATA $name
+    try {
+        Set-Content -LiteralPath $marker -Value 'x' -ErrorAction Stop
+        foreach ($package in Get-ChildItem -LiteralPath $packages -Directory -ErrorAction SilentlyContinue) {
+            if (Test-Path -LiteralPath (Join-Path $package.FullName "LocalCache\Local\$name")) { return $true }
+        }
+        return $false
+    } catch {
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+    }
+}
+if ((Test-RedirectedAppData) -and -not $AllowSandbox) {
+    throw ("This PowerShell is running inside a packaged app, which redirects %LOCALAPPDATA% and HKCU " +
+           "into its own private store: installing from here would look like it worked and Windows " +
+           "would not see the program or its startup entry. Run this script from a normal PowerShell " +
+           "or Windows Terminal window instead (or pass -AllowSandbox to try it anyway).")
+}
 
 # --- 1. build -----------------------------------------------------------------------------
 if ($Build) {
@@ -126,10 +170,21 @@ if ((Test-Path -LiteralPath $shortcutPath) -or $CreateShortcut) {
 }
 
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-if (Get-ItemProperty -Path $runKey -Name EdgeDeck -ErrorAction SilentlyContinue) {
+$hadEntry = [bool](Get-ItemProperty -Path $runKey -Name EdgeDeck -ErrorAction SilentlyContinue)
+if ($hadEntry -or $EnableAutostart) {
     # Quoted, as the app itself writes it: the path may contain spaces.
     Set-ItemProperty -Path $runKey -Name EdgeDeck -Value "`"$installedExe`""
-    Write-Host 'Autostart: repointed'
+    Write-Host $(if ($hadEntry) { 'Autostart: repointed' } else { 'Autostart: enabled' })
+}
+if ($EnableAutostart) {
+    # Task Manager's Startup tab does not delete the entry to disable it: it writes a mark beside
+    # it, an odd first byte, and leaves the entry where it was. An entry carrying that mark is
+    # ignored at sign-in, so enabling means removing the mark too (as the app's own Settings does).
+    $approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+    if (Get-ItemProperty -Path $approved -Name EdgeDeck -ErrorAction SilentlyContinue) {
+        Remove-ItemProperty -Path $approved -Name EdgeDeck -ErrorAction SilentlyContinue
+        Write-Host 'Autostart: cleared the "disabled in Task Manager" mark'
+    }
 }
 
 # --- 5. start -----------------------------------------------------------------------------

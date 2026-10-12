@@ -15,6 +15,7 @@ add_executable(EdgeDeckTests
     CrashTests.cpp
     FullscreenTests.cpp
     PlacementTests.cpp
+    IconTests.cpp
     ${CMAKE_SOURCE_DIR}/src/Fullscreen.cpp
     ${CMAKE_SOURCE_DIR}/src/Placement.cpp
     ${CMAKE_SOURCE_DIR}/src/Autostart.cpp
@@ -37,7 +38,12 @@ target_compile_definitions(EdgeDeckTests PRIVATE
     WINVER=0x0A00
 )
 
-target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/res)
+
+# IconTests reads the icon back out of the built executable, so that one has to exist first, and
+# the test has to know where it is.
+add_dependencies(EdgeDeckTests EdgeDeck)
+target_compile_definitions(EdgeDeckTests PRIVATE EDGEDECK_EXE_PATH="$<TARGET_FILE:EdgeDeck>")
 
 target_link_libraries(EdgeDeckTests PRIVATE
     d2d1

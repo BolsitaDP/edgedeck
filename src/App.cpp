@@ -1,4 +1,5 @@
 #include "App.h"
+#include "AppIcon.h"
 #include "Autostart.h"
 #include "CrashHandler.h"
 #include "Diagnostics.h"
@@ -304,15 +305,13 @@ bool App::AddTrayIcon() {
     nid.uCallbackMessage = kTrayCallbackMessage;
     // The app's own icon from the resource script, so the notification area
     // shows EdgeDeck rather than the generic application glyph.
-    nid.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(kIconIdEdgeDeck));
-    if (!nid.hIcon) {
-        nid.hIcon = static_cast<HICON>(LoadImageW(
-            nullptr, IDI_APPLICATION, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-            GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
-    }
+    nid.hIcon = AppIcon::Load(instance, true);
     wcscpy_s(nid.szTip, L"EdgeDeck");
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    // The shell keeps its own copy of the image; this one is ours to release. (Add is retried
+    // whenever Explorer restarts, so leaving it would leak an icon each time.)
+    if (nid.hIcon) DestroyIcon(nid.hIcon);
     if (m_trayAdded) {
         Diagnostics::Info("Tray: icon added");
     } else {

@@ -61,6 +61,8 @@ add_executable(EdgeDeck WIN32
     src/Fullscreen.h
     src/Placement.cpp
     src/Placement.h
+    src/AppIcon.cpp
+    src/AppIcon.h
     src/Autostart.cpp
     src/Autostart.h
     src/CrashHandler.cpp

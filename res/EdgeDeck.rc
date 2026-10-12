@@ -1,6 +1,8 @@
 #include <windows.h>
+#include "Resource.h"
 
-// Application icon, shown in Explorer, the taskbar and the notification area.
+// Application icon, shown in Explorer, the taskbar and the notification area. A numeric id (see
+// Resource.h): the lowest-numbered icon is the one Explorer shows for the .exe.
 IDI_EDGEDECK ICON "EdgeDeck.ico"
 
 VS_VERSION_INFO VERSIONINFO
