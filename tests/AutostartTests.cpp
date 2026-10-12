@@ -251,9 +251,63 @@ void TestPreferredPath() {
           L"C:\\Dev\\build\\EdgeDeck.exe");
 }
 
+void TestInspectTellsTheFourStatesApart() {
+    TEST("Autostart: Inspect separates 'never set up', 'on', 'switched off in Task Manager', 'broken'");
+    ResetRegistry();
+    TempFiles files;
+    const auto where = Scratch();
+
+    CHECK(Autostart::Inspect(where) == Autostart::State::NotConfigured);
+
+    SetRunCommand(L"\"" + files.Make(L"EdgeDeck.exe") + L"\"");
+    CHECK(Autostart::Inspect(where) == Autostart::State::Enabled);
+
+    SetApprovedFlag(3); // what Task Manager writes when the user switches it off
+    CHECK(Autostart::Inspect(where) == Autostart::State::DisabledInTaskManager);
+    SetApprovedFlag(6); // and after switching it back on
+    CHECK(Autostart::Inspect(where) == Autostart::State::Enabled);
+
+    SetRunCommand(L"\"" + files.Missing(L"gone.exe") + L"\"");
+    CHECK(Autostart::Inspect(where) == Autostart::State::PointsToMissingFile);
+    // A missing file is the fault whether or not the entry was also switched off.
+    SetApprovedFlag(3);
+    CHECK(Autostart::Inspect(where) == Autostart::State::PointsToMissingFile);
+    ResetRegistry();
+}
+
+void TestStartupNoteIsQuietUnlessThereIsSomethingToSay() {
+    TEST("Autostart: the startup note says a fault every time, a hint once, and never nags");
+    using Autostart::NoteForStartup;
+    using Autostart::Repair;
+    using Autostart::State;
+
+    // A fault: pointed at a missing file. Said with what was done about it.
+    auto fixed = NoteForStartup(State::PointsToMissingFile, Repair::Repointed, false, false);
+    CHECK(!fixed.text.empty());
+    CHECK(fixed.text.find(L"fixed") != std::wstring::npos);
+    CHECK(!fixed.settlesHint); // it is not the hint
+    auto unfixed = NoteForStartup(State::PointsToMissingFile, Repair::Failed, true, true);
+    CHECK(!unfixed.text.empty());
+    CHECK(unfixed.text.find(L"Settings") != std::wstring::npos); // what to do about it
+
+    // Not set up: said once, from the installed copy.
+    auto hint = NoteForStartup(State::NotConfigured, Repair::NotEnabled, false, true);
+    CHECK(!hint.text.empty());
+    CHECK(hint.settlesHint);
+    CHECK(NoteForStartup(State::NotConfigured, Repair::NotEnabled, true, true).text.empty()); // already said
+    // ...and not at all from a build folder or a test copy, where it is how things should be.
+    CHECK(NoteForStartup(State::NotConfigured, Repair::NotEnabled, false, false).text.empty());
+
+    // Switched off in Task Manager is the user's own decision. Nothing to say.
+    CHECK(NoteForStartup(State::DisabledInTaskManager, Repair::Valid, false, true).text.empty());
+    CHECK(NoteForStartup(State::Enabled, Repair::Valid, false, true).text.empty());
+}
+
 } // namespace
 
 void RunAutostartTests() {
+    TestInspectTellsTheFourStatesApart();
+    TestStartupNoteIsQuietUnlessThereIsSomethingToSay();
     TestCommandToPath();
     TestIsEnabledHonoursTaskManager();
     TestEnableClearsTheOffFlag();

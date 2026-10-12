@@ -175,6 +175,7 @@ std::wstring g_mainMonitor;
 bool g_fullscreenGuard = true;
 bool g_restartAfterCrash = true;
 int g_openDelayMs = 0;
+bool g_startupHintShown = false;
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
@@ -212,6 +213,9 @@ void SetQuickActionList(std::vector<QuickAction> list) {
     g_quickActions = QuickActions::Sanitize(std::move(list));
 }
 
+bool StartupHintShown() { return g_startupHintShown; }
+void SetStartupHintShown(bool shown) { g_startupHintShown = shown; }
+
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
     DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
@@ -239,6 +243,7 @@ std::vector<TabSettings> LoadOrDefault() {
     g_fullscreenGuard = true; // likewise: absent means the default
     g_restartAfterCrash = true;
     g_openDelayMs = 0;
+    g_startupHintShown = false;
     g_quickActions.clear();
     TabSettings current;
     QuickAction action;
@@ -312,6 +317,9 @@ std::vector<TabSettings> LoadOrDefault() {
                 float ms = 0.0f;
                 if (ParseFloat(value, ms)) SetOpenDelayMs(static_cast<int>(std::lround(ms)));
             }
+            if (key == L"startupHintShown" && (value == L"1" || value == L"true")) {
+                g_startupHintShown = true;
+            }
             continue;
         }
 
@@ -363,6 +371,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
     file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
     file << L"openDelayMs=" << g_openDelayMs << L"\n";
+    if (g_startupHintShown) file << L"startupHintShown=1\n";
 
     for (const auto& t : tabs) {
         file << L"[tab]\n";

@@ -295,6 +295,18 @@ bool BuildRestartCommandLine(const wchar_t* original, DWORD crashedPid, wchar_t*
                       crashedPid) > 0;
 }
 
+bool BuildRelaunchCommandLine(const wchar_t* original, DWORD previousPid, wchar_t* out, size_t capacity) {
+    constexpr size_t kRoomForFlags = 64;
+    if (!original || !out || capacity <= kRoomForFlags) return false;
+    const size_t length = wcslen(original);
+    if (length + kRoomForFlags >= capacity) return false;
+
+    wmemcpy(out, original, length + 1);
+    StripFlag(out, kFlagRestarted);
+    StripFlag(out, kFlagPid);
+    return swprintf_s(out + wcslen(out), capacity - wcslen(out), L" %s%lu", kFlagPid, previousPid) > 0;
+}
+
 size_t FormatCrashLine(char* buffer, size_t capacity, const CrashFacts& facts) {
     if (!buffer || capacity == 0) return 0;
     const char* name = facts.fromTerminate ? ExceptionName(kTerminateCode) : ExceptionName(facts.code);
@@ -342,7 +354,9 @@ void PruneDumps(const wchar_t* folder, int keep) {
 void SetRestartEnabled(bool enabled) { g_restartEnabled.store(enabled); }
 
 void WaitForPrevious(const StartupInfo& info) {
-    if (!info.restartedAfterCrash || info.previousPid == 0) return;
+    // Any copy that names the one it replaces waits for it - one that crashed, or one the user
+    // asked to restart from the menu. The flag only says why it was started.
+    if (info.previousPid == 0) return;
     HANDLE previous = OpenProcess(SYNCHRONIZE, FALSE, info.previousPid);
     if (!previous) return; // already gone, which is what is wanted
     WaitForSingleObject(previous, 10000);

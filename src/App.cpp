@@ -22,6 +22,11 @@ const wchar_t kUtilityClassName[] = L"EdgeDeckUtilityWindow";
 constexpr UINT kMenuIdExit = 100;
 constexpr UINT kMenuIdSettings = 101;
 constexpr UINT kTrayId = 102;
+constexpr UINT kMenuIdActions = 110;
+constexpr UINT kMenuIdPause = 111;
+constexpr UINT kMenuIdAutostart = 112;
+constexpr UINT kMenuIdOpenLog = 113;
+constexpr UINT kMenuIdRestart = 114;
 
 // Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
 // with them, and a chord nothing else claims.
@@ -99,13 +104,13 @@ bool App::Create(HINSTANCE hInstance) {
     CrashHandler::SetRestartEnabled(Config::RestartAfterCrash()); // the config is read now, not at install
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     UpdateDisplayHotkeys();
-    RepairAutostart();
+    CheckAutostart();
     AddTrayIcon();
     if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
     return true;
 }
 
-void App::ShowBalloon(const wchar_t* text) {
+void App::ShowBalloon(const wchar_t* text, bool warning) {
     if (!text || !*text) return;
     if (!m_trayAdded || !m_utilityHwnd) {
         // Explorer has not (re)created the notification area, so there is nothing
@@ -122,7 +127,7 @@ void App::ShowBalloon(const wchar_t* text) {
     // Quiet time is respected: a failed monitor switch is not worth breaking
     // Focus Assist for. NOSOUND is not set because the user's own notification
     // settings already decide that.
-    nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
+    nid.dwInfoFlags = (warning ? NIIF_WARNING : NIIF_INFO) | NIIF_RESPECT_QUIET_TIME;
     wcscpy_s(nid.szInfoTitle, L"EdgeDeck");
     wcsncpy_s(nid.szInfo, text, _TRUNCATE); // 255 characters at most
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
@@ -131,14 +136,16 @@ void App::ShowBalloon(const wchar_t* text) {
     }
 }
 
-void App::RepairAutostart() {
+void App::CheckAutostart() {
     // If the startup entry points at a file that is gone - the exe was moved, a
     // build folder cleaned - every sign-in would fail without a word. This costs one
     // registry read, and rewrites nothing unless the entry is actually broken; it
     // never creates an entry the user did not ask for, and never takes over one that
     // points at a different copy that still exists.
-    switch (Autostart::RepairPath(Autostart::Default(), Autostart::ThisExePath(),
-                                  Autostart::InstalledPath())) {
+    const Autostart::State before = Autostart::Inspect();
+    const Autostart::Repair repair = Autostart::RepairPath(Autostart::Default(), Autostart::ThisExePath(),
+                                                           Autostart::InstalledPath());
+    switch (repair) {
         case Autostart::Repair::Repointed:
             Diagnostics::Info("Autostart: the startup entry pointed at a missing file and was repaired");
             break;
@@ -148,8 +155,23 @@ void App::RepairAutostart() {
         default:
             break;
     }
-}
 
+    // Worth a word to the user? A fault is always said; "it is not set up" is said once, and only
+    // from the installed copy (a build folder not being on the startup list is how it should be).
+    const std::wstring installed = Autostart::InstalledPath();
+    const bool installedCopy =
+        !installed.empty() && _wcsicmp(installed.c_str(), Autostart::ThisExePath().c_str()) == 0;
+    const Autostart::StartupNote note =
+        Autostart::NoteForStartup(before, repair, Config::StartupHintShown(), installedCopy);
+    if (!note.text.empty()) {
+        if (!m_startupNotice.empty()) m_startupNotice += L" ";
+        m_startupNotice += note.text;
+    }
+    if (note.settlesHint) {
+        Config::SetStartupHintShown(true);
+        if (!Config::Save(m_settings)) Diagnostics::Error("Config: could not record that the startup hint was shown");
+    }
+}
 void App::UpdateDisplayHotkeys() {
     static_assert(kDisplayHotkeyCount == DisplayWidget::kProfileCount,
                   "one shortcut per Displays layout");
@@ -195,6 +217,9 @@ bool App::BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hIns
         newTabs.push_back(std::move(tab));
     }
     m_tabs = std::move(newTabs); // old tabs (if any) are destroyed here
+    if (m_paused) {
+        for (auto& tab : m_tabs) tab->SetPaused(true); // a rebuild must not bring them back
+    }
     return true;
 }
 
@@ -280,6 +305,118 @@ void App::ApplyActions(std::vector<QuickAction> actions) {
     }
 }
 
+void App::TogglePaused() {
+    m_paused = !m_paused;
+    for (auto& tab : m_tabs) tab->SetPaused(m_paused);
+    UpdateTrayTip();
+    Diagnostics::Info(m_paused ? "Tabs paused" : "Tabs resumed");
+}
+
+void App::UpdateTrayTip() {
+    if (!m_trayAdded || !m_utilityHwnd) return;
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = m_utilityHwnd;
+    nid.uID = kTrayId;
+    nid.uFlags = NIF_TIP;
+    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck (paused)" : L"EdgeDeck");
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
+void App::ToggleAutostart() {
+    const bool wasEnabled = Autostart::IsEnabled();
+    if (Autostart::SetEnabled(!wasEnabled)) {
+        ShowBalloon(wasEnabled ? L"EdgeDeck will no longer start with Windows."
+                               : L"EdgeDeck will start with Windows.",
+                    false);
+    } else {
+        // Read back after the write, so this is "Windows did not take it" and not a guess.
+        ShowBalloon(wasEnabled ? L"Could not turn off Start with Windows: Windows would not let "
+                                 L"the startup entry be removed."
+                               : L"Could not turn on Start with Windows: Windows would not accept "
+                                 L"the startup entry.");
+    }
+}
+
+void App::OpenLog() {
+    const std::wstring log = Diagnostics::LogPath();
+    const INT_PTR result = log.empty() ? 0
+                                       : reinterpret_cast<INT_PTR>(ShellExecuteW(
+                                             nullptr, L"open", log.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) ShowBalloon(L"EdgeDeck could not open its log file.");
+}
+
+void App::Restart() {
+    const std::wstring exe = Autostart::ThisExePath();
+    if (exe.empty()) {
+        ShowBalloon(L"EdgeDeck could not work out where it is running from to restart.");
+        return;
+    }
+    // The command line this copy was started with, so whatever it was given is given again,
+    // plus the process to wait for: this one still holds the single-instance lock until it has
+    // exited, and a copy that finds it taken just quits.
+    wchar_t command[2048];
+    if (!CrashHandler::BuildRelaunchCommandLine(GetCommandLineW(), GetCurrentProcessId(), command,
+                                                sizeof(command) / sizeof(command[0]))) {
+        ShowBalloon(L"EdgeDeck could not build the command to restart itself. It is still running.");
+        return;
+    }
+    const std::wstring directory = exe.substr(0, exe.find_last_of(L'\\'));
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(exe.c_str(), command, nullptr, nullptr, FALSE, 0, nullptr,
+                        directory.empty() ? nullptr : directory.c_str(), &startup, &process)) {
+        Diagnostics::Error("Restart: could not start a new copy (%s)", Diagnostics::LastErrorText().c_str());
+        ShowBalloon(L"EdgeDeck could not start a new copy of itself. It is still running.");
+        return;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    RequestExit();
+}
+void App::RunMenuCommand(UINT command) {
+    switch (command) {
+        case kMenuIdSettings: OpenSettings(); break;
+        case kMenuIdActions: OpenActionsEditor(); break;
+        case kMenuIdPause: TogglePaused(); break;
+        case kMenuIdAutostart: ToggleAutostart(); break;
+        case kMenuIdOpenLog: OpenLog(); break;
+        case kMenuIdRestart: Restart(); break;
+        case kMenuIdExit: RequestExit(); break;
+        default: break;
+    }
+}
+
+void App::ShowMenu(POINT screenPt, HWND owner) {
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
+    AppendMenuW(menu, MF_STRING, kMenuIdActions, L"Edit quick actions...");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kMenuIdPause,
+                m_paused ? L"Resume tabs\tCtrl+Alt+P" : L"Pause tabs\tCtrl+Alt+P");
+    // Ticked from what Windows will really do (an entry Task Manager switched off is not on).
+    AppendMenuW(menu, MF_STRING | (Autostart::IsEnabled() ? MF_CHECKED : 0), kMenuIdAutostart,
+                L"Start with Windows");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kMenuIdOpenLog, L"Open log");
+    AppendMenuW(menu, MF_STRING, kMenuIdRestart, L"Restart EdgeDeck");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
+
+    // Standard trick for a NOACTIVATE-owning window's popup menu: briefly take the foreground so
+    // the menu dismisses correctly on an outside click, then post WM_NULL per MSDN so
+    // TrackPopupMenu's state settles. The command comes back as the return value, so the tab's
+    // menu and the tray's are handled by the same code.
+    SetForegroundWindow(owner);
+    const UINT command = static_cast<UINT>(TrackPopupMenu(
+        menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, screenPt.x, screenPt.y, 0, owner, nullptr));
+    PostMessageW(owner, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    if (command != 0) RunMenuCommand(command);
+}
+
 void App::OpenTabByIndex(size_t index) {
     if (index >= m_tabs.size()) return;
     m_tabs[index]->RequestOpen();
@@ -315,6 +452,11 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
     for (int i = 0; i < kOpenHotkeyCount; ++i) {
         RegisterHotKey(m_utilityHwnd, kOpenHotkeyBase + i, MOD_CONTROL | MOD_ALT, '1' + i);
     }
+    // Logged, not shown: another program owning the chord is not worth a dialog, and the tray
+    // menu has the same command.
+    if (!RegisterHotKey(m_utilityHwnd, kPauseHotkeyId, MOD_CONTROL | MOD_ALT, 'P')) {
+        Diagnostics::Error("Hotkey: Ctrl+Alt+P is already taken by another program");
+    }
     return true;
 }
 
@@ -332,7 +474,7 @@ bool App::AddTrayIcon() {
     // The app's own icon from the resource script, so the notification area
     // shows EdgeDeck rather than the generic application glyph.
     nid.hIcon = AppIcon::Load(instance, true);
-    wcscpy_s(nid.szTip, L"EdgeDeck");
+    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck (paused)" : L"EdgeDeck");
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
     // The shell keeps its own copy of the image; this one is ours to release. (Add is retried
@@ -386,21 +528,8 @@ int App::RunMessageLoop() {
 }
 
 void App::ShowTabContextMenu(Tab* /*tab*/, POINT screenPt) {
-    HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
-
-    // Standard trick for a NOACTIVATE-owning window's popup menu: briefly
-    // take the foreground so the menu dismisses correctly on an outside
-    // click, then post WM_NULL per MSDN so TrackPopupMenu's state settles.
-    SetForegroundWindow(m_utilityHwnd);
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON, screenPt.x, screenPt.y, 0, m_utilityHwnd, nullptr);
-    PostMessageW(m_utilityHwnd, WM_NULL, 0, 0);
-
-    DestroyMenu(menu);
+    ShowMenu(screenPt, m_utilityHwnd);
 }
-
 void App::RequestExit() {
     if (m_utilityHwnd) DestroyWindow(m_utilityHwnd);
 }
@@ -433,6 +562,8 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             if (!s_instance) break;
             if (wParam == kExitHotkeyId) {
                 s_instance->RequestExit();
+            } else if (wParam == kPauseHotkeyId) {
+                s_instance->TogglePaused();
             } else if (wParam >= kOpenHotkeyBase &&
                        wParam < kOpenHotkeyBase + kOpenHotkeyCount) {
                 s_instance->OpenTabByIndex(
@@ -440,14 +571,6 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             } else if (wParam >= kDisplayHotkeyBase &&
                        wParam < kDisplayHotkeyBase + kDisplayHotkeyCount) {
                 s_instance->SwitchDisplays(static_cast<int>(wParam - kDisplayHotkeyBase));
-            }
-            return 0;
-        case WM_COMMAND:
-            if (!s_instance) return 0;
-            if (LOWORD(wParam) == kMenuIdExit) {
-                s_instance->RequestExit();
-            } else if (LOWORD(wParam) == kMenuIdSettings) {
-                s_instance->OpenSettings();
             }
             return 0;
         case kTrayCallbackMessage: {
@@ -459,21 +582,9 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             if (LOWORD(lParam) == WM_LBUTTONUP || LOWORD(lParam) == WM_LBUTTONDBLCLK) {
                 s_instance->OpenSettings();
             } else if (LOWORD(lParam) == WM_RBUTTONUP) {
-                HMENU menu = CreatePopupMenu();
-                AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
-                AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-                AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
-
                 POINT pt;
                 GetCursorPos(&pt);
-                SetForegroundWindow(hwnd);
-                const UINT cmd = static_cast<UINT>(
-                    TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y,
-                                   0, hwnd, nullptr));
-                PostMessageW(hwnd, WM_NULL, 0, 0);
-                DestroyMenu(menu);
-                if (cmd == kMenuIdSettings) s_instance->OpenSettings();
-                if (cmd == kMenuIdExit) s_instance->RequestExit();
+                s_instance->ShowMenu(pt, hwnd);
             }
             return 0;
         }
@@ -487,6 +598,7 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                     UnregisterHotKey(hwnd, kDisplayHotkeyBase + i);
                 }
                 UnregisterHotKey(hwnd, kExitHotkeyId);
+                UnregisterHotKey(hwnd, kPauseHotkeyId);
             }
             PostQuitMessage(0);
             return 0;

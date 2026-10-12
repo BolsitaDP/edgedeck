@@ -71,6 +71,12 @@ public:
     // tab out again, since that can change the panel's height. An open panel stays open.
     void RefreshWidget();
 
+    // Pausing hides the tab and closes its panel, so the pointer pushed against the screen edge
+    // (a game) meets nothing. Keyboard shortcuts keep working: they are deliberate. Not remembered
+    // across runs - a pause that survived a restart would look like a broken app.
+    void SetPaused(bool paused);
+    bool IsPaused() const { return m_paused; }
+
 private:
     enum class State { Hidden, Opening, Open, Closing };
 
@@ -146,6 +152,7 @@ private:
     bool m_pinned = false;
     bool m_dragging = false; // a widget slider owns the mouse (SetCapture) until button-up
     bool m_inRelayout = false;
+    bool m_paused = false;
     int m_hoveredControl = -1;
     int m_focusedControl = -1;
 

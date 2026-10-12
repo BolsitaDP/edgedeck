@@ -7,8 +7,9 @@
 //   crash.txt      a real access violation (a write through a null pointer)
 //   terminate.txt  an uncaught exception, as std::terminate sees it
 //
-//
-// and a menu command that has no window to click, so it can be driven from a script:
+// and the menu commands that have no window to click, so they can be driven from a script:
+//   pause.txt      toggles "Pause tabs" / "Resume tabs"
+//   restart.txt    "Restart EdgeDeck": a new copy with the same arguments, then this one exits
 //   editor.txt     opens the quick-actions editor
 //
 // usage: apptest <trigger-folder> [flags a restart adds: --restarted-after-crash --previous-pid=N]
@@ -102,9 +103,18 @@ int wmain(int argc, wchar_t** argv) {
                 DeleteFileW((dir + L"\\terminate.txt").c_str());
                 std::terminate();
             }
+            if (GetFileAttributesW((dir + L"\\pause.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\pause.txt").c_str());
+                app.TogglePaused();
+            }
             if (GetFileAttributesW((dir + L"\\editor.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\editor.txt").c_str());
                 app.OpenActionsEditor();
+            }
+            if (GetFileAttributesW((dir + L"\\restart.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                // Deleted first: the copy this starts watches the same folder.
+                DeleteFileW((dir + L"\\restart.txt").c_str());
+                app.Restart();
             }
             if (GetFileAttributesW((dir + L"\\quit.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\quit.txt").c_str());

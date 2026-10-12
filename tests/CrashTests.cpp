@@ -222,7 +222,23 @@ void TestPruneKeepsNewest() {
 
 } // namespace
 
+void TestRelaunchCommandLine() {
+    TEST("Crash: a deliberate restart keeps the arguments, waits for the old copy, and is not a crash");
+    wchar_t out[512];
+    CHECK(BuildRelaunchCommandLine(L"\"C:\\Apps\\EdgeDeck.exe\" \"C:\\scratch dir\"", 4242, out, 512));
+    CHECK(std::wstring(out) == L"\"C:\\Apps\\EdgeDeck.exe\" \"C:\\scratch dir\" --previous-pid=4242");
+    CHECK(ParseCommandLine(out).previousPid == 4242);
+    CHECK(!ParseCommandLine(out).restartedAfterCrash); // so it does not announce a crash that did not happen
+
+    // Started by a crash before, restarted by hand now: the old flags give way to the new ones.
+    CHECK(BuildRelaunchCommandLine(L"EdgeDeck.exe --restarted-after-crash --previous-pid=77", 99, out, 512));
+    CHECK(std::wstring(out) == L"EdgeDeck.exe --previous-pid=99");
+    CHECK(!BuildRelaunchCommandLine(nullptr, 1, out, 512));
+    CHECK(!BuildRelaunchCommandLine(L"EdgeDeck.exe", 1, out, 8)); // does not fit
+}
+
 void RunCrashTests() {
+    TestRelaunchCommandLine();
     TestExceptionNames();
     TestRestartDecision();
     TestParseCommandLine();

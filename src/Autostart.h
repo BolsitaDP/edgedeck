@@ -47,6 +47,28 @@ enum class Repair {
 Repair RepairPath(const Locations& where, const std::wstring& runningExe,
                   const std::wstring& installedExe);
 
+// What the startup entry looks like right now. Finer than IsEnabled, for the one question
+// "should the user be told something?".
+enum class State {
+    NotConfigured,         // no entry at all
+    Enabled,               // an entry, its file exists, Task Manager has not switched it off
+    DisabledInTaskManager, // an entry the user switched off there: their decision, not a fault
+    PointsToMissingFile,   // an entry whose file is gone: it fails at every sign-in, silently
+};
+State Inspect(const Locations& where = Default());
+
+// What, if anything, to say at startup. Pure, so the rules - which are about not being annoying -
+// can be tested without a registry or a tray icon.
+struct StartupNote {
+    std::wstring text;       // empty: say nothing
+    bool settlesHint = false; // the one-time hint was given; remember it so it is not given again
+};
+// before:           the state found at startup, before any repair
+// repair:           what RepairPath did about it
+// hintAlreadyShown: the one-time hint has been given on an earlier run
+// installedCopy:    this process is the installed copy, not a build folder or a test copy
+StartupNote NoteForStartup(State before, Repair repair, bool hintAlreadyShown, bool installedCopy);
+
 // The path inside a Run command line: quoted or not, with or without arguments.
 std::wstring CommandToPath(const std::wstring& command);
 

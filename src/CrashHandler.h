@@ -34,7 +34,7 @@ void SetRestartEnabled(bool enabled);
 
 struct StartupInfo {
     bool restartedAfterCrash = false; // --restarted-after-crash was on the command line
-    DWORD previousPid = 0;            // --previous-pid=N: the copy that crashed
+    DWORD previousPid = 0;            // --previous-pid=N: the copy this one replaces (crashed, or restarted)
 };
 
 // Pure. Looks for the two flags a restart adds, anywhere on the command line.
@@ -58,6 +58,11 @@ inline constexpr unsigned long long kRestartLoopWindowMs = 60 * 1000;
 // The command line for the replacement copy: the original one, minus any restart flags it
 // already carried, plus fresh ones. Returns false if it does not fit in `capacity`.
 bool BuildRestartCommandLine(const wchar_t* original, DWORD crashedPid, wchar_t* out, size_t capacity);
+
+// The same for a copy the user asked for ("Restart EdgeDeck" in the menu): the original command
+// line minus any restart flags, plus only --previous-pid, so the new copy waits for this one to
+// exit but is not told it was started by a crash.
+bool BuildRelaunchCommandLine(const wchar_t* original, DWORD previousPid, wchar_t* out, size_t capacity);
 
 struct CrashFacts {
     DWORD code = 0;
