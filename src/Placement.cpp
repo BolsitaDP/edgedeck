@@ -21,12 +21,12 @@ Result Compute(const Input& in) {
     if (in.edge == ScreenEdge::Left) {
         const int tabX = in.monitor.left;
         out.tab = {tabX, tabY, tabX + in.tabWidth, tabY + in.tabHeight};
-        out.panelOpenX = out.tab.right;                       // beside the tab, towards the screen
+        out.panelOpenX = out.tab.right + in.gap;              // beside the tab, towards the screen
         out.panelClosedX = in.monitor.left - in.panelWidth;   // wholly beyond the left edge
     } else {
         const int tabX = in.monitor.right - in.tabWidth;
         out.tab = {tabX, tabY, tabX + in.tabWidth, tabY + in.tabHeight};
-        out.panelOpenX = out.tab.left - in.panelWidth;
+        out.panelOpenX = out.tab.left - in.gap - in.panelWidth;
         out.panelClosedX = in.monitor.right;
     }
     out.panelY = PanelY(out.tab, in.panelHeight, in.monitor);

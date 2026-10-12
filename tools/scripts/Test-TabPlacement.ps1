@@ -110,10 +110,21 @@ try {
         $panel = Get-TestPanel $app
         Check "  its panel opens" ([bool]$panel)
         if ($panel) {
-            $besideTab = if ($case.Edge -eq 'right') { Near $panel.R $want.L } else { Near $panel.L $want.R }
-            Check "  on the screen side of the tab" $besideTab ("panel {0}..{1}, tab {2}..{3}" -f $panel.L, $panel.R, $want.L, $want.R)
+            # Five logical pixels of clear space between the tab and the panel, at this monitor's scale.
+            $gap = [int][math]::Round(5 * $want.Dpi / 96, [MidpointRounding]::AwayFromZero)
+            $besideTab = if ($case.Edge -eq 'right') { Near $panel.R ($want.L - $gap) 0 } else { Near $panel.L ($want.R + $gap) 0 }
+            Check "  on the screen side of the tab, $gap px clear of it" $besideTab ("panel {0}..{1}, tab {2}..{3}" -f $panel.L, $panel.R, $want.L, $want.R)
             $inside = $panel.L -ge $b.Left -and $panel.R -le $b.Right -and $panel.T -ge $b.Top -and $panel.B -le $b.Bottom
             Check "  inside its monitor" $inside ("panel ({0},{1})-({2},{3}) monitor ({4},{5})-({6},{7})" -f $panel.L, $panel.T, $panel.R, $panel.B, $b.Left, $b.Top, $b.Right, $b.Bottom)
+            # The pointer goes from the tab to the panel through that gap, outside both windows for a
+            # moment. Slowly (a pixel at a time), as a hand would, and the panel must stay open.
+            $y = [int](($want.T + $want.B) / 2)
+            $fromX = [int](($want.L + $want.R) / 2)
+            $toX = if ($case.Edge -eq 'right') { $panel.R - 20 } else { $panel.L + 20 }
+            $step = if ($toX -lt $fromX) { -1 } else { 1 }
+            for ($x = $fromX; $x -ne $toX; $x += $step) { Move-Mouse $x $y; Start-Sleep -Milliseconds 6 }
+            Start-Sleep -Milliseconds 700 # longer than the 320 ms before a panel closes
+            Check "  crossing the gap to the panel keeps it open" ([bool](Get-TestPanel $app))
         }
         Move-Mouse $park.X $park.Y
         $closed = Wait-Until -TimeoutSeconds 4 -PollMs 150 -Condition { -not (Get-TestPanel $app) }
