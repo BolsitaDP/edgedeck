@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "DialogTheme.h"
+#include "FileDrop.h"
 #include "QuickAction.h"
 
 // Where the Quick Actions list is edited: the rows, what each is called and what it opens. A
@@ -34,6 +35,7 @@ private:
     void OnRemove();
     void OnMove(int delta);
     void OnBrowse();
+    void OnFilesDropped(std::vector<std::wstring> paths);
     void OnNameEdited();
     void OnSave();
     void SetStatus(const wchar_t* text);
@@ -63,6 +65,7 @@ private:
     UINT m_dpi = 96;
 
     DialogTheme m_theme;
+    FileDrop::Zone m_drop; // files dragged from Explorer become rows
 
     std::vector<QuickAction> m_actions;
     int m_selected = -1;

@@ -82,6 +82,8 @@ add_executable(EdgeDeck WIN32
     src/ActionIcons.cpp
     src/ActionIcons.h
     src/PanelImage.h
+    src/FileDrop.cpp
+    src/FileDrop.h
     src/ActionsWindow.cpp
     src/ActionsWindow.h
     src/Autostart.cpp

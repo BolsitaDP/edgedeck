@@ -149,8 +149,9 @@ void ActionsWindow::CreateControls(HINSTANCE hInstance) {
     SendMessageW(m_argsEdit, EM_SETLIMITTEXT, QuickActions::kMaxArgumentsLength, 0);
 
     make(L"STATIC",
-         L"What it opens can be a program, a document, a folder or a web address (https://...). "
-         L"Windows variables such as %ProgramFiles% are filled in. The row shows the name.",
+         L"It can open a program, a document, a folder or a web address (https://...). "
+         L"Variables such as %ProgramFiles% are filled in. "
+         L"You can also drag files and folders here from Explorer.",
          0, 238, 164, 234, 126, 0);
 
     m_status = make(L"STATIC", L"", 0, 12, 308, 304, 36, 0);
@@ -277,13 +278,57 @@ void ActionsWindow::OnBrowse() {
     // A row still called "New action" takes the file's name, which is nearly always what was meant.
     const std::wstring current = TextOf(m_nameEdit);
     if (current.empty() || current == kNewActionName) {
-        std::wstring name = path;
-        const size_t slash = name.find_last_of(L"\\/");
-        if (slash != std::wstring::npos) name = name.substr(slash + 1);
-        const size_t dot = name.find_last_of(L'.');
-        if (dot != std::wstring::npos && dot > 0) name.resize(dot);
+        const std::wstring name = QuickActions::NameFromPath(path);
         SetWindowTextW(m_nameEdit, name.c_str()); // fires OnNameEdited, which updates the list
     }
+}
+
+void ActionsWindow::OnFilesDropped(std::vector<std::wstring> paths) {
+    StoreControlsIntoSelected();
+
+    const size_t room = QuickActions::kMaxActions > m_actions.size()
+                            ? QuickActions::kMaxActions - m_actions.size()
+                            : 0;
+    size_t added = 0;
+    size_t skipped = 0;
+    std::wstring lastName;
+    for (const std::wstring& path : paths) {
+        if (path.empty()) continue;
+        // A path longer than a row can hold would be cut by Sanitize into one that opens
+        // something else, or nothing; leaving it out is the honest reading of "does not fit".
+        if (added >= room || path.size() > QuickActions::kMaxTargetLength) {
+            ++skipped;
+            continue;
+        }
+
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        const bool isFolder = attributes != INVALID_FILE_ATTRIBUTES &&
+                              (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        QuickAction action;
+        action.name = QuickActions::NameFromPath(path, isFolder);
+        if (action.name.empty()) action.name = path.substr(0, QuickActions::kMaxNameLength);
+        action.target = path;
+        lastName = action.name;
+        m_actions.push_back(std::move(action));
+        ++added;
+    }
+    if (added == 0 && skipped == 0) return;
+
+    if (added > 0) RefreshList(static_cast<int>(m_actions.size()) - 1);
+
+    wchar_t text[200];
+    if (added == 0) {
+        swprintf_s(text, L"The list is full (%zu actions). Remove one to make room.",
+                   QuickActions::kMaxActions);
+    } else if (skipped > 0) {
+        swprintf_s(text, L"Added %zu. The list holds %zu at most, so %zu %ls left out.", added,
+                   QuickActions::kMaxActions, skipped, skipped == 1 ? L"was" : L"were");
+    } else if (added == 1) {
+        swprintf_s(text, L"Added \"%ls\". Press Save to keep it.", lastName.c_str());
+    } else {
+        swprintf_s(text, L"Added %zu actions. Press Save to keep them.", added);
+    }
+    SetStatus(text);
 }
 
 void ActionsWindow::OnSave() {
@@ -330,6 +375,9 @@ LRESULT ActionsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             CreateControls(cs->hInstance);
             RefreshList(0);
             m_theme.Apply(hwnd);
+            m_drop.Attach(hwnd, [this](std::vector<std::wstring> paths) {
+                OnFilesDropped(std::move(paths));
+            });
             return 0;
         }
         case WM_ERASEBKGND:
@@ -399,6 +447,7 @@ LRESULT ActionsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            m_drop.Detach();
             if (m_font) {
                 DeleteObject(m_font);
                 m_font = nullptr;

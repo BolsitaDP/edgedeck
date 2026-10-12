@@ -1,7 +1,12 @@
 // Opens just the Settings window (no tabs, no hotkeys, no single-instance mutex), so it can be
 // inspected while the user's own EdgeDeck keeps running.
 // usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N] [window=actions]
+//                        [dropfiles=X,Y,path|path|...]
 //   window=actions : host the quick-actions editor instead of Settings, and report its layout
+//   dropfiles=X,Y,paths : with window=actions, drag those files from "Explorer" onto the point
+//           (X,Y) of the editor's client area, given in logical 96-DPI units - a real OLE drag, so
+//           it goes through the same lookup of the window under the pointer a user's drag does -
+//           then print the list, the status line, and what Save would keep.
 //   drop=N : open the Nth combo box's list (1 widget type, 2 monitor, 3 edge, 4 theme)
 //   dpi=N : after creation, send the window the WM_DPICHANGED a monitor at N DPI would, so the
 //           layout can be checked at other scales without changing the user's display settings.
@@ -13,6 +18,9 @@
 #include "SettingsWindow.h"
 
 #include <commctrl.h>
+#include <ole2.h>
+#include <shlobj.h>
+#include <shobjidl.h>
 
 #include <cstdio>
 #include <cwchar>
@@ -134,6 +142,111 @@ static int LayoutReport(HWND hwnd, UINT dpi) {
     return problems;
 }
 
+// ---- a drag of files from Explorer, performed with no mouse button ----------------------------
+
+// The drag source: lets the loop run a few turns so the target is entered and hovered, then drops.
+struct DropSource final : IDropSource {
+    int calls = 0;
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override {
+        if (riid == IID_IUnknown || riid == IID_IDropSource) {
+            *object = static_cast<IDropSource*>(this);
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return 2; }  // lives on the stack
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }
+    HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD) override {
+        if (escape) return DRAGDROP_S_CANCEL;
+        return ++calls < 4 ? S_OK : DRAGDROP_S_DROP;
+    }
+    HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+};
+
+static IDataObject* DataObjectFor(const std::vector<std::wstring>& paths) {
+    std::vector<PCIDLIST_ABSOLUTE> pidls;
+    for (const std::wstring& p : paths) {
+        PIDLIST_ABSOLUTE pidl = nullptr;
+        if (SUCCEEDED(SHParseDisplayName(p.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+            pidls.push_back(pidl);
+        }
+    }
+    IDataObject* data = nullptr;
+    IShellItemArray* items = nullptr;
+    if (!pidls.empty() &&
+        SUCCEEDED(SHCreateShellItemArrayFromIDLists(static_cast<UINT>(pidls.size()), pidls.data(),
+                                                    &items)) &&
+        items) {
+        items->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&data));
+        items->Release();
+    }
+    for (PCIDLIST_ABSOLUTE pidl : pidls) CoTaskMemFree(const_cast<LPITEMIDLIST>(pidl));
+    return data;
+}
+
+static POINT g_dropPoint{};
+static void CALLBACK NudgePointer(HWND, UINT, UINT_PTR, DWORD) {
+    // The drag loop is driven by pointer movement; a one-pixel step either way keeps it turning.
+    static bool flip = false;
+    flip = !flip;
+    SetCursorPos(g_dropPoint.x + (flip ? 1 : 0), g_dropPoint.y);
+}
+
+static void DropFilesOnto(HWND window, int logicalX, int logicalY, const std::vector<std::wstring>& paths) {
+    const UINT dpi = GetDpiForWindow(window);
+    POINT at{MulDiv(logicalX, static_cast<int>(dpi), 96), MulDiv(logicalY, static_cast<int>(dpi), 96)};
+    ClientToScreen(window, &at);
+    g_dropPoint = at;
+    SetCursorPos(at.x, at.y);
+
+    IDataObject* data = DataObjectFor(paths);
+    if (!data) {
+        printf("drop: could not make a data object for %zu path(s)\n", paths.size());
+        return;
+    }
+    DropSource source;
+    DWORD effect = DROPEFFECT_NONE;
+    const UINT_PTR timer = SetTimer(nullptr, 0, 30, NudgePointer);
+    const HRESULT hr = DoDragDrop(data, &source, DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK, &effect);
+    KillTimer(nullptr, timer);
+    data->Release();
+    printf("drop: hr=0x%08lX effect=%lu (DROPEFFECT_NONE=0, COPY=1, MOVE=2, LINK=4)\n",
+           static_cast<unsigned long>(hr), static_cast<unsigned long>(effect));
+}
+
+// What the editor shows after a drop: its list, its status line, and (by pressing Save) the rows
+// it would keep.
+static void ReportEditor(HWND window) {
+    struct State { std::vector<std::wstring> items; std::vector<std::wstring> status; HWND save = nullptr; };
+    State state;
+    EnumChildWindows(window, [](HWND child, LPARAM param) -> BOOL {
+        auto* s = reinterpret_cast<State*>(param);
+        wchar_t cls[32], text[512];
+        GetClassNameW(child, cls, 32);
+        GetWindowTextW(child, text, 512);
+        if (_wcsicmp(cls, L"ListBox") == 0) {
+            const int count = static_cast<int>(SendMessageW(child, LB_GETCOUNT, 0, 0));
+            for (int i = 0; i < count; ++i) {
+                wchar_t item[256] = {};
+                SendMessageW(child, LB_GETTEXT, i, reinterpret_cast<LPARAM>(item));
+                s->items.push_back(item);
+            }
+        } else if (_wcsicmp(cls, L"Static") == 0 &&
+                   (wcsncmp(text, L"Added", 5) == 0 || wcsncmp(text, L"The list", 8) == 0)) {
+            s->status.push_back(text);
+        } else if (_wcsicmp(cls, L"Button") == 0 && wcscmp(text, L"Save") == 0) {
+            s->save = child;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&state));
+
+    printf("list: %zu item(s)\n", state.items.size());
+    for (const std::wstring& item : state.items) printf("  item: %ls\n", item.c_str());
+    for (const std::wstring& line : state.status) printf("status: %ls\n", line.c_str());
+    if (state.save) SendMessageW(state.save, BM_CLICK, 0, 0); // the save callback prints each action
+}
+
 int wmain(int argc, wchar_t** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     setvbuf(stdout, nullptr, _IONBF, 0);
@@ -145,12 +258,39 @@ int wmain(int argc, wchar_t** argv) {
     bool drop = false, flip = false, hostActions = false;
     int dropIndex = 1;
     UINT simDpi = 0;
+    bool dropFiles = false;
+    int dropX = 0, dropY = 0;
+    std::vector<std::wstring> dropPaths;
     for (int i = 3; i < argc; ++i) {
-        if (wcscmp(argv[i], L"drop") == 0) drop = true;
+        if (wcsncmp(argv[i], L"dropfiles=", 10) == 0) {
+            // dropfiles=X,Y,path|path
+            dropFiles = true;
+            wchar_t* rest = argv[i] + 10;
+            dropX = static_cast<int>(wcstol(rest, &rest, 10));
+            if (*rest == L',') ++rest;
+            dropY = static_cast<int>(wcstol(rest, &rest, 10));
+            if (*rest == L',') ++rest;
+            std::wstring list = rest;
+            size_t start = 0;
+            while (start <= list.size()) {
+                const size_t bar = list.find(L'|', start);
+                const std::wstring one = list.substr(start, bar == std::wstring::npos ? bar : bar - start);
+                if (!one.empty()) dropPaths.push_back(one);
+                if (bar == std::wstring::npos) break;
+                start = bar + 1;
+            }
+        }
+        else if (wcscmp(argv[i], L"drop") == 0) drop = true;
         else if (wcsncmp(argv[i], L"drop=", 5) == 0) { drop = true; dropIndex = _wtoi(argv[i] + 5); }
         else if (wcscmp(argv[i], L"flip") == 0) flip = true;
         else if (wcscmp(argv[i], L"window=actions") == 0) hostActions = true;
         else if (wcsncmp(argv[i], L"dpi=", 4) == 0) simDpi = static_cast<UINT>(_wtoi(argv[i] + 4));
+    }
+
+    // With OLE already running when the controls are made, an edit box registers a drop target of
+    // its own for text - the situation FileDrop::Zone exists for. `ole` asks for that.
+    for (int i = 3; i < argc; ++i) {
+        if (wcscmp(argv[i], L"ole") == 0) OleInitialize(nullptr);
     }
 
     Config::SetCurrentThemeMode(wcscmp(mode, L"dark") == 0    ? ThemeMode::Dark
@@ -171,7 +311,14 @@ int wmain(int argc, wchar_t** argv) {
         // A full list, so the buttons that depend on the count are in their usual state.
         std::vector<QuickAction> list = QuickActions::Defaults();
         list.push_back({L"M\u00FAsica", L"%USERPROFILE%\\M\u00FAsica\\lista.m3u", L"--shuffle"});
-        if (!editor.Create(GetModuleHandleW(nullptr), list, [](std::vector<QuickAction>) {})) return 1;
+        if (!editor.Create(GetModuleHandleW(nullptr), list, [](std::vector<QuickAction> kept) {
+                printf("saved: %zu action(s)\n", kept.size());
+                for (const QuickAction& a : kept) {
+                    printf("  action: %ls | %ls | %ls\n", a.name.c_str(), a.target.c_str(), a.arguments.c_str());
+                }
+            })) {
+            return 1;
+        }
     } else if (!settings.Create(GetModuleHandleW(nullptr), tabs, [](const std::vector<TabSettings>&) {})) {
         return 1;
     }
@@ -203,6 +350,21 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+
+    if (dropFiles && hostActions) {
+        // Let the window finish appearing, then drag onto it and report what it did with that.
+        const DWORD settle = GetTickCount() + 400;
+        MSG pending;
+        while (GetTickCount() < settle) {
+            while (PeekMessageW(&pending, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&pending);
+                DispatchMessageW(&pending);
+            }
+            Sleep(10);
+        }
+        DropFilesOnto(hwnd, dropX, dropY, dropPaths);
+        ReportEditor(hwnd);
+    }
 
     if (drop) {
         // The dropdown-th combo box in tab order: 1 is the widget type, 2 the monitor, 3 the edge.
