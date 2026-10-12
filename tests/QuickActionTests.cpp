@@ -90,6 +90,28 @@ void TestARowThatCannotRunSaysWhy() {
     CHECK(problem.find(L"not found") != std::wstring::npos);
 }
 
+void TestNameFromPath() {
+    TEST("QuickActions: the name a dropped file or folder suggests is its own, without the extension");
+    CHECK(QuickActions::NameFromPath(L"C:\\Tools\\Notes.lnk") == L"Notes");
+    CHECK(QuickActions::NameFromPath(L"C:\\Program Files\\Git\\git-bash.exe") == L"git-bash");
+    CHECK(QuickActions::NameFromPath(L"/usr/share/doc/readme.txt") == L"readme");
+    CHECK(QuickActions::NameFromPath(L"notepad.exe") == L"notepad");
+    // Only the last extension goes; a name with no extension, or a leading dot, is whole.
+    CHECK(QuickActions::NameFromPath(L"C:\\x\\archive.tar.gz") == L"archive.tar");
+    CHECK(QuickActions::NameFromPath(L"C:\\x\\README") == L"README");
+    CHECK(QuickActions::NameFromPath(L"C:\\x\\.gitignore") == L".gitignore");
+    // A folder is called what it is called; "v1.2" has no extension.
+    CHECK(QuickActions::NameFromPath(L"C:\\Work\\v1.2", true) == L"v1.2");
+    CHECK(QuickActions::NameFromPath(L"C:\\Work\\v1.2\\", true) == L"v1.2");
+    CHECK(QuickActions::NameFromPath(L"\\\\server\\share\\Projects", true) == L"Projects");
+    // A drive has nothing but its letter.
+    CHECK(QuickActions::NameFromPath(L"D:\\", true) == L"D:");
+    CHECK(QuickActions::NameFromPath(L"") == L"");
+    // And never more than a row holds.
+    const std::wstring longName = L"C:\\x\\" + std::wstring(80, L'n') + L".exe";
+    CHECK_EQ(QuickActions::NameFromPath(longName).size(), QuickActions::kMaxNameLength);
+}
+
 } // namespace
 
 void RunQuickActionTests() {
@@ -99,4 +121,5 @@ void RunQuickActionTests() {
     TestVariablesAreExpanded();
     TestShellErrorsAreDescribed();
     TestARowThatCannotRunSaysWhy();
+    TestNameFromPath();
 }

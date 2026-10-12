@@ -33,4 +33,11 @@ const std::vector<QuickAction>& Defaults();
 // value per line), lengths and count capped, entries with no name or nothing to open dropped.
 std::vector<QuickAction> Sanitize(std::vector<QuickAction> list);
 
+// The name a file or folder suggests for its row: the last part of the path, without the
+// extension ("C:\Tools\Notes.lnk" -> "Notes"), capped to what a row holds. A folder keeps
+// everything after its last separator, because "v1.2" is a folder called that and not a file with
+// an extension; a leading dot (".gitignore") is part of the name and not an extension either; a
+// drive ("D:\") is called "D:". Empty only when the path is.
+std::wstring NameFromPath(const std::wstring& path, bool isFolder = false);
+
 } // namespace QuickActions

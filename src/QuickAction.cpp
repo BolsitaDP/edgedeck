@@ -44,4 +44,18 @@ std::vector<QuickAction> Sanitize(std::vector<QuickAction> list) {
     return out;
 }
 
+std::wstring NameFromPath(const std::wstring& path, bool isFolder) {
+    std::wstring name = path;
+    // "C:\Games\" and "C:\Games" are the same folder; a drive's own trailing slash goes too, which
+    // leaves "D:" - the name Explorer's address bar would show for it.
+    while (!name.empty() && (name.back() == L'\\' || name.back() == L'/')) name.pop_back();
+    const size_t slash = name.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) name.erase(0, slash + 1);
+    if (!isFolder) {
+        const size_t dot = name.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot > 0) name.resize(dot);
+    }
+    return Clean(std::move(name), kMaxNameLength);
+}
+
 } // namespace QuickActions
