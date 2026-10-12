@@ -17,6 +17,8 @@ add_executable(EdgeDeckTests
     PlacementTests.cpp
     IconTests.cpp
     QuickActionTests.cpp
+    ActionIconTests.cpp
+    ${CMAKE_SOURCE_DIR}/src/ActionIcons.cpp
     ${CMAKE_SOURCE_DIR}/src/Fullscreen.cpp
     ${CMAKE_SOURCE_DIR}/src/Placement.cpp
     ${CMAKE_SOURCE_DIR}/src/QuickAction.cpp

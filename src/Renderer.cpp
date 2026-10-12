@@ -471,6 +471,7 @@ Renderer::~Renderer() { DiscardTarget(); }
 
 void Renderer::DiscardTarget() {
     ResetBrushes();
+    ResetImages();
     m_target.Reset();
     // A layered surface goes with it. The DIB and its render target are cheap to
     // rebuild, and a half-valid one is not worth reasoning about.
@@ -480,6 +481,8 @@ void Renderer::DiscardTarget() {
 }
 
 bool Renderer::IconFontAvailable() { return IconFormat() != nullptr; }
+
+void Renderer::ResetImages() { m_images.clear(); }
 
 void Renderer::ResetBrushes() {
     m_primaryTextBrush.Reset();
@@ -569,6 +572,7 @@ void Renderer::OnResize(UINT widthPx, UINT heightPx) {
     m_widthPx = 0;
     m_heightPx = 0;
     ResetBrushes();
+    ResetImages();
 }
 
 void Renderer::SetRenderDpi(float dpi) {
@@ -845,6 +849,29 @@ void Renderer::DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F 
     m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, 6.0f, 6.0f), badgeBrush.Get());
     m_target->DrawText(letters, static_cast<UINT32>(wcslen(letters)), GlyphFormat(), rect,
                        letterBrush.Get());
+}
+
+void Renderer::DrawImage(D2D1_RECT_F rect, const PanelImage& image) {
+    if (!m_target || !image.Valid()) return;
+
+    auto found = m_images.find(image.id);
+    if (found == m_images.end()) {
+        // A list is at most a dozen rows, so this stays small on its own; the cap is for a long
+        // session in which the list was edited many times and every edit made new pictures.
+        if (m_images.size() >= 48) m_images.clear();
+
+        ComPtr<ID2D1Bitmap> bitmap;
+        const D2D1_BITMAP_PROPERTIES properties = D2D1::BitmapProperties(
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        const HRESULT hr = m_target->CreateBitmap(
+            D2D1::SizeU(static_cast<UINT32>(image.width), static_cast<UINT32>(image.height)),
+            image.bgra.data(), static_cast<UINT32>(image.width) * 4, properties,
+            bitmap.GetAddressOf());
+        if (FAILED(hr) || !bitmap) return; // the row simply has no picture this time
+        found = m_images.emplace(image.id, std::move(bitmap)).first;
+    }
+
+    m_target->DrawBitmap(found->second.Get(), rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
 ID2D1SolidColorBrush* Renderer::DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled) {

@@ -79,6 +79,9 @@ add_executable(EdgeDeck WIN32
     src/DialogTheme.h
     src/QuickAction.cpp
     src/QuickAction.h
+    src/ActionIcons.cpp
+    src/ActionIcons.h
+    src/PanelImage.h
     src/ActionsWindow.cpp
     src/ActionsWindow.h
     src/Autostart.cpp

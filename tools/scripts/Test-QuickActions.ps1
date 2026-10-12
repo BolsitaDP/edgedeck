@@ -146,5 +146,64 @@ try {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+# ---- 5. each row shows the picture of what it opens ---------------------------------------------
+# A program and a folder have pictures; a program that is not there has none and shows its letter
+# in a plain badge. The picture is coloured (Explorer's yellow folder, the blue of its window), the
+# badge is grey with a white letter, so how much saturated colour sits in the row's 24-px slot says
+# which one was drawn - and a slot with neither says the row has no picture at all.
+$iconRaw = @"
+[action]
+name=Explorer
+target=%SystemRoot%\explorer.exe
+[action]
+name=Gone
+target=C:\no\such\folder\edgedeck-missing.exe
+[action]
+name=Windows folder
+target=%SystemRoot%
+"@
+
+function Get-SlotColour($panel, $scale, [int]$rowIndex) {
+    $size = [int][math]::Round(24 * $scale)
+    $x0 = [int][math]::Round($panel.L + 18 * $scale)
+    $y0 = [int][math]::Round($panel.T + ($chrome + $rowIndex * $row + ($row - 24) / 2) * $scale)
+    $bmp = New-Object System.Drawing.Bitmap($size, $size)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
+    $g.Dispose()
+    $saturated = 0; $light = 0
+    for ($y = 0; $y -lt $size; $y++) {
+        for ($x = 0; $x -lt $size; $x++) {
+            $c = $bmp.GetPixel($x, $y)
+            $hi = [math]::Max($c.R, [math]::Max($c.G, $c.B)); $lo = [math]::Min($c.R, [math]::Min($c.G, $c.B))
+            if (($hi - $lo) -gt 50) { $saturated++ }
+            if ($lo -gt 200) { $light++ }
+        }
+    }
+    $bmp.Dispose()
+    return @{ Saturated = $saturated; Light = $light }
+}
+
+$app = Start-TestApp -Tabs QuickActions -Settings @('theme=Dark', 'fullscreenGuard=0') -Raw $iconRaw
+try {
+    $r = Get-Rows $app
+    $scale = $r.Tab.Dpi / 96.0
+    # The pictures are looked up when the panel opens and arrive a moment later; wait for them.
+    $arrived = Wait-Until -TimeoutSeconds 5 -PollMs 200 -Condition {
+        (Get-SlotColour (Get-TestPanel $app) $scale 0).Saturated -gt 40
+    }
+    $panel = Get-TestPanel $app
+    $explorer = Get-SlotColour $panel $scale 0
+    $gone = Get-SlotColour $panel $scale 1
+    $folder = Get-SlotColour $panel $scale 2
+    Check 'the row for a program shows its picture (coloured pixels in the slot)' $arrived "$($explorer.Saturated) coloured pixels"
+    Check 'the row for a folder shows its picture' ($folder.Saturated -gt 40) "$($folder.Saturated) coloured pixels"
+    Check 'control: the row for a missing program has no picture - no colour in its slot' ($gone.Saturated -lt 6) "$($gone.Saturated) coloured pixels"
+    Check 'and shows its letter in a badge instead (light pixels of the letter)' ($gone.Light -ge 8) "$($gone.Light) light pixels"
+} finally {
+    Move-Mouse ($prim.R / 2) ($prim.B / 2)
+    Stop-TestApp $app
+}
+
 if ($failures) { Write-Host "$failures check(s) failed."; exit 1 }
 Write-Host 'All checks passed.'

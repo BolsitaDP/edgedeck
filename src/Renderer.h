@@ -5,8 +5,10 @@
 #include <dwrite.h>
 #include <wrl/client.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "LayeredTarget.h"
 #include "PanelWidget.h"
@@ -156,6 +158,7 @@ public:
     void DrawLabelPair(D2D1_RECT_F rect, const wchar_t* primary,
                        const wchar_t* secondary) override;
     void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) override;
+    void DrawImage(D2D1_RECT_F rect, const PanelImage& image) override;
     void DrawPrevButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
     void DrawPlayButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
     void DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) override;
@@ -207,4 +210,10 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_controlBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_accentBrush;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_edgeBrush;
+
+    // The device bitmaps made for PanelImages, by PanelImage::id. A bitmap belongs to the render
+    // target that made it, so these go whenever the target does (ResetImages), and are simply built
+    // again at the next paint.
+    std::unordered_map<std::uint64_t, Microsoft::WRL::ComPtr<ID2D1Bitmap>> m_images;
+    void ResetImages();
 };
