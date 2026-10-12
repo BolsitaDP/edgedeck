@@ -16,9 +16,6 @@ class SettingsWindow;
 inline constexpr wchar_t kTabClassName[] = L"EdgeDeckTabWindow";
 inline constexpr wchar_t kPanelClassName[] = L"EdgeDeckPanelWindow";
 
-// Resource ids from res/EdgeDeck.rc.
-inline constexpr int kIconIdEdgeDeck = 101;
-
 // Top-level orchestrator: owns every Tab, the shared window classes, the
 // process-wide hotkeys, the notification-area icon that is the safety net for
 // reaching Settings/Exit, and the settings window.

@@ -13,6 +13,7 @@ void RunNoticeTests();
 void RunAutostartTests();
 void RunFullscreenTests();
 void RunPlacementTests();
+void RunIconTests();
 void RunCrashTests();
 
 int wmain() {
@@ -44,6 +45,8 @@ int wmain() {
     RunFullscreenTests();
     std::printf("\n");
     RunPlacementTests();
+    std::printf("\n");
+    RunIconTests();
     std::printf("\n");
     RunCrashTests();
 

@@ -1,4 +1,5 @@
 #include "SettingsWindow.h"
+#include "AppIcon.h"
 #include "Autostart.h"
 #include "DisplayTopology.h"
 #include "Renderer.h"
@@ -114,6 +115,10 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
         wc.lpfnWndProc = WndProc;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+        // The title bar and Alt+Tab show EdgeDeck's icon, not the generic one. The class keeps
+        // them for the life of the process, so they are not released.
+        wc.hIcon = AppIcon::Load(hInstance, false);
+        wc.hIconSm = AppIcon::Load(hInstance, true);
         if (!RegisterClassExW(&wc)) return false;
         classRegistered = true;
     }
