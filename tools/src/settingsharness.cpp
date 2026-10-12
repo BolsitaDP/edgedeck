@@ -1,11 +1,13 @@
 // Opens just the Settings window (no tabs, no hotkeys, no single-instance mutex), so it can be
 // inspected while the user's own EdgeDeck keeps running.
-// usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N]
+// usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N] [window=actions]
+//   window=actions : host the quick-actions editor instead of Settings, and report its layout
 //   drop=N : open the Nth combo box's list (1 widget type, 2 monitor, 3 edge, 4 theme)
 //   dpi=N : after creation, send the window the WM_DPICHANGED a monitor at N DPI would, so the
 //           layout can be checked at other scales without changing the user's display settings.
 // Always prints a layout report: controls outside the client area, overlapping controls, and
 // text that is wider (or, for the footer, taller) than the control that holds it.
+#include "ActionsWindow.h"
 #include "Config.h"
 #include "Renderer.h"
 #include "SettingsWindow.h"
@@ -108,7 +110,18 @@ static int LayoutReport(HWND hwnd, UINT dpi) {
             // A button needs its own margins; a check box also needs its glyph.
             int needed = sz.cx;
             if (isButton) needed += MulDiv((c.style & BS_AUTOCHECKBOX) == BS_AUTOCHECKBOX ? 24 : 12, dpi, 96);
-            if (needed > boxW) {
+            if (isStatic && needed > boxW) {
+                // A label wraps. It only fits if the wrapped text still fits the box's height - which
+                // is what separates a paragraph meant to wrap from a one-line label that has run out
+                // of room and would lose its second line.
+                RECT calc{0, 0, boxW, 0};
+                DrawTextW(dc, c.text.c_str(), -1, &calc, DT_CALCRECT | DT_WORDBREAK);
+                if (calc.bottom > boxH) {
+                    printf("  TEXT TOO TALL: Static '%ls' wraps to %ld px, has %d\n", c.text.c_str(),
+                           calc.bottom, boxH);
+                    ++problems;
+                }
+            } else if (needed > boxW) {
                 printf("  TEXT TOO WIDE: %ls '%ls' needs %d px, has %d\n", c.cls.c_str(), c.text.c_str(),
                        needed, boxW);
                 ++problems;
@@ -129,13 +142,14 @@ int wmain(int argc, wchar_t** argv) {
 
     const wchar_t* mode = argc > 1 ? argv[1] : L"follow";
     const int seconds = argc > 2 ? _wtoi(argv[2]) : 8;
-    bool drop = false, flip = false;
+    bool drop = false, flip = false, hostActions = false;
     int dropIndex = 1;
     UINT simDpi = 0;
     for (int i = 3; i < argc; ++i) {
         if (wcscmp(argv[i], L"drop") == 0) drop = true;
         else if (wcsncmp(argv[i], L"drop=", 5) == 0) { drop = true; dropIndex = _wtoi(argv[i] + 5); }
         else if (wcscmp(argv[i], L"flip") == 0) flip = true;
+        else if (wcscmp(argv[i], L"window=actions") == 0) hostActions = true;
         else if (wcsncmp(argv[i], L"dpi=", 4) == 0) simDpi = static_cast<UINT>(_wtoi(argv[i] + 4));
     }
 
@@ -152,10 +166,17 @@ int wmain(int argc, wchar_t** argv) {
     };
 
     SettingsWindow settings;
-    if (!settings.Create(GetModuleHandleW(nullptr), tabs, [](const std::vector<TabSettings>&) {})) {
+    ActionsWindow editor;
+    if (hostActions) {
+        // A full list, so the buttons that depend on the count are in their usual state.
+        std::vector<QuickAction> list = QuickActions::Defaults();
+        list.push_back({L"M\u00FAsica", L"%USERPROFILE%\\M\u00FAsica\\lista.m3u", L"--shuffle"});
+        if (!editor.Create(GetModuleHandleW(nullptr), list, [](std::vector<QuickAction>) {})) return 1;
+    } else if (!settings.Create(GetModuleHandleW(nullptr), tabs, [](const std::vector<TabSettings>&) {})) {
         return 1;
     }
-    HWND hwnd = settings.Hwnd();
+    const auto windowHandle = [&] { return hostActions ? editor.Hwnd() : settings.Hwnd(); };
+    HWND hwnd = windowHandle();
 
     printf("window DPI as created: %u\n", GetDpiForWindow(hwnd));
     LayoutReport(hwnd, GetDpiForWindow(hwnd));
@@ -203,7 +224,7 @@ int wmain(int argc, wchar_t** argv) {
     MSG msg;
     while (GetTickCount() < end) {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (!settings.Hwnd() || !IsDialogMessageW(settings.Hwnd(), &msg)) {
+            if (!windowHandle() || !IsDialogMessageW(windowHandle(), &msg)) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -211,7 +232,7 @@ int wmain(int argc, wchar_t** argv) {
         if (flip && !flipped && GetTickCount() >= flipAt) {
             flipped = true;
             Config::SetCurrentThemeMode(ThemeMode::Light);
-            SendMessageW(settings.Hwnd(), WM_THEMECHANGED, 0, 0);
+            SendMessageW(windowHandle(), WM_THEMECHANGED, 0, 0);
         }
         Sleep(15);
     }

@@ -7,9 +7,11 @@
 #include <vector>
 
 #include "Config.h"
+#include "QuickAction.h"
 
 class Tab;
 class SettingsWindow;
+class ActionsWindow;
 
 // Shared window class names, registered once by App::Create and referenced
 // by Tab when it creates its own HWNDs.
@@ -39,6 +41,9 @@ public:
     void ShowTabContextMenu(Tab* tab, POINT screenPt);
     void RequestExit();
     void OpenSettings();
+    // The window where the Quick Actions list is edited. Opened from Settings, from the tray
+    // menu and from the menu of any tab.
+    void OpenActionsEditor();
 
     // A message for the user that does not need an answer, shown by the
     // notification-area icon. The non-modal way to say "that failed": a
@@ -58,6 +63,8 @@ private:
     void RemoveTrayIcon();
     void ApplySettings(const std::vector<TabSettings>& settings);
     bool BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hInstance);
+    // The Quick Actions list was edited: keep it, and lay the panels that show it out again.
+    void ApplyActions(std::vector<QuickAction> actions);
 
     // Fixes a Start-with-Windows entry whose file no longer exists.
     void RepairAutostart();
@@ -74,6 +81,11 @@ private:
     HWND m_utilityHwnd = nullptr;
     std::vector<std::unique_ptr<Tab>> m_tabs;
     std::unique_ptr<SettingsWindow> m_settingsWindow;
+    std::unique_ptr<ActionsWindow> m_actionsWindow;
+    // What the tabs were last built from. Kept so a change to one global (the startup hint, the
+    // Quick Actions list) can be saved without reading the file back and losing a change that
+    // is only in memory.
+    std::vector<TabSettings> m_settings;
     bool m_trayAdded = false;
 
     // A problem found before the tray icon exists (the icon is added last, once the

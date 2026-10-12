@@ -7,6 +7,10 @@
 //   crash.txt      a real access violation (a write through a null pointer)
 //   terminate.txt  an uncaught exception, as std::terminate sees it
 //
+//
+// and a menu command that has no window to click, so it can be driven from a script:
+//   editor.txt     opens the quick-actions editor
+//
 // usage: apptest <trigger-folder> [flags a restart adds: --restarted-after-crash --previous-pid=N]
 #include "App.h"
 #include "CrashHandler.h"
@@ -97,6 +101,10 @@ int wmain(int argc, wchar_t** argv) {
             if (GetFileAttributesW((dir + L"\\terminate.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\terminate.txt").c_str());
                 std::terminate();
+            }
+            if (GetFileAttributesW((dir + L"\\editor.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\editor.txt").c_str());
+                app.OpenActionsEditor();
             }
             if (GetFileAttributesW((dir + L"\\quit.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\quit.txt").c_str());

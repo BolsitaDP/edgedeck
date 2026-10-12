@@ -4,6 +4,7 @@
 #include "CrashHandler.h"
 #include "Diagnostics.h"
 #include "Tab.h"
+#include "ActionsWindow.h"
 #include "QuickActionsWidget.h"
 #include "MediaWidget.h"
 #include "BrightnessWidget.h"
@@ -94,9 +95,9 @@ bool App::Create(HINSTANCE hInstance) {
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
-    const std::vector<TabSettings> loaded = Config::LoadOrDefault();
+    m_settings = Config::LoadOrDefault();
     CrashHandler::SetRestartEnabled(Config::RestartAfterCrash()); // the config is read now, not at install
-    if (!BuildTabsFrom(loaded, hInstance)) return false;
+    if (!BuildTabsFrom(m_settings, hInstance)) return false;
     UpdateDisplayHotkeys();
     RepairAutostart();
     AddTrayIcon();
@@ -208,10 +209,12 @@ void App::OpenSettings() {
                              [this](const std::vector<TabSettings>& settings) {
                                  ApplySettings(settings);
                              },
-                             [this](const wchar_t* problem) { ShowBalloon(problem); });
+                             [this](const wchar_t* problem) { ShowBalloon(problem); },
+                             [this] { OpenActionsEditor(); });
 }
 
 void App::ApplySettings(const std::vector<TabSettings>& settings) {
+    m_settings = settings;
     if (!Config::Save(settings)) {
         // Saving is the one operation whose failure the user would otherwise
         // never find out about: the tabs would move and then quietly revert on
@@ -252,6 +255,29 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
     }
     // A Displays tab may have just been added or removed.
     UpdateDisplayHotkeys();
+}
+
+void App::OpenActionsEditor() {
+    if (m_actionsWindow && IsWindow(m_actionsWindow->Hwnd())) {
+        SetForegroundWindow(m_actionsWindow->Hwnd());
+        return;
+    }
+    m_actionsWindow = std::make_unique<ActionsWindow>();
+    m_actionsWindow->Create(m_hInstance, Config::QuickActionList(),
+                            [this](std::vector<QuickAction> list) { ApplyActions(std::move(list)); });
+}
+
+void App::ApplyActions(std::vector<QuickAction> actions) {
+    Config::SetQuickActionList(std::move(actions));
+    if (!Config::Save(m_settings)) {
+        ShowBalloon(L"EdgeDeck could not write its settings file. Your actions will apply for "
+                    L"this session but will not be kept.");
+    }
+    // Every Quick Actions panel shows the list, and a different number of rows is a different
+    // height, so each is told and laid out again - in place, so an open panel stays open.
+    for (auto& tab : m_tabs) {
+        if (tab->WidgetType() == WidgetType::QuickActions) tab->RefreshWidget();
+    }
 }
 
 void App::OpenTabByIndex(size_t index) {
@@ -345,6 +371,11 @@ int App::RunMessageLoop() {
             (s_instance && s_instance->m_settingsWindow) ? s_instance->m_settingsWindow->Hwnd()
                                                           : nullptr;
         if (settingsHwnd && IsWindow(settingsHwnd) && IsDialogMessage(settingsHwnd, &msg)) {
+            continue;
+        }
+        const HWND actionsHwnd =
+            (s_instance && s_instance->m_actionsWindow) ? s_instance->m_actionsWindow->Hwnd() : nullptr;
+        if (actionsHwnd && IsWindow(actionsHwnd) && IsDialogMessage(actionsHwnd, &msg)) {
             continue;
         }
 

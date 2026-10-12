@@ -67,6 +67,10 @@ public:
     // open or pinned panel and any in-flight async work survive the change.
     void ApplyConfig(const TabConfig& config);
 
+    // Tells the widget that what it is built from changed (the Quick Actions list) and lays the
+    // tab out again, since that can change the panel's height. An open panel stays open.
+    void RefreshWidget();
+
 private:
     enum class State { Hidden, Opening, Open, Closing };
 

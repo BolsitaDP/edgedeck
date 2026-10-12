@@ -24,6 +24,7 @@
 param(
     [string]$Dpis = '96,120,144,168,192,240',
     [ValidateSet('dark', 'light', 'follow')][string]$Theme = 'dark',
+    [ValidateSet('settings', 'actions')][string]$Dialog = 'settings',
     [string]$ToolsDir,
     [string]$ScreenshotDir
 )
@@ -37,10 +38,12 @@ $failed = $false
 $scales = @($Dpis -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 foreach ($dpi in $scales) {
     $out = [IO.Path]::GetTempFileName()
-    $process = Start-Process -FilePath $harness -ArgumentList $Theme, 4, "dpi=$dpi" -PassThru -RedirectStandardOutput $out
+    $harnessArgs = @($Theme, 4, "dpi=$dpi")
+    if ($Dialog -eq 'actions') { $harnessArgs += 'window=actions' }
+    $process = Start-Process -FilePath $harness -ArgumentList $harnessArgs -PassThru -RedirectStandardOutput $out
     if ($ScreenshotDir) {
         Start-Sleep -Milliseconds 1800
-        $window = @(Get-Wins 'EdgeDeckSettingsWindow' -ProcessId $process.Id)[0]
+        $window = @(Get-Wins $(if ($Dialog -eq 'actions') { 'EdgeDeckActionsWindow' } else { 'EdgeDeckSettingsWindow' }) -ProcessId $process.Id)[0]
         if ($window) {
             $v = Get-VisibleRect $window.Hwnd
             Take-Shot $v.L $v.T $v.Width $v.Height (Join-Path $ScreenshotDir "settings-$dpi.png")

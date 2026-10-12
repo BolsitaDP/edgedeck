@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "Config.h"
+#include "DialogTheme.h"
 
 // Modeless comctl32 settings dialog: lets the user pick each tab's widget
 // type, monitor, edge, vertical position, and size, then reorder/add/remove tabs. Built
@@ -19,9 +20,12 @@ public:
     // without a dialog: the window is closing as it is reported, so the owner shows
     // it somewhere that outlives it. Optional.
     using ProblemCallback = std::function<void(const wchar_t*)>;
+    // The "Actions..." button: the quick-actions list has a window of its own, which the owner
+    // opens. Optional.
+    using ActionsCallback = std::function<void()>;
 
     bool Create(HINSTANCE hInstance, std::vector<TabSettings> initial, SaveCallback onSave,
-                ProblemCallback onProblem = {});
+                ProblemCallback onProblem = {}, ActionsCallback onEditActions = {});
     HWND Hwnd() const { return m_hwnd; }
 
 private:
@@ -72,6 +76,7 @@ private:
     HWND m_panelWidthEdit = nullptr;
     HWND m_monitorCombo = nullptr;
     HWND m_edgeCombo = nullptr;
+    HWND m_actionsButton = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
     HWND m_upButton = nullptr;
@@ -90,15 +95,8 @@ private:
     std::vector<Placement> m_placements;
     UINT m_dpi = 96;
 
-    // Themed painting. Brushes exist only while the dark look is in use; with the
-    // system look they stay null and every WM_CTLCOLOR* message falls through.
-    bool m_themed = false;
-    HBRUSH m_windowBrush = nullptr;  // dialog background
-    HBRUSH m_controlBrush = nullptr; // edit boxes and lists
-    COLORREF m_textColor = 0;
-    COLORREF m_mutedColor = 0;
-    COLORREF m_windowColor = 0;
-    COLORREF m_controlColor = 0;
+    // Themed painting (dark title bar, controls and background when the panels are dark).
+    DialogTheme m_theme;
 
     struct MonitorChoice {
         std::wstring id; // empty = the primary monitor
@@ -110,6 +108,7 @@ private:
     int m_selectedIndex = -1;
     SaveCallback m_onSave;
     ProblemCallback m_onProblem;
+    ActionsCallback m_onEditActions;
 
     // What the startup checkbox showed when the window opened. Saving only touches
     // the startup entry when the box was actually changed: writing it on every Save

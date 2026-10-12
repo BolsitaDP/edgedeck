@@ -287,6 +287,16 @@ void Tab::ApplyConfig(const TabConfig& config) {
     if (m_state == State::Open) DrawPanelSurface();
 }
 
+void Tab::RefreshWidget() {
+    if (!m_widget) return;
+    m_widget->OnSettingsChanged();
+    if (!m_tabHwnd || !m_panelHwnd) return;
+    // The widget may now want a different height; Relayout recomputes it and repaints an open
+    // panel in place.
+    Relayout();
+    if (m_state == State::Open) DrawPanelSurface();
+}
+
 void Tab::ResizePanelToContent() {
     if (!m_widget || !m_panelHwnd) return;
 

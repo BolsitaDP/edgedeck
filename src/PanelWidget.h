@@ -175,6 +175,11 @@ public:
     // active sessions) instead of polling in the background. Default no-op.
     virtual void OnPanelOpening(HWND /*ownerHwnd*/) {}
 
+    // Something the widget is built from changed in the settings (the Quick Actions list) while
+    // it was alive. Re-read it; Tab lays the panel out again afterwards, so a change in height is
+    // taken care of. Default no-op.
+    virtual void OnSettingsChanged() {}
+
     // Called when the panel finishes opening, and again when it is about to be
     // hidden. Lets a widget start and stop whatever it needs for the duration
     // of the panel being on screen - a widget that follows playback position
