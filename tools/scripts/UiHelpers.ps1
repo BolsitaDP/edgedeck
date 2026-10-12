@@ -62,7 +62,11 @@ function Get-ToolsDir {
     <# Where the built tools are. EDGEDECK_TOOLS_DIR wins; otherwise build-tools\ (the folder
        the README suggests), then build\ for anyone who turned the option on in the main build. #>
     param([string]$Override)
-    $candidates = @($Override, $env:EDGEDECK_TOOLS_DIR,
+    # A script's own -ToolsDir counts too: the helpers are dot-sourced into the script, so its
+    # parameter is visible from here. Without this, Start-TestApp ignored the folder the script
+    # was told to use and quietly ran whatever was in build-tools\.
+    $scriptToolsDir = Get-Variable -Name ToolsDir -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    $candidates = @($Override, $scriptToolsDir, $env:EDGEDECK_TOOLS_DIR,
                     (Join-Path $script:RepoRoot 'build-tools\tools\Release'),
                     (Join-Path $script:RepoRoot 'build\tools\Release')) | Where-Object { $_ }
     foreach ($dir in $candidates) { if (Test-Path -LiteralPath (Join-Path $dir 'apptest.exe')) { return $dir } }
