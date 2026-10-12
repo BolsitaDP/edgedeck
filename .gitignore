@@ -8,3 +8,4 @@
 *.suo
 *.VC.db
 *.VC.opendb
+/dist/
