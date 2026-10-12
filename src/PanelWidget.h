@@ -6,6 +6,7 @@
 #include <string>
 
 #include "AsyncResult.h"
+#include "PanelImage.h"
 
 // What kind of content a tab's panel shows. Used by the settings UI to offer
 // a type picker and by Config to persist/restore which widget a tab has.
@@ -40,6 +41,11 @@ public:
     // Small colored rounded-square badge with 1-2 centered letters - the
     // "icon" for a row that isn't backed by a real extracted app icon.
     virtual void DrawBadge(D2D1_RECT_F rect, const wchar_t* letters, D2D1_COLOR_F color) = 0;
+
+    // A picture, scaled into rect. The painter keeps the device bitmap it builds from `image`
+    // keyed by image.id, so handing the same PanelImage in on every paint costs one lookup and
+    // not a texture upload; a widget that wants a different picture makes a new PanelImage.
+    virtual void DrawImage(D2D1_RECT_F rect, const PanelImage& image) = 0;
 
     // Transport controls, drawn as vector shapes. Segoe UI - the only font the
     // renderer names - has no glyph for U+23EE (previous), U+23ED (next) or
