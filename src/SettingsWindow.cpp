@@ -67,7 +67,7 @@ const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 
 // The client area in logical (96-DPI) units: what the controls below are laid out in.
 constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 506;
+constexpr int kClientHeight = 522;
 
 // The monitor list is wider than its combo box: a name, an id and "(not connected)" do not fit in
 // the box itself, and the open list is where the choosing is done.
@@ -331,10 +331,11 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     make(L"STATIC", L"Keyboard", 0, 12, 392, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
+         L"Ctrl+Alt+P: pause or resume the tabs.\r\n"
          L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"
          L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
          L"Enter or Space activate, and Escape unpins and closes it.",
-         0, 12, 412, 464, 90, 0);
+         0, 12, 412, 464, 102, 0);
 }
 
 void SettingsWindow::BuildDelayChoices() {

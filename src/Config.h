@@ -123,6 +123,11 @@ void SetOpenDelayMs(int ms); // clamped to 0..kMaxOpenDelayMs
 std::vector<QuickAction> QuickActionList();
 void SetQuickActionList(std::vector<QuickAction> list);
 
+// Whether the one-time "EdgeDeck is not set to start with Windows" note has been shown, so it is
+// said once and not at every launch.
+bool StartupHintShown();
+void SetStartupHintShown(bool shown);
+
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab
 // instead of three". Returns false if the file could not be committed.

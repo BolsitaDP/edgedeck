@@ -45,12 +45,22 @@ public:
     // menu and from the menu of any tab.
     void OpenActionsEditor();
 
+    // Pausing hides every tab (and closes any panel) until resumed: for a game or a presentation,
+    // where a pointer pushed against the screen edge should meet nothing. The keyboard shortcuts
+    // keep working. Not kept across runs.
+    void TogglePaused();
+    bool IsPaused() const { return m_paused; }
+    // Starts a new copy with the same arguments and exits; the new one waits for this process to
+    // be gone. The menu's "Restart EdgeDeck".
+    void Restart();
+
     // A message for the user that does not need an answer, shown by the
     // notification-area icon. The non-modal way to say "that failed": a
     // MessageBox from a background reply froze the user's work, and one raised
     // before the message loop started held the whole app up behind a dialog
     // nobody could see.
-    void ShowBalloon(const wchar_t* text);
+    // warning picks the icon the notification carries: a fault, or just information.
+    void ShowBalloon(const wchar_t* text, bool warning = true);
 
     // Opens and pins the nth tab (0-based). Wired to Ctrl+Alt+1..9, which is
     // the keyboard route into every panel - the panels themselves never take
@@ -63,11 +73,21 @@ private:
     void RemoveTrayIcon();
     void ApplySettings(const std::vector<TabSettings>& settings);
     bool BuildTabsFrom(const std::vector<TabSettings>& settings, HINSTANCE hInstance);
+
+    // Looks at the Start-with-Windows entry at startup: repairs one whose file is gone, and
+    // queues a note when something is worth saying (see Autostart::NoteForStartup).
+    void CheckAutostart();
+
+    // The menu of the notification-area icon and of a tab's right click: one list, so the two
+    // cannot drift apart. Runs the chosen command.
+    void ShowMenu(POINT screenPt, HWND owner);
+    void RunMenuCommand(UINT command);
+    void ToggleAutostart();
+    void OpenLog();
     // The Quick Actions list was edited: keep it, and lay the panels that show it out again.
     void ApplyActions(std::vector<QuickAction> actions);
-
-    // Fixes a Start-with-Windows entry whose file no longer exists.
-    void RepairAutostart();
+    // The notification-area tooltip, which says when the tabs are paused.
+    void UpdateTrayTip();
 
     // Registers the display-layout shortcuts if a Displays tab exists and drops
     // them if it does not, so they track the tab list through Settings changes.
@@ -86,6 +106,7 @@ private:
     // Quick Actions list) can be saved without reading the file back and losing a change that
     // is only in memory.
     std::vector<TabSettings> m_settings;
+    bool m_paused = false;
     bool m_trayAdded = false;
 
     // A problem found before the tray icon exists (the icon is added last, once the
@@ -103,6 +124,8 @@ private:
     // install that never uses the widget never claims the keys.
     static constexpr int kDisplayHotkeyBase = kOpenHotkeyBase + kOpenHotkeyCount;
     static constexpr int kDisplayHotkeyCount = 4;
+    // Ctrl+Alt+P: pause or resume the tabs.
+    static constexpr int kPauseHotkeyId = kDisplayHotkeyBase + kDisplayHotkeyCount;
 
     // Notification-area icon callback. Outside the widget range on purpose:
     // App's own private message, not a widget's.

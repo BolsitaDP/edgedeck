@@ -297,6 +297,34 @@ void Tab::RefreshWidget() {
     if (m_state == State::Open) DrawPanelSurface();
 }
 
+void Tab::SetPaused(bool paused) {
+    if (m_paused == paused) return;
+    m_paused = paused;
+    if (!m_tabHwnd || !m_panelHwnd) return;
+
+    if (paused) {
+        KillTimer(m_tabHwnd, kTimerOpen);
+        KillTimer(m_tabHwnd, kTimerLeave);
+        // A pinned panel is closed too: pausing is "get out of the way", and a panel left on
+        // screen is the opposite. No slide: this is a switch, not a gesture.
+        if (m_state != State::Hidden) {
+            KillTimer(m_tabHwnd, kTimerAnim);
+            ShowWindow(m_panelHwnd, SW_HIDE);
+            m_state = State::Hidden;
+            m_pinned = false;
+            if (m_widget) m_widget->OnPanelVisibilityChanged(false);
+            UpdateTickTimer();
+        }
+        m_tabHovered = false;
+        ShowWindow(m_tabHwnd, SW_HIDE);
+    } else {
+        // Drawn before it is shown, as at creation: a per-pixel-alpha window shows what it was
+        // last given, and the palette may have changed while it was away.
+        m_tabRenderer.DrawTab(false, m_config.tabWidth, m_config.tabHeight, TabGlyphToDraw());
+        ShowWindow(m_tabHwnd, SW_SHOWNOACTIVATE);
+    }
+}
+
 void Tab::ResizePanelToContent() {
     if (!m_widget || !m_panelHwnd) return;
 
@@ -754,7 +782,7 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 KillTimer(hwnd, kTimerOpen);
                 POINT pt;
                 GetCursorPos(&pt);
-                if (m_state == State::Hidden && IsPointInside(pt)) OpenFromHover(false);
+                if (!m_paused && m_state == State::Hidden && IsPointInside(pt)) OpenFromHover(false);
                 return 0;
             }
             if (wParam == kTimerTick) {

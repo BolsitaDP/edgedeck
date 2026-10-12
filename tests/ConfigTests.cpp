@@ -532,12 +532,30 @@ void TestOpenDelay() {
     CHECK_EQ(Config::OpenDelayMs(), 500);
 }
 
+void TestStartupHintIsRememberedOnce() {
+    TEST("Config: the one-time startup hint is remembered, and absent means not yet shown");
+    ScopedConfig guard;
+    Config::SetStartupHintShown(true);
+    ScopedConfig::Write(L"[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(!Config::StartupHintShown()); // a stale value does not linger
+
+    Config::SetStartupHintShown(true);
+    std::vector<TabSettings> tabs = {{WidgetType::Media, 0.5f, 26.0f, 76.0f, 320.0f}};
+    CHECK(Config::Save(tabs));
+    Config::SetStartupHintShown(false);
+    Config::LoadOrDefault();
+    CHECK(Config::StartupHintShown());
+    Config::SetStartupHintShown(false);
+}
+
 void RunConfigTests() {
     TestQuickActionsDefaultToTheOriginalThree();
     TestQuickActionsRoundTripWithAccents();
     TestQuickActionsFromAHandEditedFile();
     TestConfigIsReadAsUtf8WithOrWithoutABom();
     TestOpenDelay();
+    TestStartupHintIsRememberedOnce();
     TestRoundTrip();
     TestEdgeAndMonitorRoundTrip();
     TestOldConfigHasNoEdgeOrMonitor();
