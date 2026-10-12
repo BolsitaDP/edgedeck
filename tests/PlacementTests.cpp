@@ -45,6 +45,39 @@ void TestLeftEdgeIsTheMirror() {
     CHECK_EQ(r.panelY, 620);
 }
 
+void TestGapSeparatesTabAndPanel() {
+    TEST("Placement: a gap moves the open panel away from the tab and nothing else");
+    Placement::Input right = Make(kUltrawide, ScreenEdge::Right);
+    const Placement::Result flush = Placement::Compute(right);
+    right.gap = 5;
+    const Placement::Result r = Placement::Compute(right);
+    CHECK(Same(r.tab, flush.tab));
+    CHECK_EQ(r.panelY, flush.panelY);
+    CHECK_EQ(r.panelClosedX, flush.panelClosedX);      // the slide still starts beyond the edge
+    CHECK_EQ(r.panelOpenX, 3109);                      // 3414 - 5 - 300
+    CHECK_EQ(static_cast<int>(r.tab.left) - (r.panelOpenX + 300), 5); // five clear pixels
+
+    Placement::Input left = Make(kUltrawide, ScreenEdge::Left);
+    left.gap = 5;
+    const Placement::Result l = Placement::Compute(left);
+    CHECK_EQ(l.panelOpenX, 31); // 26 + 5
+    CHECK_EQ(l.panelOpenX - static_cast<int>(l.tab.right), 5);
+    CHECK_EQ(l.panelClosedX, -300);
+}
+
+void TestGapKeepsThePanelOnTheMonitor() {
+    TEST("Placement: with the gap the open panel is still inside its monitor, on every edge");
+    for (const RECT& monitor : {kUltrawide, kLeftMonitor, kTvAbove}) {
+        for (ScreenEdge edge : {ScreenEdge::Right, ScreenEdge::Left}) {
+            Placement::Input in = Make(monitor, edge, 0.5f);
+            in.gap = 8; // a 150% monitor's five logical pixels, rounded
+            const Placement::Result r = Placement::Compute(in);
+            CHECK(r.panelOpenX >= monitor.left);
+            CHECK(r.panelOpenX + in.panelWidth <= monitor.right);
+        }
+    }
+}
+
 void TestMonitorLeftOfTheOrigin() {
     TEST("Placement: a monitor at negative coordinates docks to its own edges, not the origin's");
     const Placement::Result right = Placement::Compute(Make(kLeftMonitor, ScreenEdge::Right, 0.0f));
@@ -113,6 +146,8 @@ void TestVisiblePartNextToANeighbour() {
 void RunPlacementTests() {
     TestRightEdgeIsWhatItAlwaysWas();
     TestLeftEdgeIsTheMirror();
+    TestGapSeparatesTabAndPanel();
+    TestGapKeepsThePanelOnTheMonitor();
     TestMonitorLeftOfTheOrigin();
     TestMonitorAboveTheOrigin();
     TestPanelStaysOnTheMonitor();

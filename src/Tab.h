@@ -24,6 +24,7 @@ struct TabConfig {
     float tabWidth = 26.0f;
     float tabHeight = 76.0f;
     float panelWidth = 300.0f;
+    float panelGap = 5.0f; // clear space between the tab and the open panel
     float cornerRadius = 10.0f;
     int animationMs = 200;
     int closeDelayMs = 320;
@@ -148,6 +149,9 @@ private:
     bool m_monitorMissing = false; // the configured monitor is not on the desktop (logged once)
     bool m_slideNeedsClip = false; // another monitor lies beyond the edge the panel slides from
     bool m_panelClipped = false;   // the panel window currently carries a slide-clip region
+    // The opening panel has been painted while on the desktop (it starts outside it, where a paint
+    // is lost): see StepAnimation.
+    bool m_panelPaintedOnScreen = false;
 
     // Physical-pixel geometry, in screen coordinates.
     RECT m_tabRectPx{};

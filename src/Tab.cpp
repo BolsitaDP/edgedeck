@@ -166,6 +166,7 @@ bool Tab::ComputeLayout() {
     in.panelWidth = m_panelWidthPx;
     in.panelHeight = m_panelHeightPx;
     in.verticalRatio = m_config.verticalRatio;
+    in.gap = static_cast<int>(std::lround(m_config.panelGap * m_dpiScale));
     const Placement::Result placed = Placement::Compute(in);
     m_tabRectPx = placed.tab;
     m_panelYPx = placed.panelY;
@@ -406,6 +407,7 @@ void Tab::BeginOpen() {
     m_animToX = m_panelOpenXPx;
     m_animStartTick = GetTickCount64();
     m_state = State::Opening;
+    m_panelPaintedOnScreen = false; // see StepAnimation
     SetTimer(m_tabHwnd, kTimerAnim, kAnimIntervalMs, nullptr);
 
     // Parked outside the edge, the panel is shown a moment before the first animation tick moves
@@ -561,6 +563,20 @@ void Tab::StepAnimation() {
     const int x =
         m_animFromX + static_cast<int>(std::lround((m_animToX - m_animFromX) * eased));
     MovePanelTo(x);
+
+    // DWM keeps no picture of a per-pixel-alpha window that was presented while it lay wholly
+    // outside the desktop, and a slide starts exactly there, just beyond the edge. The paint that
+    // BeginOpen asks for was therefore thrown away, and the panel stayed invisible - the slide
+    // included - until something repainted it, in practice the pointer entering it. So it is
+    // painted again the first time it touches its monitor.
+    if (!m_panelPaintedOnScreen && m_state == State::Opening) {
+        const RECT shown = Placement::VisiblePart(x, m_panelYPx, m_panelWidthPx, m_panelHeightPx,
+                                                  m_monitorRectPx);
+        if (shown.right > shown.left) {
+            m_panelPaintedOnScreen = true;
+            DrawPanelSurface();
+        }
+    }
 
     if (t < 1.0) return;
 

@@ -23,12 +23,15 @@ struct Input {
     int panelWidth = 0;
     int panelHeight = 0;
     float verticalRatio = 0.5f; // 0 = top of the monitor, 1 = bottom
+    // Clear space between the tab and the open panel, so the two read as separate shapes.
+    int gap = 0;
 };
 
 struct Result {
     RECT tab{};
-    // The panel's left edge when it is open (beside the tab, on the side facing the screen) and
-    // when it is closed (completely beyond the edge, where the slide starts and ends).
+    // The panel's left edge when it is open (beside the tab, `gap` pixels away, on the side
+    // facing the screen) and when it is closed (completely beyond the edge, where the slide
+    // starts and ends).
     int panelOpenX = 0;
     int panelClosedX = 0;
     int panelY = 0;

@@ -50,6 +50,7 @@ Todos devuelven un código de salida distinto de cero si algo falla. `-ToolsDir`
 |---|---|---|
 | `Test-SettingsLayout.ps1` | La maquetación de Settings a 100–250 % (`-Dpis 96,144`, `-ScreenshotDir`). | Abre una ventana unos segundos. Seguro. |
 | `Test-FullscreenGuard.ps1` | Que el hover no abre el panel sobre una app a pantalla completa y sí en los demás casos. | Una ventana oscura cubre el monitor principal ~10 s; mueve el cursor. |
+| `Test-PanelPaint.ps1` | Que el panel **está dibujado** —no solo "visible" para Windows— nada más posarse el cursor en la pestaña, durante el deslizamiento y al abrirlo por segunda vez, sin que el cursor tenga que entrar en él. Mira píxeles: una ventana lisa donde se abrirá el panel, y más de un color en la imagen es el panel. | Mueve el cursor; pone una ventana lisa ~15 s en cada borde del monitor principal. |
 | `Test-TabPlacement.ps1` | Que cada pestaña se acopla al borde y al monitor configurados (derecho e izquierdo, el principal y otro, y uno desconectado que cae al principal), que su panel se abre junto a ella y dentro de su monitor, y —con dos monitores contiguos— que el panel al deslizarse **no se ve en el vecino**: pone una ventana lisa en esa franja, la captura ~460 veces mientras el panel entra y sale y cuenta los píxeles que no son suyos. Lleva un control (una ventana naranja que el escaneo debe ver) para que "0 píxeles ajenos" signifique algo. | Mueve el cursor; pone ventanas lisas ~10 s en el monitor vecino. No conmuta monitores. Con un solo monitor omite lo de dos. |
 | `Test-Notices.ps1` | El aviso de error en la cabecera del panel y por la bandeja (`-ScreenshotDir` para verlos). | Mueve el cursor; puede aparecer una notificación. |
 | `Capture-TabIcons.ps1` | Una imagen con el icono de cada pestaña, ampliada (`-Path`, `-Zoom`). | Pone una tira lisa en el borde derecho unos segundos. |
@@ -73,6 +74,14 @@ Para volver a abrir tu EdgeDeck tras un script que lo cerró: `scripts\install.p
 - **Capturas.** `Take-Shot` copia lo que haya sobre ese rectángulo de pantalla. Apúntala solo a
   una ventana que esté sobre un `backdrop`, o a una ventana recortada a sus límites visibles
   (`Get-VisibleRect`, que excluye su borde invisible). Una captura con contenido ajeno se borra.
+- **"Visible" no es "dibujado".** `IsWindowVisible` es cierto para una ventana con alfa por píxel a la que
+  nadie ha dado imagen todavía. Los scripts que comprobaban ventanas (¿existe el panel? ¿dónde está?)
+  pasaron durante semanas mientras el panel salía **vacío** al abrirse con el cursor sobre la pestaña:
+  la primera imagen se presenta con la ventana fuera del escritorio, DWM no guarda la imagen de una
+  ventana así, y el panel no se veía hasta que el cursor entraba en él y provocaba otro repintado
+  (por eso casi nadie lo notaba: es lo que se hace justo después). Solo un script que mira píxeles
+  lo ve: `Test-PanelPaint`. En un borde con otro monitor al otro lado no ocurre, porque el panel
+  empieza dentro del escritorio, así que el fallo depende de cuál sea el borde.
 - **`[math]::Min(1, 0.63)` devuelve 1.** Con un entero y un decimal, PowerShell elige la sobrecarga de
   enteros y redondea el decimal. `Test-TabPlacement` puso así una pestaña abajo del todo en vez de a
   media altura, y su comprobación de píxeles pasaba sin ver nada: el panel nunca cruzaba la franja
