@@ -96,6 +96,9 @@ private:
     // back by the full-screen guard.
     void OnEnter(bool userRequested = false);
     void OnLeave();
+    // The pointer has stayed on the tab for the open delay (or there is none): open, unless a
+    // full-screen app is in front of this monitor. userRequested skips that guard.
+    void OpenFromHover(bool userRequested);
     void BeginOpen();
     void BeginClose();
     void StepAnimation();
@@ -177,6 +180,7 @@ private:
     static constexpr UINT_PTR kTimerLeave = 2;
     static constexpr UINT_PTR kTimerTick = 3;
     static constexpr UINT_PTR kTimerNotice = 4;
+    static constexpr UINT_PTR kTimerOpen = 5; // the open delay: armed only while hovering a closed tab
     static constexpr UINT kAnimIntervalMs = 15;
 
     // How long a notice stays in the header. One-shot, and only armed while a

@@ -109,6 +109,14 @@ void SetFullscreenGuard(bool on);
 bool RestartAfterCrash();
 void SetRestartAfterCrash(bool on);
 
+// How long the pointer has to rest on a tab before its panel opens, in milliseconds. 0 - the
+// default - is "at once", as it always was; a few hundred stops a pointer that is only passing
+// the edge from opening panels. A keyboard shortcut is never delayed. Held in memory like the
+// theme and written by Save.
+inline constexpr int kMaxOpenDelayMs = 1000;
+int OpenDelayMs();
+void SetOpenDelayMs(int ms); // clamped to 0..kMaxOpenDelayMs
+
 // The rows of every Quick Actions panel. Absent from the file means the defaults (what it always
 // showed); a list that is empty after Sanitize also means the defaults, so a damaged file cannot
 // leave a panel with nothing in it. [action] sections in config.txt, saved with Save.

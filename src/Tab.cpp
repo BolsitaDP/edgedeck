@@ -357,16 +357,18 @@ void Tab::OnEnter(bool userRequested) {
     KillTimer(m_tabHwnd, kTimerLeave);
 
     if (m_state == State::Hidden) {
-        // The tabs live on a screen edge the pointer reaches by accident all the
-        // time - in a game, the mouse is pushed against the right edge constantly.
-        // A panel opening over the game then is the surprise, so a hover does not
-        // open one while a full-screen app is in front of this monitor. Asked at
-        // this moment only, so there is nothing to poll, and the keyboard shortcut
-        // is a request, not a hover, and always goes through.
-        if (!userRequested && Config::FullscreenGuard() && Fullscreen::AppOnMonitor(m_monitor)) {
-            return;
+        if (!userRequested) {
+            // A pointer that is only passing the edge should not open anything: wait for it to
+            // rest on the tab. The timer exists only between arriving on a closed tab and either
+            // leaving it or the delay running out, so a quiet EdgeDeck still has no timers. A
+            // keyboard shortcut is a request and is never made to wait.
+            const int delay = Config::OpenDelayMs();
+            if (delay > 0) {
+                SetTimer(m_tabHwnd, kTimerOpen, static_cast<UINT>(delay), nullptr);
+                return;
+            }
         }
-        BeginOpen();
+        OpenFromHover(userRequested);
     } else if (m_state == State::Closing) {
         // Cursor came back before the close animation finished - reverse it.
         m_animFromX = CurrentPanelX();
@@ -377,7 +379,20 @@ void Tab::OnEnter(bool userRequested) {
     }
 }
 
+void Tab::OpenFromHover(bool userRequested) {
+    // The tabs live on a screen edge the pointer reaches by accident all the
+    // time - in a game, the mouse is pushed against the right edge constantly.
+    // A panel opening over the game then is the surprise, so a hover does not
+    // open one while a full-screen app is in front of this monitor. Asked at
+    // this moment only, so there is nothing to poll, and the keyboard shortcut
+    // is a request, not a hover, and always goes through.
+    if (!userRequested && Config::FullscreenGuard() && Fullscreen::AppOnMonitor(m_monitor)) return;
+    BeginOpen();
+}
+
 void Tab::OnLeave() {
+    // Left before the open delay was up: nothing was going to open.
+    KillTimer(m_tabHwnd, kTimerOpen);
     // Debounce: don't close immediately, the cursor may just be crossing the
     // (borderless) seam between the tab window and the panel window.
     SetTimer(m_tabHwnd, kTimerLeave, static_cast<UINT>(m_config.closeDelayMs), nullptr);
@@ -733,6 +748,15 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 CheckPendingClose();
                 return 0;
             }
+            if (wParam == kTimerOpen) {
+                // The pointer has rested on the tab for the open delay. Asked again whether it
+                // is still there: a tab can be left and re-entered, or paused, in that time.
+                KillTimer(hwnd, kTimerOpen);
+                POINT pt;
+                GetCursorPos(&pt);
+                if (m_state == State::Hidden && IsPointInside(pt)) OpenFromHover(false);
+                return 0;
+            }
             if (wParam == kTimerTick) {
                 if (m_widget && (m_state == State::Open || m_state == State::Opening)) {
                     m_widget->OnTick();
@@ -766,6 +790,7 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             KillTimer(hwnd, kTimerLeave);
             KillTimer(hwnd, kTimerTick);
             KillTimer(hwnd, kTimerNotice);
+            KillTimer(hwnd, kTimerOpen);
             if (m_panelHwnd) {
                 DestroyWindow(m_panelHwnd);
                 m_panelHwnd = nullptr;

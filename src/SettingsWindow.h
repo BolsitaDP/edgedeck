@@ -36,6 +36,8 @@ private:
     // Which monitors a tab can be put on: the primary one, every monitor Windows knows of, and
     // any saved monitor that is not plugged in right now.
     void BuildMonitorChoices();
+    // The open-delay values the combo offers (plus the configured one, if it is none of them).
+    void BuildDelayChoices();
     int MonitorChoiceIndex(const std::wstring& id) const; // -1 when there is no such entry
     void RefreshList(int selectIndex);
     void LoadSelectedIntoControls();
@@ -76,6 +78,7 @@ private:
     HWND m_panelWidthEdit = nullptr;
     HWND m_monitorCombo = nullptr;
     HWND m_edgeCombo = nullptr;
+    HWND m_delayCombo = nullptr;
     HWND m_actionsButton = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
@@ -109,6 +112,7 @@ private:
     SaveCallback m_onSave;
     ProblemCallback m_onProblem;
     ActionsCallback m_onEditActions;
+    std::vector<int> m_delayChoices; // milliseconds, parallel to the combo box
 
     // What the startup checkbox showed when the window opened. Saving only touches
     // the startup entry when the box was actually changed: writing it on every Save

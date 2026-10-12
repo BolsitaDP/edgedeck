@@ -174,6 +174,7 @@ std::wstring g_tvMonitor;
 std::wstring g_mainMonitor;
 bool g_fullscreenGuard = true;
 bool g_restartAfterCrash = true;
+int g_openDelayMs = 0;
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
@@ -200,6 +201,9 @@ void SetFullscreenGuard(bool on) { g_fullscreenGuard = on; }
 
 bool RestartAfterCrash() { return g_restartAfterCrash; }
 void SetRestartAfterCrash(bool on) { g_restartAfterCrash = on; }
+
+int OpenDelayMs() { return g_openDelayMs; }
+void SetOpenDelayMs(int ms) { g_openDelayMs = ms < 0 ? 0 : (ms > kMaxOpenDelayMs ? kMaxOpenDelayMs : ms); }
 
 std::vector<QuickAction> QuickActionList() {
     return g_quickActions.empty() ? QuickActions::Defaults() : g_quickActions;
@@ -234,6 +238,7 @@ std::vector<TabSettings> LoadOrDefault() {
     g_mainMonitor.clear();
     g_fullscreenGuard = true; // likewise: absent means the default
     g_restartAfterCrash = true;
+    g_openDelayMs = 0;
     g_quickActions.clear();
     TabSettings current;
     QuickAction action;
@@ -303,6 +308,10 @@ std::vector<TabSettings> LoadOrDefault() {
             if (key == L"restartAfterCrash" && (value == L"0" || value == L"false")) {
                 g_restartAfterCrash = false;
             }
+            if (key == L"openDelayMs") {
+                float ms = 0.0f;
+                if (ParseFloat(value, ms)) SetOpenDelayMs(static_cast<int>(std::lround(ms)));
+            }
             continue;
         }
 
@@ -353,6 +362,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
     file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
     file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
+    file << L"openDelayMs=" << g_openDelayMs << L"\n";
 
     for (const auto& t : tabs) {
         file << L"[tab]\n";

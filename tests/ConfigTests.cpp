@@ -502,11 +502,42 @@ void TestConfigIsReadAsUtf8WithOrWithoutABom() {
     CHECK_EQ(list.size(), size_t{1});
 }
 
+void TestOpenDelay() {
+    TEST("Config: the open delay defaults to instant, is clamped, and survives a save");
+    ScopedConfig guard;
+
+    ScopedConfig::Write(L"[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), 0);
+
+    ScopedConfig::Write(L"[settings]\nopenDelayMs=300\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), 300);
+
+    ScopedConfig::Write(L"[settings]\nopenDelayMs=-40\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), 0);
+    ScopedConfig::Write(L"[settings]\nopenDelayMs=999999\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), Config::kMaxOpenDelayMs);
+    ScopedConfig::Write(L"[settings]\nopenDelayMs=fast\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), 0); // unreadable: the default, not a guess
+
+    Config::SetOpenDelayMs(500);
+    std::vector<TabSettings> tabs = {{WidgetType::Media, 0.5f, 26.0f, 76.0f, 320.0f}};
+    CHECK(Config::Save(tabs));
+    Config::SetOpenDelayMs(0);
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::OpenDelayMs(), 500);
+}
+
 void RunConfigTests() {
     TestQuickActionsDefaultToTheOriginalThree();
     TestQuickActionsRoundTripWithAccents();
     TestQuickActionsFromAHandEditedFile();
     TestConfigIsReadAsUtf8WithOrWithoutABom();
+    TestOpenDelay();
     TestRoundTrip();
     TestEdgeAndMonitorRoundTrip();
     TestOldConfigHasNoEdgeOrMonitor();
