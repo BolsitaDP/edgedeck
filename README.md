@@ -30,6 +30,14 @@ Compila, copia el resultado a `%LOCALAPPDATA%\EdgeDeck\bin\EdgeDeck.exe`, apunta
 
 EdgeDeck solo admite una instancia a la vez, así que una copia abierta desde `build/Release` mientras la instalada está en marcha se cierra sola al arrancar.
 
+#### Instalarlo en otra máquina, sin compilar
+
+Cada compilación del CI sube un paquete (`EdgeDeck-package`), y una etiqueta `vX.Y.Z` publica una *release* de GitHub con el mismo `.zip`, sus símbolos (`.pdb`, 12 MB, aparte porque solo hacen falta para leer un volcado de fallo) y su SHA256. El `.zip` lleva `EdgeDeck.exe`, `Install.cmd`, `install.ps1`, `uninstall.ps1` y un `README.txt`: se descomprime donde sea y **`Install.cmd`** (doble clic) pregunta una sola cosa —si debe iniciarse con Windows— e instala para el usuario actual, sin administrador y sin tocar nada fuera de su perfil. No hay que instalar el runtime de Visual C++ (va dentro del `.exe`). El ejecutable no está firmado, así que SmartScreen puede avisar: el SHA256 publicado permite comprobarlo.
+
+`scripts\package.ps1 [-Build] [-Version 1.2.0]` hace ese mismo paquete en local (en `dist\`). Se niega a empaquetar un `.exe` cuya versión no sea la pedida: un paquete llamado 1.2.0 alrededor de un ejecutable 1.0.0 es justo el error que evita. La versión (`-DEDGEDECK_VERSION=major.minor.patch`; la *release* la toma de la etiqueta) es la que ve el Explorador en las propiedades del archivo y el tooltip del icono de notificación. **Entrecomilla ese argumento en PowerShell**: sin comillas lo parte por los puntos.
+
+`scripts\uninstall.ps1` lo desinstala: para el proceso, borra la entrada de inicio y la marca del Administrador de tareas, el acceso directo (solo si apunta a la copia instalada) y `%LOCALAPPDATA%\EdgeDeck\bin`. La configuración y el log se conservan, a menos que se pase `-RemoveSettings`.
+
 ## Uso
 
 - Pasa el cursor sobre una pestaña para abrir su panel. Mientras el cursor siga sobre la pestaña o su panel, el panel permanece abierto, incluso si haces clic en algo de su interior. Se cierra solo cuando sacas el cursor (tras una breve espera). El panel se abre a 5 píxeles lógicos de la pestaña (se escalan con el monitor), no pegado a ella, para que se lean como dos formas separadas; esa franja no es de ninguna de las dos ventanas, pero cruzarla lleva milisegundos y la espera de 320 ms antes de cerrar absorbe el paso (`Test-TabPlacement` lo comprueba moviendo el cursor un píxel cada vez de la pestaña al panel).

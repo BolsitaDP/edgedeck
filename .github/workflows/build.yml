@@ -27,8 +27,23 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Upload binary
+      # The same zip a release carries (EdgeDeck.exe, the installer and the uninstaller), so a
+      # branch's build can be tried on another machine without compiling it there. Symbols are
+      # kept apart: they are 12 MB and only a crash dump needs them.
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EdgeDeck
-          path: build/Release/EdgeDeck.exe
+          name: EdgeDeck-package
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: Upload symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgeDeck-symbols
+          path: dist/*.pdb

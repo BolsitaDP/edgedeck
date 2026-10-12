@@ -9,6 +9,7 @@
 
       1. -Build   builds first (CMake + MSVC). Safe while EdgeDeck is running, because the
                   running copy is the installed one and not the build output.
+                  (Not needed in a release package, which carries EdgeDeck.exe next to this script.)
       2. Stops any running EdgeDeck. Only one can run at a time (it holds a single-instance
          lock), and an old copy left running would make the new one exit silently.
       3. Copies build\<Configuration>\EdgeDeck.exe into the install folder.
@@ -34,6 +35,18 @@
     this switch an entry is only ever repointed, never created, so that installing does not
     undo a choice made in Settings.
 
+.PARAMETER ExePath
+    The EdgeDeck.exe to install. By default: the EdgeDeck.exe next to this script (a release
+    package) if there is one, otherwise the build output.
+
+.PARAMETER InstallDir
+    Where to put it. Default: %LOCALAPPDATA%\EdgeDeck\bin, which is also where the app looks for
+    its installed copy, so it is not something to change outside of testing the installer.
+
+.PARAMETER NoIntegration
+    Copy the files and nothing else: do not touch the desktop shortcut or the startup entry, and
+    do not stop a running EdgeDeck. For trying the installer out without changing the machine.
+
 .PARAMETER AllowSandbox
     Go ahead although this PowerShell runs inside a packaged app (see the check below). What it
     writes under %LOCALAPPDATA% and HKCU then goes to that app's private copy, which Windows
@@ -52,6 +65,9 @@ param(
     [switch]$CreateShortcut,
     [switch]$EnableAutostart,
     [switch]$AllowSandbox,
+    [switch]$NoIntegration,
+    [string]$ExePath,
+    [string]$InstallDir,
     [string]$Configuration = 'Release'
 )
 
@@ -59,8 +75,18 @@ $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $repo 'build'
-$builtExe = Join-Path $buildDir "$Configuration\EdgeDeck.exe"
-$installDir = Join-Path $env:LOCALAPPDATA 'EdgeDeck\bin'
+# Which executable: the one asked for; else the one next to this script (a release package puts
+# them side by side); else what the build produced. The sibling is checked first so that unpacking
+# a release inside some other project's folder tree still installs the release.
+$packagedExe = Join-Path $PSScriptRoot 'EdgeDeck.exe'
+if ($ExePath) {
+    $builtExe = $ExePath
+} elseif (Test-Path -LiteralPath $packagedExe) {
+    $builtExe = $packagedExe
+} else {
+    $builtExe = Join-Path $buildDir "$Configuration\EdgeDeck.exe"
+}
+$installDir = if ($InstallDir) { $InstallDir } else { Join-Path $env:LOCALAPPDATA 'EdgeDeck\bin' }
 $installedExe = Join-Path $installDir 'EdgeDeck.exe'
 
 # --- 0. is what this writes going to be seen by Windows? -----------------------------------
@@ -87,7 +113,7 @@ function Test-RedirectedAppData {
         Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
     }
 }
-if ((Test-RedirectedAppData) -and -not $AllowSandbox) {
+if ((Test-RedirectedAppData) -and -not $AllowSandbox -and -not $NoIntegration) {
     throw ("This PowerShell is running inside a packaged app, which redirects %LOCALAPPDATA% and HKCU " +
            "into its own private store: installing from here would look like it worked and Windows " +
            "would not see the program or its startup entry. Run this script from a normal PowerShell " +
@@ -119,11 +145,13 @@ if ($Build) {
 }
 
 if (-not (Test-Path -LiteralPath $builtExe)) {
-    throw "No build found at $builtExe. Run again with -Build."
+    throw "No EdgeDeck.exe found at $builtExe. Build it with -Build, or run this from a release package."
 }
 
 # --- 2. stop whatever is running ----------------------------------------------------------
-$running = @(Get-Process -Name EdgeDeck -ErrorAction SilentlyContinue)
+# Not with -NoIntegration: trying the installer out is not a reason to stop the user's own copy.
+$running = @()
+if (-not $NoIntegration) { $running = @(Get-Process -Name EdgeDeck -ErrorAction SilentlyContinue) }
 foreach ($process in $running) {
     Write-Host "Stopping EdgeDeck (pid $($process.Id))"
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
@@ -156,6 +184,10 @@ if (Test-Path -LiteralPath $builtPdb) {
 }
 
 # --- 4. shortcut and autostart ------------------------------------------------------------
+if ($NoIntegration) {
+    Write-Host 'Left the shortcut, the startup entry and any running copy alone (-NoIntegration).'
+    return
+}
 $shell = New-Object -ComObject WScript.Shell
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'EdgeDeck.lnk'
 if ((Test-Path -LiteralPath $shortcutPath) -or $CreateShortcut) {

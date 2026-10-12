@@ -27,6 +27,18 @@ option(EDGEDECK_BUILD_TESTS "Build the EdgeDeck unit tests" ON)
 # keeps them in step with the code they call.
 option(EDGEDECK_BUILD_TOOLS "Build the developer test tools" OFF)
 
+# The version shown in the file's properties and the notification-area tooltip. Plain
+# major.minor.patch; the release workflow passes the tag it was started by.
+set(EDGEDECK_VERSION "1.0.0" CACHE STRING "EdgeDeck version, major.minor.patch")
+if (NOT EDGEDECK_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+    message(FATAL_ERROR "EDGEDECK_VERSION must be major.minor.patch, got \"${EDGEDECK_VERSION}\"")
+endif()
+set(EDGEDECK_VERSION_MAJOR ${CMAKE_MATCH_1})
+set(EDGEDECK_VERSION_MINOR ${CMAKE_MATCH_2})
+set(EDGEDECK_VERSION_PATCH ${CMAKE_MATCH_3})
+set(EDGEDECK_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+configure_file(res/Version.h.in "${EDGEDECK_GENERATED_DIR}/Version.h" @ONLY)
+
 add_executable(EdgeDeck WIN32
     src/main.cpp
     src/App.cpp
@@ -89,6 +101,8 @@ add_executable(EdgeDeck WIN32
     src/MediaControls.h
     res/EdgeDeck.rc
 )
+
+target_include_directories(EdgeDeck PRIVATE "${EDGEDECK_GENERATED_DIR}")
 
 target_compile_definitions(EdgeDeck PRIVATE
     UNICODE

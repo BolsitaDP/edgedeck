@@ -17,6 +17,8 @@
 
 #include <algorithm>
 
+#include "Version.h"
+
 namespace {
 const wchar_t kUtilityClassName[] = L"EdgeDeckUtilityWindow";
 constexpr UINT kMenuIdExit = 100;
@@ -319,7 +321,8 @@ void App::UpdateTrayTip() {
     nid.hWnd = m_utilityHwnd;
     nid.uID = kTrayId;
     nid.uFlags = NIF_TIP;
-    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck (paused)" : L"EdgeDeck");
+    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck " EDGEDECK_VERSION_WSTRING L" (paused)"
+                                 : L"EdgeDeck " EDGEDECK_VERSION_WSTRING);
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
@@ -474,7 +477,8 @@ bool App::AddTrayIcon() {
     // The app's own icon from the resource script, so the notification area
     // shows EdgeDeck rather than the generic application glyph.
     nid.hIcon = AppIcon::Load(instance, true);
-    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck (paused)" : L"EdgeDeck");
+    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck " EDGEDECK_VERSION_WSTRING L" (paused)"
+                                 : L"EdgeDeck " EDGEDECK_VERSION_WSTRING);
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
     // The shell keeps its own copy of the image; this one is ours to release. (Add is retried
