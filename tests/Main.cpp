@@ -2,6 +2,9 @@
 // Run*Tests() function; this just calls them in order and reports.
 #include "TestHarness.h"
 
+#include <filesystem>
+#include <string>
+
 void RunLyricsTests();
 void RunConfigTests();
 void RunDisplayTests();
@@ -13,6 +16,18 @@ void RunPlacementTests();
 void RunCrashTests();
 
 int wmain() {
+    // The suites read and write the config file and the log under %LOCALAPPDATA%\EdgeDeck. They
+    // used to do that in the real folder, saving the user's file first and putting it back after:
+    // correct, until a run was killed half way and left a test's settings in a real install, and
+    // meanwhile every run rewrote the real file's timestamp. Pointed at a scratch folder instead,
+    // a test run cannot reach anything that belongs to a running EdgeDeck.
+    std::error_code ec;
+    const std::filesystem::path scratch =
+        std::filesystem::temp_directory_path(ec) /
+        (L"edgedeck-tests-" + std::to_wstring(GetCurrentProcessId()));
+    std::filesystem::create_directories(scratch, ec);
+    if (!ec) SetEnvironmentVariableW(L"LOCALAPPDATA", scratch.c_str());
+
     std::printf("EdgeDeck unit tests\n\n");
     RunLyricsTests();
     std::printf("\n");
@@ -31,5 +46,8 @@ int wmain() {
     RunPlacementTests();
     std::printf("\n");
     RunCrashTests();
-    return testing::Summary();
+
+    const int failures = testing::Summary();
+    std::filesystem::remove_all(scratch, ec);
+    return failures;
 }
