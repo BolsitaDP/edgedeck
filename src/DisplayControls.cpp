@@ -8,7 +8,7 @@ namespace DisplayControls {
 namespace {
 
 winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId,
-                                    std::wstring configuredTvId) {
+                                    std::wstring configuredTvId, std::wstring configuredMainId) {
     auto* list = new MonitorList();
     list->requestId = requestId;
 
@@ -17,6 +17,7 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
     try {
         list->monitors = DisplayTopology::Enumerate();
         list->tvId = DisplayTopology::ResolveTvId(list->monitors, configuredTvId);
+        list->mainId = DisplayTopology::ResolveMainId(list->monitors, list->tvId, configuredMainId);
     } catch (...) {
         // An empty list is a valid answer: the panel shows "no monitors found".
     }
@@ -48,8 +49,9 @@ winrt::fire_and_forget ApplyAsync(std::vector<std::wstring> monitorIds, int prof
 } // namespace
 
 void Refresh(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId,
-             std::wstring configuredTvId) {
-    RefreshAsync(notifyWindow, notifyMessage, requestId, std::move(configuredTvId));
+             std::wstring configuredTvId, std::wstring configuredMainId) {
+    RefreshAsync(notifyWindow, notifyMessage, requestId, std::move(configuredTvId),
+                 std::move(configuredMainId));
 }
 
 void ApplyProfile(std::vector<std::wstring> monitorIds, int profileIndex, HWND notifyWindow,

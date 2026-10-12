@@ -69,6 +69,24 @@ std::wstring SourceGdiName(const DISPLAYCONFIG_PATH_INFO& path) {
     return source.viewGdiDeviceName;
 }
 
+// The GDI device name of Windows' primary monitor, or empty if there is none to ask about.
+std::wstring PrimaryGdiName() {
+    std::wstring name;
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
+            MONITORINFOEXW info{};
+            info.cbSize = sizeof(info);
+            if (GetMonitorInfoW(monitor, &info) && (info.dwFlags & MONITORINFOF_PRIMARY)) {
+                *reinterpret_cast<std::wstring*>(param) = info.szDevice;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&name));
+    return name;
+}
+
 } // namespace
 
 std::vector<Monitor> Enumerate() {
@@ -132,6 +150,15 @@ std::vector<Monitor> Enumerate() {
                 monitors[i].id += L"#" + instances[i];
                 break;
             }
+        }
+    }
+
+    // Which of the active ones Windows calls primary. Matched through the GDI device name, the one
+    // thing a path and a monitor handle have in common.
+    const std::wstring primary = PrimaryGdiName();
+    if (!primary.empty()) {
+        for (Monitor& m : monitors) {
+            m.primary = m.active && !m.gdiName.empty() && _wcsicmp(m.gdiName.c_str(), primary.c_str()) == 0;
         }
     }
 
@@ -199,12 +226,43 @@ std::wstring ResolveTvId(const std::vector<Monitor>& monitors, const std::wstrin
     return largest->id;
 }
 
+std::wstring ResolveMainId(const std::vector<Monitor>& monitors, const std::wstring& tvId,
+                           const std::wstring& configuredId) {
+    if (!configuredId.empty()) return configuredId;
+
+    const bool tvPresent =
+        !tvId.empty() && std::any_of(monitors.begin(), monitors.end(),
+                                     [&](const Monitor& m) { return m.id == tvId; });
+    auto isTv = [&](const Monitor& m) { return tvPresent && m.id == tvId; };
+
+    for (const Monitor& m : monitors) {
+        if (m.primary && m.active && !isTv(m)) return m.id;
+    }
+
+    // The primary is the TV (it is while the TV is on alone) or nothing is known to be primary:
+    // the largest panel that is not the TV. Ties go to the first by id, so the answer is stable.
+    const Monitor* best = nullptr;
+    unsigned long long bestArea = 0;
+    for (const Monitor& m : monitors) {
+        if (isTv(m)) continue;
+        const unsigned long long area = static_cast<unsigned long long>(m.nativeWidth) * m.nativeHeight;
+        if (!best || area > bestArea) {
+            best = &m;
+            bestArea = area;
+        }
+    }
+    return best ? best->id : std::wstring();
+}
+
 ProfileState Evaluate(Profile profile, const std::vector<Monitor>& monitors,
-                      const std::wstring& tvId) {
+                      const std::wstring& tvId, const std::wstring& mainId) {
     ProfileState state;
     const bool tvPresent =
         !tvId.empty() && std::any_of(monitors.begin(), monitors.end(),
                                      [&](const Monitor& m) { return m.id == tvId; });
+    const bool mainPresent =
+        !mainId.empty() && std::any_of(monitors.begin(), monitors.end(),
+                                       [&](const Monitor& m) { return m.id == mainId; });
 
     for (const Monitor& m : monitors) {
         const bool isTv = tvPresent && m.id == tvId;
@@ -218,6 +276,9 @@ ProfileState Evaluate(Profile profile, const std::vector<Monitor>& monitors,
             case Profile::AllMonitors:
                 state.ids.push_back(m.id);
                 break;
+            case Profile::MainOnly:
+                if (mainPresent && m.id == mainId) state.ids.push_back(m.id);
+                break;
         }
     }
 
@@ -225,6 +286,15 @@ ProfileState Evaluate(Profile profile, const std::vector<Monitor>& monitors,
     // with no TV is nothing: neither is a button worth offering.
     state.available = !state.ids.empty() &&
                       (profile == Profile::MainMonitors || tvPresent);
+    if (profile == Profile::MainOnly) {
+        // Offered only when it switches something off that "main monitors" would leave on: some
+        // other monitor that is not the TV. Without one it is the same layout as that button (and
+        // the TV alone, if the "main" monitor is the TV), and two buttons would light for it.
+        const bool otherDeskMonitor = std::any_of(monitors.begin(), monitors.end(), [&](const Monitor& m) {
+            return m.id != mainId && !(tvPresent && m.id == tvId);
+        });
+        state.available = !state.ids.empty() && !(tvPresent && mainId == tvId) && otherDeskMonitor;
+    }
 
     bool exactMatch = state.available;
     for (const Monitor& m : monitors) {

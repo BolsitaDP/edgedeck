@@ -247,6 +247,36 @@ void TestTvMonitorDefaultsToEmpty() {
     CHECK_EQ(Config::DisplayTvMonitor(), std::wstring());
 }
 
+void TestMainMonitorRoundTripAndDefault() {
+    TEST("Config: the main-monitor override survives a save, and is empty when not set");
+    ScopedConfig guard;
+
+    // Absent: left to be worked out (Windows' primary monitor), and a stale value from an earlier
+    // read must not linger.
+    Config::SetDisplayMainMonitor(L"STALE");
+    ScopedConfig::Write(L"[settings]\ntheme=Dark\n[tab]\nwidget=Displays\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::DisplayMainMonitor(), std::wstring());
+
+    // Typed by hand in lower case, saved and read back upper-cased, like the TV one.
+    ScopedConfig::Write(L"[settings]\nmainMonitor=gsm7768\n[tab]\nwidget=Displays\n");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::DisplayMainMonitor(), std::wstring(L"GSM7768"));
+
+    std::vector<TabSettings> tabs = {{WidgetType::Displays, 0.5f, 26.0f, 76.0f, 300.0f}};
+    CHECK(Config::Save(tabs)); // a Settings round trip must keep it
+    Config::SetDisplayMainMonitor(L"");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::DisplayMainMonitor(), std::wstring(L"GSM7768"));
+
+    // And an empty one is not written at all.
+    Config::SetDisplayMainMonitor(L"");
+    CHECK(Config::Save(tabs));
+    Config::SetDisplayMainMonitor(L"STALE");
+    Config::LoadOrDefault();
+    CHECK_EQ(Config::DisplayMainMonitor(), std::wstring());
+}
+
 void TestFullscreenGuardRoundTrip() {
     TEST("Config: the full-screen guard defaults on, and only an explicit 'off' turns it off");
     ScopedConfig guard;
@@ -373,6 +403,7 @@ void RunConfigTests() {
     TestRestartAfterCrashRoundTrip();
     TestDisplaysWidgetAndTvMonitorRoundTrip();
     TestTvMonitorDefaultsToEmpty();
+    TestMainMonitorRoundTripAndDefault();
     TestLegacyAndUnknownTypes();
     TestOutOfRangeValuesAreClamped();
     TestMalformedNumbersKeepDefaults();

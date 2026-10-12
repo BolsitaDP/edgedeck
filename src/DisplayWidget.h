@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-// Three buttons that decide which monitors are switched on: the two desktop
-// monitors, the TV alone, or all of them. The button matching what is on right
+// Four buttons that decide which monitors are switched on: the desk monitors, the TV
+// alone, all of them, or the main monitor alone. The button matching what is on right
 // now is marked, so the panel doubles as a read-out of the current layout.
 //
 // The monitor list is read when the panel opens and again after a switch - there
@@ -40,7 +40,7 @@ public:
     void SetFocusedControl(int controlId) override { m_focusedControl = controlId; }
     bool OnKeyDown(UINT key, int focusedControl) override;
 
-    static constexpr int kProfileCount = 3;
+    static constexpr int kProfileCount = 4;
     static constexpr UINT kRefreshMessage = kWidgetMessageFirst + 41;
     static constexpr UINT kApplyMessage = kWidgetMessageFirst + 42;
 
@@ -54,6 +54,7 @@ private:
 
     std::vector<DisplayTopology::Monitor> m_monitors;
     std::wstring m_tvId;
+    std::wstring m_mainId;
     bool m_loaded = false;
 
     int m_hoveredControl = -1;

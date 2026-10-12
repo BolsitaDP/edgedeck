@@ -88,12 +88,12 @@ private:
     // with the exit hotkey's id.
     static constexpr int kOpenHotkeyBase = 2;
     static constexpr int kOpenHotkeyCount = 9;
-    // Ctrl+Alt+Shift+1..3: the Displays tab's three layouts, in the order its
+    // Ctrl+Alt+Shift+1..4: the Displays tab's four layouts, in the order its
     // buttons appear. The extra Shift keeps them clear of the tab openers, and
     // they are registered only while there is a Displays tab to act on, so an
     // install that never uses the widget never claims the keys.
     static constexpr int kDisplayHotkeyBase = kOpenHotkeyBase + kOpenHotkeyCount;
-    static constexpr int kDisplayHotkeyCount = 3;
+    static constexpr int kDisplayHotkeyCount = 4;
 
     // Notification-area icon callback. Outside the widget range on purpose:
     // App's own private message, not a widget's.

@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Renderer.h"
 
+#include <algorithm>
 #include <cstdio>
 
 namespace {
@@ -23,6 +24,7 @@ constexpr ProfileRow kProfiles[DisplayWidget::kProfileCount] = {
     {DisplayTopology::Profile::MainMonitors, L"Monitors 1 + 2", L"1+2"},
     {DisplayTopology::Profile::TvOnly, L"TV only", L"TV"},
     {DisplayTopology::Profile::AllMonitors, L"All monitors", L"ALL"},
+    {DisplayTopology::Profile::MainOnly, L"Main monitor only", L"1"},
 };
 
 // U+25A1 WHITE SQUARE - a screen, near enough, and inside the WGL4 set Segoe UI
@@ -67,15 +69,27 @@ float DisplayWidget::PreferredContentHeight(float /*logicalWidth*/) const {
 
 DisplayTopology::ProfileState DisplayWidget::StateOf(int profileIndex) const {
     if (!m_loaded || profileIndex < 0 || profileIndex >= kProfileCount) return {};
-    return DisplayTopology::Evaluate(kProfiles[profileIndex].profile, m_monitors, m_tvId);
+    return DisplayTopology::Evaluate(kProfiles[profileIndex].profile, m_monitors, m_tvId, m_mainId);
 }
 
 std::wstring DisplayWidget::Subtitle(int profileIndex,
                                      const DisplayTopology::ProfileState& state) const {
     if (!m_loaded) return L"Checking...";
     if (!state.available) {
-        const bool needsTv = kProfiles[profileIndex].profile != DisplayTopology::Profile::MainMonitors;
-        return needsTv ? L"TV not connected" : L"No monitors found";
+        switch (kProfiles[profileIndex].profile) {
+            case DisplayTopology::Profile::MainMonitors:
+                return L"No monitors found";
+            case DisplayTopology::Profile::MainOnly: {
+                // Either the main monitor is not there (a configured one, unplugged) or it is the
+                // only one that is not the TV, so there is nothing else to turn off.
+                const bool mainThere = std::any_of(
+                    m_monitors.begin(), m_monitors.end(),
+                    [&](const DisplayTopology::Monitor& m) { return m.id == m_mainId; });
+                return mainThere ? L"No other monitors" : L"Main monitor not found";
+            }
+            default:
+                return L"TV not connected";
+        }
     }
 
     // Every monitor's name in one line does not fit beside the "Active" marker
@@ -177,6 +191,7 @@ void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 
         m_monitors = std::move(list->monitors);
         m_tvId = std::move(list->tvId);
+        m_mainId = std::move(list->mainId);
         m_loaded = true;
 
         // If a shortcut asked for this very read, carry it out now that the state
@@ -235,7 +250,7 @@ void DisplayWidget::RequestRefresh(HWND ownerHwnd, bool supersede) {
     }
     m_refreshRequestId = m_requests.Begin();
     DisplayControls::Refresh(ownerHwnd, kRefreshMessage, m_refreshRequestId,
-                             Config::DisplayTvMonitor());
+                             Config::DisplayTvMonitor(), Config::DisplayMainMonitor());
 }
 
 std::wstring DisplayWidget::AccessibleSummary() const {

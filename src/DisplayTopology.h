@@ -27,17 +27,22 @@ struct Monitor {
     LUID adapter{};
     UINT32 targetId = 0;
     bool active = false; // part of the desktop right now
+    // Windows' primary monitor (the one at the origin, where the taskbar starts). False for a
+    // monitor that is off.
+    bool primary = false;
     // Native resolution. Known for a switched-off monitor too, which is the
     // reason it is read from the preferred mode and not from the live one.
     UINT32 nativeWidth = 0;
     UINT32 nativeHeight = 0;
 };
 
-// The three layouts the Displays tab offers.
+// The layouts the Displays tab offers. New ones are added at the end: the order is the order of
+// the tab's buttons and of its Ctrl+Alt+Shift+N shortcuts, and people have those in their fingers.
 enum class Profile {
     MainMonitors, // everything except the TV
     TvOnly,
     AllMonitors,
+    MainOnly,     // the main monitor alone: everything else, the other desk monitors too, is off
 };
 
 // Every connected monitor, switched on or not, ordered by id so the order does
@@ -60,14 +65,25 @@ std::wstring GdiNameOf(const std::vector<Monitor>& monitors, const std::wstring&
 // "a 4K TV next to two desktop monitors" without naming hardware.
 std::wstring ResolveTvId(const std::vector<Monitor>& monitors, const std::wstring& configuredId);
 
+// Which monitor is "the main one". A non-empty configuredId wins outright (even if that monitor
+// is unplugged - then the profile is simply unavailable). Otherwise it is Windows' primary
+// monitor, unless that is the TV, which is what the primary becomes while only the TV is on; then
+// it is the largest panel that is not the TV. So "main only" means the same monitor whichever
+// layout it is chosen from. Empty when there is no candidate.
+std::wstring ResolveMainId(const std::vector<Monitor>& monitors, const std::wstring& tvId,
+                           const std::wstring& configuredId);
+
 struct ProfileState {
     bool available = false;           // can it be applied with what is plugged in?
     bool active = false;              // is exactly this set switched on right now?
     std::vector<std::wstring> ids;    // the monitors the profile switches on
 };
 
+// mainId is only read by Profile::MainOnly (see ResolveMainId); empty makes that profile
+// unavailable. MainOnly is also unavailable when it would be the same layout as MainMonitors - no
+// other desk monitor to switch off - so two buttons never light up for one layout.
 ProfileState Evaluate(Profile profile, const std::vector<Monitor>& monitors,
-                      const std::wstring& tvId);
+                      const std::wstring& tvId, const std::wstring& mainId = L"");
 
 // --- applying -------------------------------------------------------------
 

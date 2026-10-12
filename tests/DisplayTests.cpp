@@ -150,7 +150,8 @@ void TestProfileActiveMarker() {
     CHECK(Evaluate(Profile::TvOnly, tvOn, tv).active);
     CHECK(!Evaluate(Profile::MainMonitors, tvOn, tv).active);
 
-    // A layout none of the buttons produces (just the ultrawide) marks nothing.
+    // A layout these three do not produce (just the ultrawide) marks none of them; it is what
+    // "main monitor only" is for.
     auto odd = Desk(true, false, false);
     CHECK(!Evaluate(Profile::MainMonitors, odd, tv).active);
     CHECK(!Evaluate(Profile::TvOnly, odd, tv).active);
@@ -170,6 +171,111 @@ void TestProfilesWithoutATv() {
     CHECK(!Evaluate(Profile::AllMonitors, noTv, L"SAM7A08").available);
 
     CHECK(!Evaluate(Profile::MainMonitors, {}, L"").available);
+}
+
+// The user's desk with Windows' primary flag set on one of the active monitors.
+std::vector<Monitor> DeskWithPrimary(bool lgOn, bool c27On, bool tvOn, const wchar_t* primaryId) {
+    std::vector<Monitor> desk = Desk(lgOn, c27On, tvOn);
+    for (Monitor& m : desk) m.primary = m.active && m.id == primaryId;
+    return desk;
+}
+
+void TestMainIsThePrimaryUnlessItIsTheTv() {
+    TEST("Displays: the main monitor is Windows' primary one, not the TV, and not an off one");
+    const std::wstring tv = L"SAM7A08";
+
+    CHECK(ResolveMainId(DeskWithPrimary(true, true, true, L"GSM7768"), tv, L"") == L"GSM7768");
+    // Whatever Windows says is primary, even if it is the smaller desk monitor.
+    CHECK(ResolveMainId(DeskWithPrimary(true, true, false, L"SAM0F9D"), tv, L"") == L"SAM0F9D");
+
+    // With only the TV on, the TV is the primary. "Main" must still mean the desk monitor, so the
+    // button reads the same from every layout: the largest panel that is not the TV, even though
+    // it is off.
+    CHECK(ResolveMainId(DeskWithPrimary(false, false, true, L"SAM7A08"), tv, L"") == L"GSM7768");
+
+    // No primary known at all: the same fallback.
+    CHECK(ResolveMainId(Desk(true, true, true), tv, L"") == L"GSM7768");
+
+    // A primary flag on a monitor that is off means nothing.
+    std::vector<Monitor> stale = Desk(false, true, false);
+    stale[0].primary = true; // the ultrawide, which is off
+    stale[1].primary = true; // the 1080p monitor, which is what is really primary
+    CHECK(ResolveMainId(stale, tv, L"") == L"SAM0F9D");
+}
+
+void TestMainOverrideAndEdgeCases() {
+    TEST("Displays: a configured main monitor wins; with no candidate there is none");
+    const std::wstring tv = L"SAM7A08";
+    CHECK(ResolveMainId(DeskWithPrimary(true, true, true, L"GSM7768"), tv, L"SAM0F9D") == L"SAM0F9D");
+    // Honoured even when unplugged, like the TV override: the button is then unavailable instead
+    // of quietly picking some other monitor.
+    CHECK(ResolveMainId(Desk(true, true, true), tv, L"NOPE000") == L"NOPE000");
+
+    std::vector<Monitor> onlyTv = {MakeMonitor(L"SAM7A08", 4352, true, 3840, 2160)};
+    CHECK(ResolveMainId(onlyTv, L"", L"").empty() == false); // a lone monitor is its own main
+    CHECK(ResolveMainId(onlyTv, tv, L"").empty());           // ...unless it is known to be the TV
+    CHECK(ResolveMainId({}, tv, L"").empty());
+}
+
+void TestMainOnlyProfile() {
+    TEST("Displays: 'main monitor only' switches on the main monitor and nothing else");
+    const auto desk = Desk(true, true, true);
+    const std::wstring tv = L"SAM7A08";
+
+    ProfileState s = Evaluate(Profile::MainOnly, desk, tv, L"GSM7768");
+    CHECK(s.available);
+    CHECK_EQ(s.ids.size(), size_t{1});
+    CHECK(s.ids.size() == 1 && s.ids[0] == L"GSM7768");
+
+    // It is the answer exactly when only that monitor is on.
+    CHECK(Evaluate(Profile::MainOnly, Desk(true, false, false), tv, L"GSM7768").active);
+    CHECK(!Evaluate(Profile::MainOnly, Desk(true, true, false), tv, L"GSM7768").active);
+    CHECK(!Evaluate(Profile::MainOnly, Desk(true, true, true), tv, L"GSM7768").active);
+    CHECK(!Evaluate(Profile::MainOnly, Desk(false, false, true), tv, L"GSM7768").active);
+    CHECK(!Evaluate(Profile::MainOnly, Desk(false, true, false), tv, L"GSM7768").active);
+}
+
+void TestNoLayoutLightsTwoButtons() {
+    TEST("Displays: whatever is on, at most one of the four buttons is marked active");
+    const std::wstring tv = L"SAM7A08";
+    for (int mask = 0; mask < 8; ++mask) {
+        const auto desk = Desk((mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0);
+        int lit = 0;
+        for (Profile p : {Profile::MainMonitors, Profile::TvOnly, Profile::AllMonitors, Profile::MainOnly}) {
+            if (Evaluate(p, desk, tv, L"GSM7768").active) ++lit;
+        }
+        CHECK(lit <= 1);
+    }
+}
+
+void TestMainOnlyIsNotOfferedWhenItChangesNothing() {
+    TEST("Displays: 'main monitor only' is unavailable unless it turns something off");
+    const std::wstring tv = L"SAM7A08";
+
+    // Nothing to switch off beside the TV: it would be the same layout as "main monitors".
+    std::vector<Monitor> withTv = {MakeMonitor(L"GSM7768", 4353, true, 3440, 1440),
+                                   MakeMonitor(L"SAM7A08", 4352, false, 3840, 2160)};
+    CHECK(!Evaluate(Profile::MainOnly, withTv, tv, L"GSM7768").available);
+    CHECK(Evaluate(Profile::MainMonitors, withTv, tv).active); // so that one lights, once
+    CHECK(!Evaluate(Profile::MainOnly, withTv, tv, L"GSM7768").active);
+
+    std::vector<Monitor> lone = {MakeMonitor(L"GSM7768", 4353, true, 3440, 1440)};
+    CHECK(!Evaluate(Profile::MainOnly, lone, L"", L"GSM7768").available);
+
+    // Two desk monitors and no TV: this is exactly what the button is for.
+    std::vector<Monitor> two = {MakeMonitor(L"GSM7768", 4353, true, 3440, 1440),
+                                MakeMonitor(L"SAM0F9D", 0, true, 1920, 1080)};
+    CHECK(Evaluate(Profile::MainOnly, two, L"", L"GSM7768").available);
+}
+
+void TestMainOnlyNeedsAKnownMainMonitor() {
+    TEST("Displays: with no main monitor, or a missing one, or the TV as main, it is unavailable");
+    const auto desk = Desk(true, true, true);
+    const std::wstring tv = L"SAM7A08";
+    CHECK(!Evaluate(Profile::MainOnly, desk, tv, L"").available);
+    CHECK(!Evaluate(Profile::MainOnly, desk, tv).available); // the old three-argument calls
+    CHECK(!Evaluate(Profile::MainOnly, desk, tv, L"NOPE000").available);
+    CHECK(!Evaluate(Profile::MainOnly, desk, tv, L"SAM7A08").available); // that is "TV only"
 }
 
 void TestRemovalKeepsSurvivorsInPlace() {
@@ -343,6 +449,12 @@ void RunDisplayTests() {
     TestProfileSets();
     TestProfileActiveMarker();
     TestProfilesWithoutATv();
+    TestMainIsThePrimaryUnlessItIsTheTv();
+    TestMainOverrideAndEdgeCases();
+    TestMainOnlyProfile();
+    TestNoLayoutLightsTwoButtons();
+    TestMainOnlyIsNotOfferedWhenItChangesNothing();
+    TestMainOnlyNeedsAKnownMainMonitor();
     TestRemovalKeepsSurvivorsInPlace();
     TestRemovalMovesTheOriginToASurvivor();
     TestRemovalShiftsSurvivorsTogether();
