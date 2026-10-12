@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File tools\scripts\Test-SettingsLayout.ps1
 
 | Programa | Qué es |
 |---|---|
-| `dispcfg` | Lista qué monitores están encendidos (con su id EDID y el dispositivo GDI `gdi=\\.\DISPLAY2` por el que se dibujan, que es lo que une un id con un rectángulo de pantalla), valida o aplica una disposición (`main`, `tv`, `all`), guarda y restaura una instantánea. Usa el mismo `DisplayTopology` que la pestaña Displays, así que lo que dice vale para la app. |
+| `dispcfg` | Lista qué monitores están encendidos (con su id EDID y el dispositivo GDI `gdi=\\.\DISPLAY2` por el que se dibujan, que es lo que une un id con un rectángulo de pantalla), marca cuál es el principal de Windows y cuál el "main" que usaría el botón de monitor principal solo (`<== primary`, `<== main`), valida o aplica una disposición (`main`, `tv`, `all`, `only`), guarda y restaura una instantánea. Usa el mismo `DisplayTopology` que la pestaña Displays, así que lo que dice vale para la app. |
 | `settingsharness` | Abre **solo** la ventana de Settings (sin pestañas, sin atajos, sin candado de instancia) e imprime un informe de maquetación: controles fuera de la ventana, controles solapados, textos más anchos que su control. Con `dpi=N` simula el `WM_DPICHANGED` de un monitor a esa escala sin tocar tu configuración de pantalla (el tamaño lógico lo lee de la propia ventana, no lo lleva escrito). Con `drop=N` abre la lista del N-ésimo desplegable (2 = monitores), para ver sus etiquetas. |
 | `apptest` | La `App` **real** dentro de otro proceso, sin el candado de instancia única, así que convive con tu EdgeDeck. Lee ficheros `trig*.txt` de una carpeta y los entrega a la primera pestaña como lo haría `PanelWidget::ReportProblem`; `quit.txt` la cierra. Instala el manejador de fallos como `WinMain` y se puede hacer caer a propósito: `crash.txt` provoca un acceso inválido real y `terminate.txt` una excepción sin capturar. |
 | `backdrop` | Una ventana lisa siempre encima, para que una captura de lo que haya delante no contenga nada de tu escritorio. |
@@ -57,7 +57,7 @@ Todos devuelven un código de salida distinto de cero si algo falla. `-ToolsDir`
 | `Measure-Perf.ps1` | Memoria, hilos, handles y CPU de dos compilaciones, alternadas (`-ExeA`, `-ExeB`, `-Runs`). | Mueve el cursor ~20 s por pasada. **Exige cerrar el EdgeDeck real** (`-StopRunningInstance`). |
 | `Test-DisplaySwitching.ps1` 🖥️ | Que `dispcfg` cambia de disposición y vuelve. Por defecto solo enciende y apaga la TV. | **Conmuta monitores.** Guarda una instantánea y termina dejando la disposición inicial. |
 | `Test-CrashHandling.ps1` | Provoca fallos reales en una copia de prueba y comprueba qué deja: línea en el log, minidump válido y **un solo** reinicio (y ninguno si el reiniciado cae enseguida o si `restartAfterCrash=0`). | Abre y mata procesos `apptest.exe` suyos. Seguro. |
-| `Test-DisplayHotkeys.ps1` 🖥️ | Los atajos `Ctrl+Alt+Shift+1/2/3` con el panel sin abrir. | **Conmuta monitores y pulsa teclas.** Exige cerrar el EdgeDeck real, que es quien las tiene. |
+| `Test-DisplayHotkeys.ps1` 🖥️ | Los atajos `Ctrl+Alt+Shift+1`..`4` con el panel sin abrir (el 4, el monitor principal solo, apaga también el C27 y vuelve). | **Conmuta monitores y pulsa teclas.** Exige cerrar el EdgeDeck real, que es quien las tiene. |
 
 `UiHelpers.ps1` es la biblioteca común (buscar ventanas **por proceso**, ratón, teclado,
 capturas, y `Start-TestApp` para arrancar una copia de prueba con configuración propia).

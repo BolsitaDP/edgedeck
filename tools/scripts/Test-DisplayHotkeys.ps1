@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Presses the Displays tab's global shortcuts (Ctrl+Alt+Shift+1/2/3) for real, with the
+    Presses the Displays tab's global shortcuts (Ctrl+Alt+Shift+1..4) for real, with the
     panel never opened, and checks the monitors follow.
 
 .DESCRIPTION
@@ -14,6 +14,8 @@
 
       from "main":  Ctrl+Alt+Shift+3 (all)  -> TV on;   Ctrl+Alt+Shift+1 (main) -> TV off
       from "all":   Ctrl+Alt+Shift+1 (main) -> TV off;  Ctrl+Alt+Shift+3 (all)  -> TV on
+      then Ctrl+Alt+Shift+4 (main monitor only), when that is offered, which also switches the
+      other desk monitors off, and back to where it started;
       then the current layout's shortcut once more, which must change nothing.
 
     The panel is never opened, which is the point: a shortcut has to read the monitors itself
@@ -39,7 +41,7 @@ foreach ($p in 'main', 'all') {
 $start = ('main', 'all' | Where-Object { $state[$_].Active } | Select-Object -First 1)
 if (-not $start) { Write-Host "Start from the 'main' or 'all' layout."; exit 2 }
 
-$keys = @{ main = 0x31; tv = 0x32; all = 0x33 }   # '1', '2', '3'
+$keys = @{ main = 0x31; tv = 0x32; all = 0x33; only = 0x34 }   # '1'..'4'
 $other = if ($start -eq 'main') { 'all' } else { 'main' }
 $failures = 0
 function Check($label, $ok) { '{0} {1}' -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $label; if (-not $ok) { $script:failures++ } }
@@ -54,6 +56,15 @@ try {
 
     Press-Chord $keys[$start]
     Check "Ctrl+Alt+Shift+$([char]$keys[$start]) -> $start (panel never opened)" (Wait-DisplayProfile $start -ToolsDir $ToolsDir)
+
+    if ($state['only'].Available) {
+        Press-Chord $keys['only']
+        Check 'Ctrl+Alt+Shift+4 -> only (the main monitor alone; panel never opened)' (Wait-DisplayProfile 'only' -ToolsDir $ToolsDir)
+        Press-Chord $keys[$start]
+        Check "Ctrl+Alt+Shift+$([char]$keys[$start]) -> $start again" (Wait-DisplayProfile $start -ToolsDir $ToolsDir)
+    } else {
+        'SKIP the main-monitor-only shortcut: that layout is not offered with what is connected.'
+    }
 
     Press-Chord $keys[$start]
     Start-Sleep -Seconds 3

@@ -250,6 +250,6 @@ function Get-DisplayState {
 }
 
 function Wait-DisplayProfile {
-    param([Parameter(Mandatory)][ValidateSet('main', 'tv', 'all')][string]$Profile, [double]$TimeoutSeconds = 25, [string]$ToolsDir)
+    param([Parameter(Mandatory)][ValidateSet('main', 'tv', 'all', 'only')][string]$Profile, [double]$TimeoutSeconds = 25, [string]$ToolsDir)
     Wait-Until -TimeoutSeconds $TimeoutSeconds -Condition { (Get-DisplayState $ToolsDir)[$Profile].Active }
 }

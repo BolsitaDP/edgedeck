@@ -319,7 +319,7 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     make(L"STATIC", L"Keyboard", 0, 12, 460, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
-         L"Ctrl+Alt+Shift+1/2/3: switch monitors (needs a Displays tab).\r\n"
+         L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"
          L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
          L"Enter or Space activate, and Escape unpins and closes it.",
          0, 12, 480, 464, 82, 0);

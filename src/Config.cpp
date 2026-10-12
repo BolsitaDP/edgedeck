@@ -119,6 +119,7 @@ namespace {
 // caller having to thread it through.
 ThemeMode g_themeMode = ThemeMode::Follow;
 std::wstring g_tvMonitor;
+std::wstring g_mainMonitor;
 bool g_fullscreenGuard = true;
 bool g_restartAfterCrash = true;
 
@@ -137,6 +138,9 @@ void SetCurrentThemeMode(ThemeMode mode) { g_themeMode = mode; }
 
 std::wstring DisplayTvMonitor() { return g_tvMonitor; }
 void SetDisplayTvMonitor(const std::wstring& id) { g_tvMonitor = Upper(id); }
+
+std::wstring DisplayMainMonitor() { return g_mainMonitor; }
+void SetDisplayMainMonitor(const std::wstring& id) { g_mainMonitor = Upper(id); }
 
 bool FullscreenGuard() { return g_fullscreenGuard; }
 void SetFullscreenGuard(bool on) { g_fullscreenGuard = on; }
@@ -165,6 +169,7 @@ std::vector<TabSettings> LoadOrDefault() {
     if (!file) return DefaultTabs();
 
     g_tvMonitor.clear(); // re-read below if the file still names one
+    g_mainMonitor.clear();
     g_fullscreenGuard = true; // likewise: absent means the default
     g_restartAfterCrash = true;
     TabSettings current;
@@ -206,6 +211,7 @@ std::vector<TabSettings> LoadOrDefault() {
         if (inSettings) {
             if (key == L"theme") g_themeMode = ThemeModeFromString(value);
             if (key == L"tvMonitor") g_tvMonitor = Upper(value);
+            if (key == L"mainMonitor") g_mainMonitor = Upper(value);
             // Only an explicit "off" turns it off; anything unreadable keeps the safe default.
             if (key == L"fullscreenGuard" && (value == L"0" || value == L"false")) {
                 g_fullscreenGuard = false;
@@ -257,6 +263,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
         file << L"[settings]\n";
         file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
         if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
+        if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
         file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
         file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
 

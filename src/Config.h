@@ -87,6 +87,14 @@ void SetCurrentThemeMode(ThemeMode mode);
 std::wstring DisplayTvMonitor();
 void SetDisplayTvMonitor(const std::wstring& id);
 
+// Which monitor the Displays tab's "main monitor only" button keeps on, as its EDID id. Empty -
+// the default - means Windows' primary monitor (or, while the TV is the primary, the largest
+// panel that is not the TV); see DisplayTopology::ResolveMainId. Set it by hand ([settings]
+// mainMonitor=GSM7768) when that guess is wrong. Held in memory like tvMonitor and written back
+// by Save.
+std::wstring DisplayMainMonitor();
+void SetDisplayMainMonitor(const std::wstring& id);
+
 // Whether hovering a tab is allowed to open its panel over a full-screen app (a
 // game, a video). On by default: the panel popping over a game because the pointer
 // brushed the screen edge is the surprise, and opening one deliberately with its

@@ -19,7 +19,8 @@ namespace DisplayControls {
 struct MonitorList : AsyncEnvelope {
     AsyncKind Kind() const override { return AsyncKind::Displays; }
     std::vector<DisplayTopology::Monitor> monitors;
-    std::wstring tvId; // which one of them is the TV, already resolved
+    std::wstring tvId;   // which one of them is the TV, already resolved
+    std::wstring mainId; // and which is the main monitor, resolved against that TV
 };
 
 struct ApplyResult : AsyncEnvelope {
@@ -28,10 +29,10 @@ struct ApplyResult : AsyncEnvelope {
     int profileIndex = -1; // the row that asked for it
 };
 
-// configuredTvId is the user's override from the config file (may be empty); it
-// is passed in by value so the worker never reads shared state.
+// configuredTvId and configuredMainId are the user's overrides from the config file (either may be
+// empty); they are passed in by value so the worker never reads shared state.
 void Refresh(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId,
-             std::wstring configuredTvId);
+             std::wstring configuredTvId, std::wstring configuredMainId);
 
 void ApplyProfile(std::vector<std::wstring> monitorIds, int profileIndex, HWND notifyWindow,
                   UINT notifyMessage, std::uint64_t requestId);
