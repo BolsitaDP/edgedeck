@@ -57,7 +57,19 @@ public:
         }
     }
 
+    // Bytes exactly as given, for the cases that are about the encoding itself.
+    static void WriteRaw(const std::string& bytes) {
+        CreateDirectoryW(ConfigDir().c_str(), nullptr);
+        HANDLE file = CreateFileW(ConfigPath().c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) return;
+        DWORD written = 0;
+        WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
+        CloseHandle(file);
+    }
+
     static void Write(const std::wstring& contents) {
+        CreateDirectoryW(ConfigDir().c_str(), nullptr);
         HANDLE file = CreateFileW(ConfigPath().c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                   FILE_ATTRIBUTE_NORMAL, nullptr);
         if (file == INVALID_HANDLE_VALUE) return;
@@ -394,7 +406,107 @@ void TestEdgeAndMonitorByHand() {
     }
 }
 
+bool SameActions(const std::vector<QuickAction>& a, const std::vector<QuickAction>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].name != b[i].name || a[i].target != b[i].target || a[i].arguments != b[i].arguments) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TestQuickActionsDefaultToTheOriginalThree() {
+    TEST("Config: with no [action] sections the Quick Actions list is the original three");
+    ScopedConfig guard;
+    Config::SetQuickActionList({{L"stale", L"x", L""}});
+    ScopedConfig::Write(L"[tab]\nwidget=QuickActions\n");
+    Config::LoadOrDefault();
+    const auto list = Config::QuickActionList();
+    CHECK_EQ(list.size(), size_t{3});
+    CHECK(SameActions(list, QuickActions::Defaults()));
+}
+
+void TestQuickActionsRoundTripWithAccents() {
+    TEST("Config: the actions survive a save and reload, accents and arguments included");
+    ScopedConfig guard;
+    ScopedConfig::Write(L"");
+
+    const std::vector<QuickAction> mine = {
+        {L"M\u00FAsica", L"C:\\Users\\Santiago\\M\u00FAsica\\lista.m3u", L"--shuffle --volume=40"},
+        {L"Documentos", L"%USERPROFILE%\\Documents", L""},
+        {L"Sitio", L"https://example.org/a?b=c&d=e", L""}, // an '=' inside a value must not split it
+        {L"Show Desktop", QuickActions::kShowDesktop, L""},
+    };
+    Config::SetQuickActionList(mine);
+    std::vector<TabSettings> tabs = {{WidgetType::QuickActions, 0.5f, 26.0f, 76.0f, 300.0f}};
+    CHECK(Config::Save(tabs));
+
+    Config::SetQuickActionList({});
+    auto loaded = Config::LoadOrDefault();
+    CHECK_EQ(loaded.size(), size_t{1}); // the tabs are undisturbed by the new sections
+    CHECK(SameActions(Config::QuickActionList(), mine));
+}
+
+void TestQuickActionsFromAHandEditedFile() {
+    TEST("Config: a hand-edited action list is cleaned, capped, and never left empty");
+    ScopedConfig guard;
+
+    // A row with no name, one with nothing to open, and one that is fine.
+    ScopedConfig::Write(L"[action]\nname=\ntarget=notepad.exe\n"
+                        L"[action]\nname=Broken\n"
+                        L"[action]\nname=  Fine  \ntarget=  calc.exe \nargs=  /x \n");
+    Config::LoadOrDefault();
+    auto list = Config::QuickActionList();
+    CHECK_EQ(list.size(), size_t{1});
+    if (list.size() == 1) {
+        CHECK(list[0].name == L"Fine");
+        CHECK(list[0].target == L"calc.exe");
+        CHECK(list[0].arguments == L"/x");
+    }
+
+    // Nothing usable at all is the defaults, not an empty panel.
+    ScopedConfig::Write(L"[action]\nname=\ntarget=\n[action]\nname=NoTarget\n");
+    Config::LoadOrDefault();
+    CHECK(SameActions(Config::QuickActionList(), QuickActions::Defaults()));
+
+    // More than the panel can hold: the first kMaxActions, in order.
+    std::wstring many;
+    for (int i = 0; i < 20; ++i) {
+        many += L"[action]\nname=A" + std::to_wstring(i) + L"\ntarget=t" + std::to_wstring(i) + L"\n";
+    }
+    ScopedConfig::Write(many);
+    Config::LoadOrDefault();
+    list = Config::QuickActionList();
+    CHECK_EQ(list.size(), QuickActions::kMaxActions);
+    if (!list.empty()) CHECK(list.front().name == L"A0");
+    if (list.size() == QuickActions::kMaxActions) CHECK(list.back().name == L"A11");
+}
+
+void TestConfigIsReadAsUtf8WithOrWithoutABom() {
+    TEST("Config: the file is UTF-8, and a byte order mark an editor added is not part of the first line");
+    ScopedConfig guard;
+
+    // "M\u00FAsica" in UTF-8 is 4D C3 BA 73 69 63 61.
+    const std::string body = "[action]\nname=M\xC3\xBA" "sica\ntarget=player.exe\n";
+    ScopedConfig::WriteRaw(body);
+    Config::LoadOrDefault();
+    auto list = Config::QuickActionList();
+    CHECK_EQ(list.size(), size_t{1});
+    if (!list.empty()) CHECK(list[0].name == L"M\u00FAsica");
+
+    ScopedConfig::WriteRaw("\xEF\xBB\xBF[settings]\ntheme=Dark\n" + body);
+    Config::LoadOrDefault();
+    CHECK(Config::CurrentThemeMode() == ThemeMode::Dark); // "[settings]" was found despite the BOM
+    list = Config::QuickActionList();
+    CHECK_EQ(list.size(), size_t{1});
+}
+
 void RunConfigTests() {
+    TestQuickActionsDefaultToTheOriginalThree();
+    TestQuickActionsRoundTripWithAccents();
+    TestQuickActionsFromAHandEditedFile();
+    TestConfigIsReadAsUtf8WithOrWithoutABom();
     TestRoundTrip();
     TestEdgeAndMonitorRoundTrip();
     TestOldConfigHasNoEdgeOrMonitor();

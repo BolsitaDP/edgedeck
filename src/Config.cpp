@@ -5,20 +5,72 @@
 #include <clocale>
 #include <cmath>
 #include <cstdlib>
-#include <fstream>
 #include <locale>
+#include <sstream>
 #include <string>
 
 namespace {
 
-// The config file is a machine-written format, not prose: it must round-trip a
-// decimal point regardless of the user's regional settings, and it must not
-// change meaning if anything ever calls std::locale::global. Both the stream
-// and the number parsing are therefore pinned to the classic locale.
-std::wifstream OpenRead(const std::wstring& path) {
-    std::wifstream file(path);
-    file.imbue(std::locale::classic());
-    return file;
+// The config file is UTF-8. It used to be read and written through wide file streams pinned to
+// the classic locale, which round-trips ASCII and nothing else - fine while every value was a
+// number or an id, and wrong the moment a quick action is called "Música" or points into a folder
+// with an accent in it. The bytes are decoded and encoded here, explicitly.
+//
+// The file is also a machine-written format: it must round-trip a decimal point whatever the
+// user's regional settings, and must not change meaning if anything ever calls
+// std::locale::global. The text is therefore parsed and formatted through classic-locale streams
+// and the number parsing below.
+bool ReadUtf8File(const std::wstring& path, std::wstring& out) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    LARGE_INTEGER size{};
+    // A settings file is a few hundred bytes. Far more than that is not one, and is not read.
+    if (!GetFileSizeEx(file, &size) || size.QuadPart > 4 * 1024 * 1024) {
+        CloseHandle(file);
+        return false;
+    }
+    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    const BOOL ok = bytes.empty() || ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr);
+    CloseHandle(file);
+    if (!ok) return false;
+    bytes.resize(read);
+
+    size_t start = 0;
+    if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xEF &&
+        static_cast<unsigned char>(bytes[1]) == 0xBB && static_cast<unsigned char>(bytes[2]) == 0xBF) {
+        start = 3; // a byte order mark, which an editor may have added
+    }
+    const int length = MultiByteToWideChar(CP_UTF8, 0, bytes.data() + start,
+                                           static_cast<int>(bytes.size() - start), nullptr, 0);
+    out.assign(static_cast<size_t>(length > 0 ? length : 0), L'\0');
+    if (length > 0) {
+        MultiByteToWideChar(CP_UTF8, 0, bytes.data() + start, static_cast<int>(bytes.size() - start),
+                            out.data(), length);
+    }
+    return true;
+}
+
+bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
+    std::string bytes;
+    if (!text.empty()) {
+        const int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+                                               nullptr, 0, nullptr, nullptr);
+        if (length <= 0) return false;
+        bytes.assign(static_cast<size_t>(length), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), bytes.data(), length,
+                            nullptr, nullptr);
+    }
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = bytes.empty() || WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
+    const BOOL flushed = ok && FlushFileBuffers(file);
+    CloseHandle(file);
+    return ok && flushed && written == bytes.size();
 }
 
 // One process-wide "C" locale for the parser. Created once (locale_t objects
@@ -122,6 +174,7 @@ std::wstring g_tvMonitor;
 std::wstring g_mainMonitor;
 bool g_fullscreenGuard = true;
 bool g_restartAfterCrash = true;
+std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
 // case it was typed in.
@@ -148,6 +201,13 @@ void SetFullscreenGuard(bool on) { g_fullscreenGuard = on; }
 bool RestartAfterCrash() { return g_restartAfterCrash; }
 void SetRestartAfterCrash(bool on) { g_restartAfterCrash = on; }
 
+std::vector<QuickAction> QuickActionList() {
+    return g_quickActions.empty() ? QuickActions::Defaults() : g_quickActions;
+}
+void SetQuickActionList(std::vector<QuickAction> list) {
+    g_quickActions = QuickActions::Sanitize(std::move(list));
+}
+
 std::wstring FilePath() {
     wchar_t buf[MAX_PATH];
     DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
@@ -165,18 +225,25 @@ std::vector<TabSettings> LoadOrDefault() {
     const std::wstring path = FilePath();
     if (path.empty()) return DefaultTabs();
 
-    std::wifstream file = OpenRead(path);
-    if (!file) return DefaultTabs();
+    std::wstring contents;
+    if (!ReadUtf8File(path, contents)) return DefaultTabs();
+    std::wistringstream file(contents);
+    file.imbue(std::locale::classic());
 
     g_tvMonitor.clear(); // re-read below if the file still names one
     g_mainMonitor.clear();
     g_fullscreenGuard = true; // likewise: absent means the default
     g_restartAfterCrash = true;
+    g_quickActions.clear();
     TabSettings current;
+    QuickAction action;
+    std::vector<QuickAction> actions;
     bool inTab = false;
     bool inSettings = false;
+    bool inAction = false;
 
     auto flush = [&] {
+        if (inAction) actions.push_back(action);
         if (!inTab) return;
         ConfigLimits::Clamp(current);
         result.push_back(current);
@@ -194,19 +261,36 @@ std::vector<TabSettings> LoadOrDefault() {
             current = TabSettings{};
             inTab = true;
             inSettings = false;
+            inAction = false;
             continue;
         }
         if (line == L"[settings]") {
             flush();
             inTab = false;
             inSettings = true;
+            inAction = false;
+            continue;
+        }
+        if (line == L"[action]") {
+            flush();
+            action = QuickAction{};
+            inTab = false;
+            inSettings = false;
+            inAction = true;
             continue;
         }
 
         const size_t eq = line.find(L'=');
-        if (eq == std::wstring::npos || (!inTab && !inSettings)) continue;
+        if (eq == std::wstring::npos || (!inTab && !inSettings && !inAction)) continue;
         const std::wstring key = line.substr(0, eq);
         const std::wstring value = line.substr(eq + 1);
+
+        if (inAction) {
+            if (key == L"name") action.name = value;
+            else if (key == L"target") action.target = value;
+            else if (key == L"args") action.arguments = value;
+            continue;
+        }
 
         if (inSettings) {
             if (key == L"theme") g_themeMode = ThemeModeFromString(value);
@@ -242,6 +326,10 @@ std::vector<TabSettings> LoadOrDefault() {
     }
     flush();
 
+    // No [action] sections (a file from before the actions were editable) and nothing usable in
+    // them both mean the original three, which QuickActionList() supplies for an empty list.
+    g_quickActions = QuickActions::Sanitize(std::move(actions));
+
     // An empty but perfectly valid file (the user removed every tab) is honoured
     // as "no tabs"; a file we could not make sense of falls back to defaults.
     return result.empty() ? DefaultTabs() : result;
@@ -252,37 +340,45 @@ bool Save(const std::vector<TabSettings>& tabs) {
     if (path.empty()) return false;
 
     const std::wstring temp = path + L".tmp";
-    {
-        std::wofstream file(temp, std::ios::trunc);
-        if (!file) return false;
-        file.imbue(std::locale::classic());
 
-        // Globals first, in their own section. Written even when every value is
-        // the default, so the file says what it means rather than what was
-        // changed.
-        file << L"[settings]\n";
-        file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
-        if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
-        if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
-        file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
-        file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
+    std::wostringstream file;
+    file.imbue(std::locale::classic()); // '.' for decimals, whatever the user's region says
 
-        for (const auto& t : tabs) {
-            file << L"[tab]\n";
-            file << L"widget=" << WidgetTypeToString(t.widgetType) << L"\n";
-            file << L"verticalRatio=" << t.verticalRatio << L"\n";
-            file << L"tabWidth=" << t.tabWidth << L"\n";
-            file << L"tabHeight=" << t.tabHeight << L"\n";
-            file << L"panelWidth=" << t.panelWidth << L"\n";
-            file << L"edge=" << EdgeToString(t.edge) << L"\n";
-            if (!t.monitor.empty()) file << L"monitor=" << t.monitor << L"\n";
+    // Globals first, in their own section. Written even when every value is
+    // the default, so the file says what it means rather than what was
+    // changed.
+    file << L"[settings]\n";
+    file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
+    if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
+    if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
+    file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";
+    file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
+
+    for (const auto& t : tabs) {
+        file << L"[tab]\n";
+        file << L"widget=" << WidgetTypeToString(t.widgetType) << L"\n";
+        file << L"verticalRatio=" << t.verticalRatio << L"\n";
+        file << L"tabWidth=" << t.tabWidth << L"\n";
+        file << L"tabHeight=" << t.tabHeight << L"\n";
+        file << L"panelWidth=" << t.panelWidth << L"\n";
+        file << L"edge=" << EdgeToString(t.edge) << L"\n";
+        if (!t.monitor.empty()) file << L"monitor=" << t.monitor << L"\n";
+    }
+
+    // The rows of the Quick Actions panels. Written whenever they are not the defaults, so a
+    // file that never had them stays as it was, and "no sections" keeps meaning "the defaults".
+    if (!g_quickActions.empty()) {
+        for (const QuickAction& a : g_quickActions) {
+            file << L"[action]\n";
+            file << L"name=" << a.name << L"\n";
+            file << L"target=" << a.target << L"\n";
+            if (!a.arguments.empty()) file << L"args=" << a.arguments << L"\n";
         }
-        file.flush();
-        if (!file) {
-            file.close();
-            DeleteFileW(temp.c_str());
-            return false;
-        }
+    }
+
+    if (!WriteUtf8File(temp, file.str())) {
+        DeleteFileW(temp.c_str());
+        return false;
     }
 
     if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {

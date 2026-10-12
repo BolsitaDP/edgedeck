@@ -34,6 +34,7 @@ constexpr int kIdThemeCombo = 113;
 constexpr int kIdFullscreenGuard = 114;
 constexpr int kIdMonitorCombo = 115;
 constexpr int kIdEdgeCombo = 116;
+constexpr int kIdActionsButton = 118;
 
 struct TypeEntry {
     WidgetType type;
@@ -71,40 +72,15 @@ constexpr int kClientHeight = 581;
 // the box itself, and the open list is where the choosing is done.
 constexpr int kMonitorDropWidth = 330;
 
-COLORREF ToColorRef(const D2D1_COLOR_F& c) {
-    auto channel = [](float v) {
-        return static_cast<BYTE>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
-    };
-    return RGB(channel(c.r), channel(c.g), channel(c.b));
-}
-
-// Windows has no dark mode for common controls as such; what it has is a set of
-// alternate visual styles that Explorer and the common dialogs use, selected per
-// control with SetWindowTheme. Buttons, lists and the trackbar take the Explorer
-// one; combo boxes and edit boxes take the file-dialog one.
-BOOL CALLBACK ThemeChild(HWND child, LPARAM dark) {
-    wchar_t cls[32];
-    if (!GetClassNameW(child, cls, 32)) return TRUE;
-
-    const wchar_t* darkTheme = nullptr;
-    if (_wcsicmp(cls, L"Button") == 0 || _wcsicmp(cls, L"ListBox") == 0 ||
-        _wcsicmp(cls, TRACKBAR_CLASSW) == 0) {
-        darkTheme = L"DarkMode_Explorer";
-    } else if (_wcsicmp(cls, L"ComboBox") == 0 || _wcsicmp(cls, L"Edit") == 0) {
-        darkTheme = L"DarkMode_CFD";
-    }
-    // Null for both names puts the control back on the default style, which is
-    // what a window that has just been switched back to light needs.
-    if (darkTheme) SetWindowTheme(child, dark ? darkTheme : nullptr, nullptr);
-    return TRUE;
-}
 } // namespace
 
 bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initial,
-                             SaveCallback onSave, ProblemCallback onProblem) {
+                             SaveCallback onSave, ProblemCallback onProblem,
+                             ActionsCallback onEditActions) {
     m_tabs = std::move(initial);
     m_onSave = std::move(onSave);
     m_onProblem = std::move(onProblem);
+    m_onEditActions = std::move(onEditActions);
     BuildMonitorChoices();
 
     static bool classRegistered = false;
@@ -248,6 +224,9 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 418, 50, 24, kIdDown);
 
     make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
+    // The list of quick actions is shared by every Quick Actions tab, so it is edited in a window of
+    // its own; this is the way in from here.
+    m_actionsButton = make(L"BUTTON", L"Actions...", BS_PUSHBUTTON, 396, 8, 80, 22, kIdActionsButton);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 250,
                        200, kIdTypeCombo);
     for (const TypeEntry& entry : kTypes) {
@@ -521,52 +500,14 @@ void SettingsWindow::OnSave() {
     DestroyWindow(m_hwnd);
 }
 
-void SettingsWindow::ApplyTheme() {
-    if (!m_hwnd) return;
-
-    // The same palette the panels use, so a "Always dark" override darkens this
-    // window too, and a light override on a dark system keeps it light.
-    const PanelTheme& theme = PanelTheme::Current();
-    m_themed = theme.dark && !theme.highContrast;
-
-    if (m_windowBrush) DeleteObject(m_windowBrush);
-    if (m_controlBrush) DeleteObject(m_controlBrush);
-    m_windowBrush = nullptr;
-    m_controlBrush = nullptr;
-    if (m_themed) {
-        m_windowColor = ToColorRef(theme.panelBg);
-        m_controlColor = ToColorRef(theme.controlBg);
-        m_textColor = ToColorRef(theme.textPrimary);
-        m_mutedColor = ToColorRef(theme.textSecondary);
-        m_windowBrush = CreateSolidBrush(m_windowColor);
-        m_controlBrush = CreateSolidBrush(m_controlColor);
-    }
-
-    // The title bar is drawn by the window manager, not by us. Attribute 20 is
-    // the documented one (Windows 10 2004 and later); 19 is what it was called in
-    // the builds before that, and failing both is harmless - the bar stays light.
-    const BOOL dark = m_themed ? TRUE : FALSE;
-    if (FAILED(DwmSetWindowAttribute(m_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)))) {
-        DwmSetWindowAttribute(m_hwnd, 19, &dark, sizeof(dark));
-    }
-
-    EnumChildWindows(m_hwnd, ThemeChild, m_themed ? 1 : 0);
-    RedrawWindow(m_hwnd, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME | RDW_UPDATENOW);
-}
+void SettingsWindow::ApplyTheme() { m_theme.Apply(m_hwnd); }
 
 LRESULT SettingsWindow::OnControlColor(UINT msg, HDC dc, HWND control) {
-    // An edit box reports itself as a STATIC while it is disabled or read-only, so
-    // the message alone cannot tell a field from a label; the id can.
+    // The number fields are edit boxes that report themselves as STATIC while disabled.
     const int id = GetDlgCtrlID(control);
-    const bool field = msg == WM_CTLCOLOREDIT || msg == WM_CTLCOLORLISTBOX || id == kIdTabWidth ||
-                       id == kIdTabHeight || id == kIdPanelWidth;
-
-    SetTextColor(dc, IsWindowEnabled(control) ? m_textColor : m_mutedColor);
-    SetBkColor(dc, field ? m_controlColor : m_windowColor);
-    return reinterpret_cast<LRESULT>(field ? m_controlBrush : m_windowBrush);
+    const bool numberField = id == kIdTabWidth || id == kIdTabHeight || id == kIdPanelWidth;
+    return m_theme.ControlColor(msg, dc, control, numberField);
 }
-
 LRESULT CALLBACK SettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     SettingsWindow* self =
         reinterpret_cast<SettingsWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -601,12 +542,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             // Class background is the system button face; when themed the dialog
             // paints its own, so a theme change repaints correctly without
             // re-registering the class.
-            if (m_themed && m_windowBrush) {
-                RECT client{};
-                GetClientRect(hwnd, &client);
-                FillRect(reinterpret_cast<HDC>(wParam), &client, m_windowBrush);
-                return 1;
-            }
+            if (m_theme.EraseBackground(hwnd, reinterpret_cast<HDC>(wParam))) return 1;
             break;
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLOREDIT:
@@ -614,7 +550,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_CTLCOLORBTN:
             // With the system look nothing is overridden, and the default
             // handling is exactly what high contrast needs.
-            if (m_themed && m_windowBrush && m_controlBrush) {
+            if (m_theme.Themed()) {
                 return OnControlColor(msg, reinterpret_cast<HDC>(wParam),
                                       reinterpret_cast<HWND>(lParam));
             }
@@ -658,6 +594,8 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 OnMove(1);
             } else if (id == kIdSave) {
                 OnSave();
+            } else if (id == kIdActionsButton) {
+                if (m_onEditActions) m_onEditActions();
             } else if (id == kIdClose) {
                 DestroyWindow(hwnd);
             }
@@ -674,11 +612,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 DeleteObject(m_font);
                 m_font = nullptr;
             }
-            if (m_windowBrush) DeleteObject(m_windowBrush);
-            if (m_controlBrush) DeleteObject(m_controlBrush);
-            m_windowBrush = nullptr;
-            m_controlBrush = nullptr;
-            m_themed = false;
+            m_theme.Release();
             m_placements.clear();
             m_hwnd = nullptr;
             return 0;

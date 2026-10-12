@@ -7,6 +7,7 @@
 
 #include "PanelWidget.h"
 #include "Placement.h"
+#include "QuickAction.h"
 
 // The user-configurable subset of a tab's layout. Tab's own TabConfig also
 // carries fixed constants (corner radius, animation timing) that aren't
@@ -107,6 +108,12 @@ void SetFullscreenGuard(bool on);
 // only an explicit "off" turns it off. Config-only: [settings] restartAfterCrash=0.
 bool RestartAfterCrash();
 void SetRestartAfterCrash(bool on);
+
+// The rows of every Quick Actions panel. Absent from the file means the defaults (what it always
+// showed); a list that is empty after Sanitize also means the defaults, so a damaged file cannot
+// leave a panel with nothing in it. [action] sections in config.txt, saved with Save.
+std::vector<QuickAction> QuickActionList();
+void SetQuickActionList(std::vector<QuickAction> list);
 
 // Written to a sibling temp file and swapped in atomically, so a crash or a
 // full disk can never leave a half-written file that later loads as "one tab

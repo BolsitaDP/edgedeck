@@ -63,6 +63,12 @@ add_executable(EdgeDeck WIN32
     src/Placement.h
     src/AppIcon.cpp
     src/AppIcon.h
+    src/DialogTheme.cpp
+    src/DialogTheme.h
+    src/QuickAction.cpp
+    src/QuickAction.h
+    src/ActionsWindow.cpp
+    src/ActionsWindow.h
     src/Autostart.cpp
     src/Autostart.h
     src/CrashHandler.cpp
@@ -104,6 +110,7 @@ target_link_libraries(EdgeDeck PRIVATE
     shcore
     windowsapp
     comctl32
+    comdlg32
     uxtheme
     dwmapi
     dxva2

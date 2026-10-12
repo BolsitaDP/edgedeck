@@ -174,10 +174,12 @@ function Start-TestApp {
     .PARAMETER Settings  Lines written under [settings], e.g. @('theme=Dark','fullscreenGuard=0').
     .PARAMETER TabExtra  Extra lines for each tab, parallel to -Tabs (one string per tab, lines
                          separated by `n), e.g. @('edge=left', 'edge=left`nmonitor=SAM0F9D').
+    .PARAMETER Raw       Text appended to the config after the tabs, as it is - for sections that
+                         are not tabs, such as [action] rows for the Quick Actions panel.
     .OUTPUTS   An object with Process, Scratch, AppData, Trigger and Log.
     #>
     param([string[]]$Tabs = @('QuickActions'), [string[]]$Settings = @('theme=Dark'), [string]$ToolsDir,
-          [double]$StartupSeconds = 3, [string[]]$TabExtra = @())
+          [double]$StartupSeconds = 3, [string[]]$TabExtra = @(), [string]$Raw = '')
     $scratch = New-ScratchDir
     $appdata = Join-Path $scratch 'appdata'
     $trigger = Join-Path $scratch 'trig'
@@ -190,7 +192,9 @@ function Start-TestApp {
                  "tabWidth=26`ntabHeight=76`npanelWidth=320`n"
         if ($i -lt $TabExtra.Count -and $TabExtra[$i]) { $text += $TabExtra[$i] + "`n" }
     }
-    Set-Content -Path "$appdata\EdgeDeck\config.txt" -Value $text -Encoding ASCII
+    if ($Raw) { $text += $Raw.TrimEnd("`n") + "`n" }
+    # UTF-8 without a BOM, which is what the app writes: ASCII would turn an accented name into '?'.
+    [IO.File]::WriteAllText("$appdata\EdgeDeck\config.txt", $text, (New-Object Text.UTF8Encoding($false)))
 
     $real = $env:LOCALAPPDATA
     $env:LOCALAPPDATA = $appdata
