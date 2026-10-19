@@ -81,6 +81,12 @@ add_executable(EdgeDeck WIN32
     src/QuickAction.h
     src/ActionIcons.cpp
     src/ActionIcons.h
+    src/BadgeColor.cpp
+    src/BadgeColor.h
+    src/RecentFiles.cpp
+    src/RecentFiles.h
+    src/RecentFilesWidget.cpp
+    src/RecentFilesWidget.h
     src/PanelImage.h
     src/FileDrop.cpp
     src/FileDrop.h
@@ -137,6 +143,7 @@ target_link_libraries(EdgeDeck PRIVATE
     winhttp
     mmdevapi
     propsys
+    shlwapi
     uuid
     avrt
 )

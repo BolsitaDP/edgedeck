@@ -6,6 +6,7 @@
 #include <vector>
 #include "Config.h"
 #include "DialogTheme.h"
+#include "FileDrop.h"
 
 // Modeless comctl32 settings dialog: lets the user pick each tab's widget
 // type, monitor, edge, vertical position, and size, then reorder/add/remove tabs. Built
@@ -48,6 +49,7 @@ private:
     void OnMove(int delta);
     void OnSave();
     void OnTrackbarChanged();
+    void OnFoldersDropped(std::vector<std::wstring> paths);
 
     // Follows the panel's palette: a dark title bar, dark child controls and a
     // dark background when the panel is dark, and the plain system look when it is
@@ -80,6 +82,7 @@ private:
     HWND m_edgeCombo = nullptr;
     HWND m_delayCombo = nullptr;
     HWND m_actionsButton = nullptr;
+    HWND m_folderEdit = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
     HWND m_upButton = nullptr;
@@ -113,6 +116,12 @@ private:
     ProblemCallback m_onProblem;
     ActionsCallback m_onEditActions;
     std::vector<int> m_delayChoices; // milliseconds, parallel to the combo box
+
+    // The folder the Recent files tabs list (a setting of the app, not of one tab): held here while
+    // the window is open, shown in the folder box when the selected tab is a Recent files one, and
+    // handed to Config on Save. A folder dragged from Explorer onto the window sets it.
+    std::wstring m_recentFolder;
+    FileDrop::Zone m_drop;
 
     // What the startup checkbox showed when the window opened. Saving only touches
     // the startup entry when the box was actually changed: writing it on every Save

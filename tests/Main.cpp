@@ -16,6 +16,7 @@ void RunPlacementTests();
 void RunIconTests();
 void RunQuickActionTests();
 void RunActionIconTests();
+void RunRecentFilesTests();
 void RunCrashTests();
 
 int wmain() {
@@ -53,6 +54,8 @@ int wmain() {
     RunQuickActionTests();
     std::printf("\n");
     RunActionIconTests();
+    std::printf("\n");
+    RunRecentFilesTests();
     std::printf("\n");
     RunCrashTests();
 

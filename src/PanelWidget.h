@@ -17,6 +17,7 @@ enum class WidgetType {
     Lyrics,
     Volume,
     Displays,
+    RecentFiles,
 };
 
 // Drawing primitives a PanelWidget can call without owning any D2D

@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shldisp.h>
+#include <shlwapi.h>
 
 #include <cstdio>
 
@@ -84,15 +85,18 @@ std::wstring DescribeShellError(DWORD error) {
     }
 }
 
-bool Run(const QuickAction& action, std::wstring& problem) {
-    if (action.target == QuickActions::kShowDesktop) {
-        if (ShowDesktopToggle()) return true;
-        problem = L"Windows could not show the desktop.";
+namespace {
+
+// Asks the shell to open `target`. `what` is how the failure sentence names it.
+bool Launch(const std::wstring& target, const std::wstring& arguments, const std::wstring& what,
+            std::wstring& problem) {
+    // Windows shows its "Open with" window for a file nothing is registered for, even when asked
+    // for no interface at all. That window takes the focus, so it is the one thing never done from a
+    // panel: say it in the header instead, like every other reason a row cannot open.
+    if (NothingOpens(target)) {
+        problem = L"Could not open \"" + what + L"\": " + DescribeShellError(ERROR_NO_ASSOCIATION) + L".";
         return false;
     }
-
-    const std::wstring target = ExpandVariables(action.target);
-    const std::wstring arguments = ExpandVariables(action.arguments);
 
     // A program is started from its own folder, as double-clicking it would; a web address or a
     // bare name like "notepad.exe" has none to offer.
@@ -122,8 +126,45 @@ bool Run(const QuickAction& action, std::wstring& problem) {
     // GetLastError.
     const INT_PTR code = reinterpret_cast<INT_PTR>(info.hInstApp);
     if (error == 0 && code > 0 && code <= 32) error = static_cast<DWORD>(code);
-    problem = L"Could not open \"" + action.name + L"\": " + DescribeShellError(error) + L".";
+    problem = L"Could not open \"" + what + L"\": " + DescribeShellError(error) + L".";
     return false;
+}
+
+} // namespace
+
+bool NothingOpens(const std::wstring& path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) return false;
+
+    const size_t slash = path.find_last_of(L"\\/");
+    const size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos || (slash != std::wstring::npos && dot < slash)) return false;
+    const std::wstring extension = path.substr(dot);
+
+    wchar_t program[MAX_PATH * 2] = {};
+    DWORD length = MAX_PATH * 2;
+    const HRESULT hr = AssocQueryStringW(ASSOCF_NOTRUNCATE, ASSOCSTR_EXECUTABLE, extension.c_str(),
+                                         L"open", program, &length);
+    // A lookup that fails says nothing either way: shortcuts, and every type a Store app opens
+    // (pictures, music), fail it - with ERROR_NO_ASSOCIATION, even - and open perfectly well.
+    if (FAILED(hr)) return false;
+
+    const wchar_t* name = wcsrchr(program, L'\\');
+    name = name ? name + 1 : program;
+    return _wcsicmp(name, L"OpenWith.exe") == 0;
+}
+
+bool Run(const QuickAction& action, std::wstring& problem) {
+    if (action.target == QuickActions::kShowDesktop) {
+        if (ShowDesktopToggle()) return true;
+        problem = L"Windows could not show the desktop.";
+        return false;
+    }
+    return Launch(ExpandVariables(action.target), ExpandVariables(action.arguments), action.name, problem);
+}
+
+bool Open(const std::wstring& path, const std::wstring& what, std::wstring& problem) {
+    return Launch(path, std::wstring(), what, problem);
 }
 
 } // namespace Actions

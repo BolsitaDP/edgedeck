@@ -123,6 +123,11 @@ void SetOpenDelayMs(int ms); // clamped to 0..kMaxOpenDelayMs
 std::vector<QuickAction> QuickActionList();
 void SetQuickActionList(std::vector<QuickAction> list);
 
+// The folder every Recent files tab lists. Empty - the default - means the user's Downloads folder.
+// Held in memory like the theme and written by Save ([settings] recentFolder=...).
+std::wstring RecentFolder();
+void SetRecentFolder(const std::wstring& folder);
+
 // Whether the one-time "EdgeDeck is not set to start with Windows" note has been shown, so it is
 // said once and not at every launch.
 bool StartupHintShown();

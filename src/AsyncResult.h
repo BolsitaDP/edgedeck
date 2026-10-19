@@ -48,6 +48,7 @@ enum class AsyncKind : int {
     DisplayApply, // the outcome of switching them
     Notice,       // a short message for the user, see PanelWidget::ReportProblem
     ActionIcons,  // the pictures of what the Quick Actions rows open
+    RecentFiles,  // the newest files of a folder, for the Recent files tab
 };
 
 struct AsyncEnvelope {

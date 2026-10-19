@@ -3,10 +3,11 @@
 // usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N] [window=actions]
 //                        [dropfiles=X,Y,path|path|...]
 //   window=actions : host the quick-actions editor instead of Settings, and report its layout
-//   dropfiles=X,Y,paths : with window=actions, drag those files from "Explorer" onto the point
+//   dropfiles=X,Y,paths : drag those files from "Explorer" onto the point
 //           (X,Y) of the editor's client area, given in logical 96-DPI units - a real OLE drag, so
 //           it goes through the same lookup of the window under the pointer a user's drag does -
-//           then print the list, the status line, and what Save would keep.
+//           then print the list, the status line, and what Save would keep. On Settings the
+//           first tab is a Recent files one, and what is printed is the folder box.
 //   drop=N : open the Nth combo box's list (1 widget type, 2 monitor, 3 edge, 4 theme)
 //   dpi=N : after creation, send the window the WM_DPICHANGED a monitor at N DPI would, so the
 //           layout can be checked at other scales without changing the user's display settings.
@@ -305,6 +306,9 @@ int wmain(int argc, wchar_t** argv) {
         {WidgetType::Brightness, 0.80f, 26.0f, 76.0f, 300.0f},
     };
 
+    // A drop on Settings is a folder for a Recent files tab, which is the one selected.
+    if (dropFiles && !hostActions) tabs.insert(tabs.begin(), {WidgetType::RecentFiles, 0.5f, 26.0f, 76.0f, 300.0f});
+
     SettingsWindow settings;
     ActionsWindow editor;
     if (hostActions) {
@@ -351,7 +355,7 @@ int wmain(int argc, wchar_t** argv) {
 
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 
-    if (dropFiles && hostActions) {
+    if (dropFiles) {
         // Let the window finish appearing, then drag onto it and report what it did with that.
         const DWORD settle = GetTickCount() + 400;
         MSG pending;
@@ -363,7 +367,13 @@ int wmain(int argc, wchar_t** argv) {
             Sleep(10);
         }
         DropFilesOnto(hwnd, dropX, dropY, dropPaths);
-        ReportEditor(hwnd);
+        if (hostActions) {
+            ReportEditor(hwnd);
+        } else {
+            wchar_t folder[600] = {};
+            GetWindowTextW(GetDlgItem(hwnd, 119), folder, 600); // the Recent folder box
+            printf("folder box: %ls\n", folder);
+        }
     }
 
     if (drop) {

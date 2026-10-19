@@ -1,3 +1,4 @@
+#include "BadgeColor.h"
 #include "Diagnostics.h"
 #include "Renderer.h"
 #include "MediaWidget.h"
@@ -110,40 +111,9 @@ D2D1_COLOR_F BadgeColorFor(const std::wstring& name) {
         if (lower.find(entry.match) != std::wstring::npos) return entry.color;
     }
 
-    // Unknown app: derive a stable, reasonably saturated colour from the name
-    // instead of collapsing every unknown source into the same slate, so two
-    // unfamiliar apps are still told apart at a glance.
-    unsigned long long hash = 1469598103934665603ULL; // FNV-1a
-    for (wchar_t c : name) {
-        hash ^= static_cast<unsigned long long>(c & 0x7F);
-        hash *= 1099511628211ULL;
-    }
-
-    // HSL -> RGB by hand: D2D1 has no HSL helper, and going through HSL keeps
-    // every generated colour at the same lightness and saturation, which is what
-    // makes an arbitrary app name still look deliberate.
-    //
-    // The lightness follows the theme: a badge has to separate from the surface it
-    // sits on, and one value cannot do that for both a #F3F3F3 and a #202020
-    // panel. DrawBadge picks the letter colour from the result, so any lightness
-    // here stays readable.
-    const float hue = static_cast<float>(hash % 360) / 360.0f;
-    const float saturation = PanelTheme::Current().dark ? 0.50f : 0.58f;
-    const float lightness = PanelTheme::Current().dark ? 0.54f : 0.44f;
-
-    auto channel = [&](float p, float q, float t) {
-        if (t < 0.0f) t += 1.0f;
-        if (t > 1.0f) t -= 1.0f;
-        if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
-        if (t < 1.0f / 2.0f) return q;
-        if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
-        return p;
-    };
-
-    const float q = lightness * (1.0f + saturation) - lightness * saturation;
-    const float p = 2.0f * lightness - q;
-    return D2D1::ColorF(channel(p, q, hue + 1.0f / 3.0f), channel(p, q, hue),
-                        channel(p, q, hue - 1.0f / 3.0f), 1.0f);
+    // Unknown app: a stable colour from the name, so two unfamiliar apps are still told apart
+    // at a glance instead of collapsing into one slate.
+    return HashedBadgeColor(name);
 }
 
 std::wstring RowSubtitle(const MediaControls::SessionInfo& info) {

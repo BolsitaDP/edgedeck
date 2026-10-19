@@ -90,6 +90,47 @@ void TestARowThatCannotRunSaysWhy() {
     CHECK(problem.find(L"not found") != std::wstring::npos);
 }
 
+void TestAFileNothingOpensIsNotHandedToTheShell() {
+    TEST("Actions: a file whose type has no program says so, instead of Windows' Open with window");
+    wchar_t temp[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp);
+    const std::wstring unknown = std::wstring(temp) + L"edgedeck-test.edgedecktest";
+    {
+        HANDLE h = CreateFileW(unknown.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+
+    CHECK(Actions::NothingOpens(unknown));
+    // The negatives are what keeps a real file from being refused: a program has its own handler,
+    // and what is not a file on disk is not this function's to judge.
+    wchar_t system[MAX_PATH];
+    GetSystemDirectoryW(system, MAX_PATH);
+    CHECK(!Actions::NothingOpens(std::wstring(system) + L"\\notepad.exe"));
+    CHECK(!Actions::NothingOpens(system));                          // a folder
+    // A shortcut's type has no "open" command of its own - the shell follows the link - so the
+    // lookup fails, with ERROR_NO_ASSOCIATION; that must not read as "nothing opens it". Store-app
+    // types (.png, .mp3) fail the same way on a machine that has them.
+    const std::wstring shortcut = std::wstring(temp) + L"edgedeck-test-shortcut.lnk";
+    {
+        HANDLE h = CreateFileW(shortcut.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+    CHECK(!Actions::NothingOpens(shortcut));
+    DeleteFileW(shortcut.c_str());
+    CHECK(!Actions::NothingOpens(L"C:\\no\\such\\file.edgedecktest")); // not there at all
+    CHECK(!Actions::NothingOpens(L"https://example.org/a.edgedecktest"));
+
+    // And through the launcher: false with the sentence, at once, and no window.
+    std::wstring problem;
+    CHECK(!Actions::Open(unknown, L"unknown-kind", problem));
+    CHECK(problem.find(L"\"unknown-kind\"") != std::wstring::npos);
+    CHECK(problem.find(L"nothing is set to open that kind of file") != std::wstring::npos);
+
+    DeleteFileW(unknown.c_str());
+}
+
 void TestNameFromPath() {
     TEST("QuickActions: the name a dropped file or folder suggests is its own, without the extension");
     CHECK(QuickActions::NameFromPath(L"C:\\Tools\\Notes.lnk") == L"Notes");
@@ -122,4 +163,5 @@ void RunQuickActionTests() {
     TestShellErrorsAreDescribed();
     TestARowThatCannotRunSaysWhy();
     TestNameFromPath();
+    TestAFileNothingOpensIsNotHandedToTheShell();
 }

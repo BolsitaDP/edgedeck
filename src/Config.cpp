@@ -1,5 +1,7 @@
 #include "Config.h"
 
+#include "RecentFiles.h"
+
 #include <windows.h>
 
 #include <clocale>
@@ -114,6 +116,7 @@ const wchar_t* WidgetTypeToString(WidgetType type) {
         case WidgetType::Lyrics: return L"Lyrics";
         case WidgetType::Volume: return L"Volume";
         case WidgetType::Displays: return L"Displays";
+        case WidgetType::RecentFiles: return L"Recent";
         default: return L"QuickActions";
     }
 }
@@ -126,6 +129,7 @@ WidgetType WidgetTypeFromString(const std::wstring& s) {
     if (s == L"Lyrics") return WidgetType::Lyrics;
     if (s == L"Volume") return WidgetType::Volume;
     if (s == L"Displays") return WidgetType::Displays;
+    if (s == L"Recent") return WidgetType::RecentFiles;
     return WidgetType::QuickActions;
 }
 
@@ -176,6 +180,7 @@ bool g_fullscreenGuard = true;
 bool g_restartAfterCrash = true;
 int g_openDelayMs = 0;
 bool g_startupHintShown = false;
+std::wstring g_recentFolder;             // empty means Downloads, resolved where it is used
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
@@ -213,6 +218,9 @@ void SetQuickActionList(std::vector<QuickAction> list) {
     g_quickActions = QuickActions::Sanitize(std::move(list));
 }
 
+std::wstring RecentFolder() { return g_recentFolder; }
+void SetRecentFolder(const std::wstring& folder) { g_recentFolder = RecentFiles::SanitizeFolder(folder); }
+
 bool StartupHintShown() { return g_startupHintShown; }
 void SetStartupHintShown(bool shown) { g_startupHintShown = shown; }
 
@@ -244,6 +252,7 @@ std::vector<TabSettings> LoadOrDefault() {
     g_restartAfterCrash = true;
     g_openDelayMs = 0;
     g_startupHintShown = false;
+    g_recentFolder.clear();
     g_quickActions.clear();
     TabSettings current;
     QuickAction action;
@@ -320,6 +329,7 @@ std::vector<TabSettings> LoadOrDefault() {
             if (key == L"startupHintShown" && (value == L"1" || value == L"true")) {
                 g_startupHintShown = true;
             }
+            if (key == L"recentFolder") g_recentFolder = RecentFiles::SanitizeFolder(value);
             continue;
         }
 
@@ -372,6 +382,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     file << L"restartAfterCrash=" << (g_restartAfterCrash ? L"1" : L"0") << L"\n";
     file << L"openDelayMs=" << g_openDelayMs << L"\n";
     if (g_startupHintShown) file << L"startupHintShown=1\n";
+    if (!g_recentFolder.empty()) file << L"recentFolder=" << g_recentFolder << L"\n";
 
     for (const auto& t : tabs) {
         file << L"[tab]\n";

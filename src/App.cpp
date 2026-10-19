@@ -6,6 +6,7 @@
 #include "Tab.h"
 #include "ActionsWindow.h"
 #include "QuickActionsWidget.h"
+#include "RecentFilesWidget.h"
 #include "MediaWidget.h"
 #include "BrightnessWidget.h"
 #include "LyricsWidget.h"
@@ -68,6 +69,7 @@ std::unique_ptr<PanelWidget> MakeWidget(WidgetType type) {
         case WidgetType::Lyrics: return std::make_unique<LyricsWidget>();
         case WidgetType::Volume: return std::make_unique<VolumeWidget>();
         case WidgetType::Displays: return std::make_unique<DisplayWidget>();
+        case WidgetType::RecentFiles: return std::make_unique<RecentFilesWidget>();
         default: return std::make_unique<QuickActionsWidget>();
     }
 }
@@ -271,6 +273,9 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
         if (typesMatch) {
             for (size_t i = 0; i < settings.size(); ++i) {
                 m_tabs[i]->ApplyConfig(MakeTabConfig(settings[i]));
+                // The folder a Recent files tab lists is a setting of its own and may have
+                // changed in this Save; the widget is kept, so it has to be told.
+                if (settings[i].widgetType == WidgetType::RecentFiles) m_tabs[i]->RefreshWidget();
             }
             return;
         }

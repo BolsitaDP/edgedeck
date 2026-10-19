@@ -18,7 +18,9 @@ add_executable(EdgeDeckTests
     IconTests.cpp
     QuickActionTests.cpp
     ActionIconTests.cpp
+    RecentFilesTests.cpp
     ${CMAKE_SOURCE_DIR}/src/ActionIcons.cpp
+    ${CMAKE_SOURCE_DIR}/src/RecentFiles.cpp
     ${CMAKE_SOURCE_DIR}/src/Fullscreen.cpp
     ${CMAKE_SOURCE_DIR}/src/Placement.cpp
     ${CMAKE_SOURCE_DIR}/src/QuickAction.cpp
@@ -61,6 +63,7 @@ target_link_libraries(EdgeDeckTests PRIVATE
     oleaut32
     windowsapp
     winhttp
+    shlwapi
 )
 
 if (MSVC)

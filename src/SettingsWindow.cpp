@@ -2,6 +2,7 @@
 #include "AppIcon.h"
 #include "Autostart.h"
 #include "DisplayTopology.h"
+#include "RecentFiles.h"
 #include "Renderer.h"
 
 #include <commctrl.h>
@@ -36,6 +37,7 @@ constexpr int kIdMonitorCombo = 115;
 constexpr int kIdEdgeCombo = 116;
 constexpr int kIdDelayCombo = 117;
 constexpr int kIdActionsButton = 118;
+constexpr int kIdFolderEdit = 119;
 
 struct TypeEntry {
     WidgetType type;
@@ -49,6 +51,7 @@ constexpr TypeEntry kTypes[] = {
     {WidgetType::Lyrics, L"Lyrics (auto-detect)", L"Lyrics"},
     {WidgetType::Volume, L"Volume (audio output)", L"Volume"},
     {WidgetType::Displays, L"Displays (switch monitors)", L"Displays"},
+    {WidgetType::RecentFiles, L"Recent files (a folder)", L"Recent files"},
 };
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypes) / sizeof(kTypes[0]));
 
@@ -67,7 +70,7 @@ const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 
 // The client area in logical (96-DPI) units: what the controls below are laid out in.
 constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 522;
+constexpr int kClientHeight = 554;
 
 // The monitor list is wider than its combo box: a name, an id and "(not connected)" do not fit in
 // the box itself, and the open list is where the choosing is done.
@@ -79,6 +82,7 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
                              SaveCallback onSave, ProblemCallback onProblem,
                              ActionsCallback onEditActions) {
     m_tabs = std::move(initial);
+    m_recentFolder = Config::RecentFolder();
     m_onSave = std::move(onSave);
     m_onProblem = std::move(onProblem);
     m_onEditActions = std::move(onEditActions);
@@ -216,15 +220,15 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // Left: the tabs and the buttons that arrange them. The list runs down to the row the
     // buttons share with Save and Close, so the window is no taller than the right column needs.
     make(L"STATIC", L"Tabs", 0, 12, 10, 100, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 312, kIdList);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 344, kIdList);
 
-    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 352, 56, 24, kIdAdd);
+    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 384, 56, 24, kIdAdd);
     // Wide enough for their label with room to spare: "Remove" and "Down" had the
     // text within a pixel or two of the edges, which any other font, language or
     // scale turns into a clipped word.
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 352, 66, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 352, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 352, 50, 24, kIdDown);
+    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 384, 66, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 384, 34, 24, kIdUp);
+    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 384, 50, 24, kIdDown);
 
     // Right: what belongs to the selected tab, then what belongs to the whole app.
     make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
@@ -273,7 +277,16 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
         SendMessageW(m_edgeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
     }
 
-    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 234,
+    // The folder the Recent files tabs list. It is one setting for all of them, so it is only
+    // editable while a Recent files tab is the selected one (otherwise it would be a field that
+    // does nothing); a folder dragged onto the window lands here as well.
+    make(L"STATIC", L"Recent folder:", 0, 220, 232, 92, 18, 0);
+    m_folderEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 314, 230, 162, 22,
+                        kIdFolderEdit);
+    SendMessageW(m_folderEdit, EM_SETLIMITTEXT, RecentFiles::kMaxFolderLength, 0);
+    SendMessageW(m_folderEdit, EM_SETCUEBANNER, FALSE, reinterpret_cast<LPARAM>(L"Downloads (default)"));
+
+    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 266,
                              256, 22, kIdAutostart);
     // "Enabled" means it will really start - an entry that Task Manager switched
     // off shows as unticked, so ticking it and saving is what turns it back on.
@@ -284,8 +297,8 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // the rest of Windows; forcing either mode is for people whose system setting
     // and preferred panel appearance disagree, which is not rare - plenty of
     // people run a light system and still want the dark panel.
-    make(L"STATIC", L"Theme:", 0, 220, 266, 58, 18, 0);
-    m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 264,
+    make(L"STATIC", L"Theme:", 0, 220, 298, 58, 18, 0);
+    m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 296,
                         196, 120, kIdThemeCombo);
     for (const wchar_t* label : {L"Follow Windows", L"Always dark", L"Always light"}) {
         SendMessageW(m_themeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
@@ -294,8 +307,8 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     // How long the pointer has to rest on a tab before its panel opens. "Instant" is how it has
     // always been; a short wait stops a pointer that is only passing the edge from opening panels.
-    make(L"STATIC", L"Open delay:", 0, 220, 298, 84, 18, 0);
-    m_delayCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 308, 296,
+    make(L"STATIC", L"Open delay:", 0, 220, 330, 84, 18, 0);
+    m_delayCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 308, 328,
                         168, 140, kIdDelayCombo);
     BuildDelayChoices();
     for (int ms : m_delayChoices) {
@@ -316,26 +329,26 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // Off lets a hover open panels over a game or a video; the keyboard shortcuts
     // open them either way.
     m_fullscreenCheck = make(L"BUTTON", L"Don't open over full-screen apps",
-                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 328, 256, 22, kIdFullscreenGuard);
+                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 360, 256, 22, kIdFullscreenGuard);
     SendMessageW(m_fullscreenCheck, BM_SETCHECK,
                  Config::FullscreenGuard() ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 352, 70, 26, kIdSave);
-    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 352, 70, 26, kIdClose);
+    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 384, 70, 26, kIdSave);
+    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 384, 70, 26, kIdClose);
 
     // A footer under the button row, across the full width. This used to sit in
     // the bottom-left corner at the same height as the Add / Remove / Up / Down
     // buttons, narrower than its own text, so it painted over them and the
     // buttons showed only their last letters. Statics are transparent to the
     // mouse, which is why the buttons still worked and nobody noticed.
-    make(L"STATIC", L"Keyboard", 0, 12, 392, 100, 18, 0);
+    make(L"STATIC", L"Keyboard", 0, 12, 424, 100, 18, 0);
     make(L"STATIC",
          L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
          L"Ctrl+Alt+P: pause or resume the tabs.\r\n"
          L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"
          L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
          L"Enter or Space activate, and Escape unpins and closes it.",
-         0, 12, 412, 464, 102, 0);
+         0, 12, 444, 464, 102, 0);
 }
 
 void SettingsWindow::BuildDelayChoices() {
@@ -379,6 +392,13 @@ void SettingsWindow::LoadSelectedIntoControls() {
     EnableWindow(m_upButton, hasSelection && m_selectedIndex > 0);
     EnableWindow(m_downButton, hasSelection && m_selectedIndex < static_cast<int>(m_tabs.size()) - 1);
 
+    // The recent-files folder is for Recent files tabs only; for any other it would be a field that
+    // changes nothing, so it is greyed (and keeps showing what is set).
+    const bool isRecentTab =
+        hasSelection && m_tabs[m_selectedIndex].widgetType == WidgetType::RecentFiles;
+    EnableWindow(m_folderEdit, isRecentTab);
+    SetWindowTextW(m_folderEdit, m_recentFolder.c_str());
+
     if (!hasSelection) return;
     const TabSettings& t = m_tabs[m_selectedIndex];
 
@@ -409,6 +429,13 @@ void SettingsWindow::LoadSelectedIntoControls() {
 void SettingsWindow::StoreControlsIntoSelected() {
     if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_tabs.size())) return;
     TabSettings& t = m_tabs[m_selectedIndex];
+
+    // Read before the type is: the box is live only while the tab is (still) a Recent files one.
+    if (IsWindowEnabled(m_folderEdit)) {
+        wchar_t folder[RecentFiles::kMaxFolderLength + 1] = {};
+        GetWindowTextW(m_folderEdit, folder, RecentFiles::kMaxFolderLength + 1);
+        m_recentFolder = RecentFiles::SanitizeFolder(folder);
+    }
 
     t.widgetType = TypeFromIndex(static_cast<int>(SendMessageW(m_typeCombo, CB_GETCURSEL, 0, 0)));
 
@@ -536,8 +563,24 @@ void SettingsWindow::OnSave() {
         Config::SetOpenDelayMs(m_delayChoices[static_cast<size_t>(delaySel)]);
     }
 
+    Config::SetRecentFolder(m_recentFolder);
+
     if (m_onSave) m_onSave(m_tabs);
     DestroyWindow(m_hwnd);
+}
+
+void SettingsWindow::OnFoldersDropped(std::vector<std::wstring> paths) {
+    // Only a Recent files tab has a folder to set; a drop on another is not for this window.
+    if (paths.empty() || !IsWindowEnabled(m_folderEdit)) return;
+    std::wstring folder = paths.front();
+    const DWORD attributes = GetFileAttributesW(folder.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        // A file was dropped: its folder is what was meant.
+        const size_t slash = folder.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) folder.resize(slash);
+    }
+    m_recentFolder = RecentFiles::SanitizeFolder(folder);
+    SetWindowTextW(m_folderEdit, m_recentFolder.c_str());
 }
 
 void SettingsWindow::ApplyTheme() { m_theme.Apply(m_hwnd); }
@@ -545,7 +588,7 @@ void SettingsWindow::ApplyTheme() { m_theme.Apply(m_hwnd); }
 LRESULT SettingsWindow::OnControlColor(UINT msg, HDC dc, HWND control) {
     // The number fields are edit boxes that report themselves as STATIC while disabled.
     const int id = GetDlgCtrlID(control);
-    const bool numberField = id == kIdTabWidth || id == kIdTabHeight || id == kIdPanelWidth;
+    const bool numberField = id == kIdTabWidth || id == kIdTabHeight || id == kIdPanelWidth || id == kIdFolderEdit;
     return m_theme.ControlColor(msg, dc, control, numberField);
 }
 LRESULT CALLBACK SettingsWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -576,6 +619,9 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             CreateControls(cs->hInstance);
             RefreshList(0);
             ApplyTheme();
+            m_drop.Attach(hwnd, [this](std::vector<std::wstring> paths) {
+                OnFoldersDropped(std::move(paths));
+            });
             return 0;
         }
         case WM_ERASEBKGND:
@@ -648,6 +694,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            m_drop.Detach();
             if (m_font) {
                 DeleteObject(m_font);
                 m_font = nullptr;
