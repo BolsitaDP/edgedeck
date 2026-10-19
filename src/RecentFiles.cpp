@@ -2,6 +2,7 @@
 
 #include "ActionIcons.h"
 #include "Diagnostics.h"
+#include "Strings.h"
 
 #include <algorithm>
 #include <cwchar>
@@ -131,21 +132,12 @@ std::wstring ExtensionBadge(const std::wstring& name) {
 }
 
 std::wstring DescribeAge(long long seconds) {
-    if (seconds < 60) return L"just now"; // includes a file stamped slightly in the future
-    wchar_t text[48];
-    if (seconds < 3600) {
-        swprintf_s(text, L"%lld min ago", seconds / 60);
-        return text;
-    }
-    if (seconds < 86400) {
-        swprintf_s(text, L"%lld h ago", seconds / 3600);
-        return text;
-    }
-    if (seconds < 2 * 86400) return L"yesterday";
-    if (seconds < 7 * 86400) {
-        swprintf_s(text, L"%lld days ago", seconds / 86400);
-        return text;
-    }
+    using Strings::Id;
+    if (seconds < 60) return TR(AgeJustNow); // includes a file stamped slightly in the future
+    if (seconds < 3600) return Strings::Format(Id::AgeMinutes, seconds / 60);
+    if (seconds < 86400) return Strings::Format(Id::AgeHours, seconds / 3600);
+    if (seconds < 2 * 86400) return TR(AgeYesterday);
+    if (seconds < 7 * 86400) return Strings::Format(Id::AgeDays, seconds / 86400);
     return {};
 }
 

@@ -2,6 +2,7 @@
 
 #include "Config.h"
 #include "Renderer.h"
+#include "Strings.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -16,15 +17,15 @@ constexpr float kNameHeight = 34.0f;
 
 struct ProfileRow {
     DisplayTopology::Profile profile;
-    const wchar_t* title;
+    Strings::Id title; // in the current language when shown
     const wchar_t* badge;
 };
 
 constexpr ProfileRow kProfiles[DisplayWidget::kProfileCount] = {
-    {DisplayTopology::Profile::MainMonitors, L"Monitors 1 + 2", L"1+2"},
-    {DisplayTopology::Profile::TvOnly, L"TV only", L"TV"},
-    {DisplayTopology::Profile::AllMonitors, L"All monitors", L"ALL"},
-    {DisplayTopology::Profile::MainOnly, L"Main monitor only", L"1"},
+    {DisplayTopology::Profile::MainMonitors, Strings::Id::ProfileMainMonitors, L"1+2"},
+    {DisplayTopology::Profile::TvOnly, Strings::Id::ProfileTvOnly, L"TV"},
+    {DisplayTopology::Profile::AllMonitors, Strings::Id::ProfileAll, L"ALL"},
+    {DisplayTopology::Profile::MainOnly, Strings::Id::ProfileMainOnly, L"1"},
 };
 
 // U+25A1 WHITE SQUARE - a screen, near enough, and inside the WGL4 set Segoe UI
@@ -61,7 +62,7 @@ const wchar_t* DisplayWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* DisplayWidget::PanelTitle() const { return L"Displays"; }
+const wchar_t* DisplayWidget::PanelTitle() const { return TR(DisplaysTitle); }
 
 float DisplayWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     return kProfileCount * kRowHeight + (kProfileCount - 1) * kRowGap;
@@ -74,28 +75,28 @@ DisplayTopology::ProfileState DisplayWidget::StateOf(int profileIndex) const {
 
 std::wstring DisplayWidget::Subtitle(int profileIndex,
                                      const DisplayTopology::ProfileState& state) const {
-    if (!m_loaded) return L"Checking...";
+    if (!m_loaded) return TR(Checking);
     if (!state.available) {
         switch (kProfiles[profileIndex].profile) {
             case DisplayTopology::Profile::MainMonitors:
-                return L"No monitors found";
+                return TR(NoMonitors);
             case DisplayTopology::Profile::MainOnly: {
                 // Either the main monitor is not there (a configured one, unplugged) or it is the
                 // only one that is not the TV, so there is nothing else to turn off.
                 const bool mainThere = std::any_of(
                     m_monitors.begin(), m_monitors.end(),
                     [&](const DisplayTopology::Monitor& m) { return m.id == m_mainId; });
-                return mainThere ? L"No other monitors" : L"Main monitor not found";
+                return mainThere ? TR(DisplaysNoOthers) : TR(DisplaysMainMissing);
             }
             default:
-                return L"TV not connected";
+                return TR(DisplaysTvMissing);
         }
     }
 
     // Every monitor's name in one line does not fit beside the "Active" marker
     // (it was cut off mid-name), and "all" is better said as a count anyway.
     if (kProfiles[profileIndex].profile == DisplayTopology::Profile::AllMonitors) {
-        return std::to_wstring(state.ids.size()) + L" monitors";
+        return Strings::Format(Strings::Id::DisplaysCount, state.ids.size());
     }
 
     std::wstring names;
@@ -128,12 +129,12 @@ void DisplayWidget::Draw(IPanelPainter& painter, float width, float /*contentHei
 
         painter.DrawBadge(BadgeRect(row), kProfiles[i].badge,
                           state.active ? theme.accent : theme.controlBg);
-        painter.DrawLabelPair(NameRect(row), kProfiles[i].title, Subtitle(i, state).c_str());
+        painter.DrawLabelPair(NameRect(row), Strings::Get(kProfiles[i].title), Subtitle(i, state).c_str());
 
         if (i == m_applyingRow) {
-            painter.DrawValueText(ValueRect(row), L"Switching...", true);
+            painter.DrawValueText(ValueRect(row), TR(DisplaysSwitching), true);
         } else if (state.active) {
-            painter.DrawValueText(ValueRect(row), L"Active", false);
+            painter.DrawValueText(ValueRect(row), TR(DisplaysActive), false);
         }
     }
 }
@@ -221,13 +222,12 @@ void DisplayWidget::OnAsyncResult(UINT message, WPARAM wParam) {
         using DisplayTopology::ApplyResult;
         if (result->outcome.result == ApplyResult::NotConnected) {
             discard();
-            ReportProblem(m_owner, L"One of those monitors is not connected right now.");
+            ReportProblem(m_owner, TR(DisplaysOneMissing));
             return;
         }
         if (result->outcome.result == ApplyResult::Failed) {
-            wchar_t text[160];
-            swprintf_s(text, L"Windows could not change the display layout (error %ld).",
-                       result->outcome.error);
+            const std::wstring text =
+                Strings::Format(Strings::Id::DisplaysApplyFailed, static_cast<long>(result->outcome.error));
             discard();
             ReportProblem(m_owner, text);
             return;
@@ -254,12 +254,11 @@ void DisplayWidget::RequestRefresh(HWND ownerHwnd, bool supersede) {
 }
 
 std::wstring DisplayWidget::AccessibleSummary() const {
-    std::wstring summary = L"Displays.";
+    std::wstring summary = TR(DisplaysSummary);
     for (int i = 0; i < kProfileCount; ++i) {
         if (StateOf(i).active) {
             summary += L" ";
-            summary += kProfiles[i].title;
-            summary += L" is active.";
+            summary += Strings::Format(Strings::Id::DisplaysSummaryActive, Strings::Get(kProfiles[i].title));
         }
     }
     return summary;
@@ -268,11 +267,8 @@ std::wstring DisplayWidget::AccessibleSummary() const {
 std::wstring DisplayWidget::AccessibleControlText(int controlId) const {
     if (controlId < 0 || controlId >= kProfileCount) return {};
     const DisplayTopology::ProfileState state = StateOf(controlId);
-    std::wstring text = kProfiles[controlId].title;
-    text += L": ";
-    text += Subtitle(controlId, state);
-    if (state.active) text += L". Active";
-    return text;
+    return Strings::Format(state.active ? Strings::Id::DisplaysRowActive : Strings::Id::DisplaysRow,
+                           Strings::Get(kProfiles[controlId].title), Subtitle(controlId, state).c_str());
 }
 
 bool DisplayWidget::OnKeyDown(UINT key, int focusedControl) {

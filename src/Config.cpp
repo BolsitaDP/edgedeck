@@ -1,6 +1,7 @@
 #include "Config.h"
 
 #include "RecentFiles.h"
+#include "Strings.h"
 
 #include <windows.h>
 
@@ -254,6 +255,7 @@ std::vector<TabSettings> LoadOrDefault() {
     g_startupHintShown = false;
     g_recentFolder.clear();
     g_quickActions.clear();
+    Strings::SetCurrent(Language::English); // absent means the default, like everything here
     TabSettings current;
     QuickAction action;
     std::vector<QuickAction> actions;
@@ -330,6 +332,7 @@ std::vector<TabSettings> LoadOrDefault() {
                 g_startupHintShown = true;
             }
             if (key == L"recentFolder") g_recentFolder = RecentFiles::SanitizeFolder(value);
+            if (key == L"language") Strings::SetCurrent(Strings::FromCode(value));
             continue;
         }
 
@@ -376,6 +379,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     // changed.
     file << L"[settings]\n";
     file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
+    file << L"language=" << Strings::Code(Strings::Current()) << L"\n";
     if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
     if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
     file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";

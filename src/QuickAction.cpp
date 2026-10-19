@@ -1,5 +1,7 @@
 #include "QuickAction.h"
 
+#include "Strings.h"
+
 #include <algorithm>
 
 namespace QuickActions {
@@ -21,13 +23,14 @@ std::wstring Clean(std::wstring text, size_t maxLength) {
 
 } // namespace
 
-const std::vector<QuickAction>& Defaults() {
-    static const std::vector<QuickAction> defaults = {
-        {L"Open Notepad", L"notepad.exe", L""},
-        {L"Open Calculator", L"calc.exe", L""},
-        {L"Show Desktop", kShowDesktop, L""},
+std::vector<QuickAction> Defaults() {
+    // Built when asked for, not kept: the names are in the current language, and they are never
+    // saved (an unedited list is "no [action] sections"), so changing the language renames them.
+    return {
+        {TR(DefaultNotepad), L"notepad.exe", L""},
+        {TR(DefaultCalculator), L"calc.exe", L""},
+        {TR(DefaultDesktop), kShowDesktop, L""},
     };
-    return defaults;
 }
 
 std::vector<QuickAction> Sanitize(std::vector<QuickAction> list) {

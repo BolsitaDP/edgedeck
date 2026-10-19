@@ -1,4 +1,5 @@
 #include "BrightnessWidget.h"
+#include "Strings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -28,7 +29,7 @@ const wchar_t* BrightnessWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* BrightnessWidget::PanelTitle() const { return L"Brightness"; }
+const wchar_t* BrightnessWidget::PanelTitle() const { return TR(BrightnessTitle); }
 
 float BrightnessWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     if (m_rows.empty()) return 40.0f;
@@ -39,7 +40,7 @@ float BrightnessWidget::PreferredContentHeight(float /*logicalWidth*/) const {
 void BrightnessWidget::Draw(IPanelPainter& painter, float width, float /*contentHeight*/) {
     if (m_rows.empty()) {
         painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, 40.0f),
-                          m_hasLoaded ? L"No monitors found" : L"Checking displays...", true);
+                          m_hasLoaded ? TR(NoMonitors) : TR(BrightnessChecking), true);
         return;
     }
 
@@ -52,7 +53,7 @@ void BrightnessWidget::Draw(IPanelPainter& painter, float width, float /*content
         D2D1_RECT_F track = TrackRect(i, width);
         if (!r.info.supported) {
             painter.DrawLabel(D2D1::RectF(kPaddingX, track.top, width - kPaddingX, track.bottom),
-                              L"Brightness control not available", true);
+                              TR(BrightnessUnavailable), true);
             continue;
         }
 
@@ -243,18 +244,16 @@ void BrightnessWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 }
 
 std::wstring BrightnessWidget::AccessibleSummary() const {
-    if (m_rows.empty()) return L"Brightness. No monitors found.";
-    std::wstring out = L"Brightness. ";
-    out += std::to_wstring(m_rows.size());
-    out += (m_rows.size() == 1) ? L" monitor." : L" monitors.";
-    return out;
+    if (m_rows.empty()) return TR(BrightnessSummaryNone);
+    return Strings::Format(m_rows.size() == 1 ? Strings::Id::BrightnessSummaryOne : Strings::Id::BrightnessSummaryMany,
+                           m_rows.size());
 }
 
 std::wstring BrightnessWidget::AccessibleControlText(int controlId) const {
     if (controlId < 0 || controlId >= static_cast<int>(m_rows.size())) return {};
     const Row& r = m_rows[controlId];
-    if (!r.info.supported) return r.info.name + L": brightness control not available.";
-    return r.info.name + L": brightness " + std::to_wstring(r.info.percent) + L" percent.";
+    if (!r.info.supported) return Strings::Format(Strings::Id::BrightnessRowUnavailable, r.info.name.c_str());
+    return Strings::Format(Strings::Id::BrightnessLevel, r.info.name.c_str(), static_cast<int>(r.info.percent));
 }
 
 bool BrightnessWidget::OnKeyDown(UINT key, int focusedControl) {

@@ -1,4 +1,5 @@
 #include "Diagnostics.h"
+#include "Strings.h"
 #include "VolumeWidget.h"
 
 #include <algorithm>
@@ -26,7 +27,7 @@ const wchar_t* VolumeWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* VolumeWidget::PanelTitle() const { return L"Volume"; }
+const wchar_t* VolumeWidget::PanelTitle() const { return TR(VolumeTitle); }
 
 float VolumeWidget::RowTop(int row) const {
     return static_cast<float>(row) * (kRowHeight + kRowGap);
@@ -56,7 +57,7 @@ D2D1_RECT_F MuteRectFor(int row, float width) {
 void VolumeWidget::Draw(IPanelPainter& painter, float width, float /*contentHeight*/) {
     if (m_rows.empty()) {
         painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, 40.0f),
-                          m_hasLoaded ? L"No audio output devices" : L"Checking audio...", true);
+                          m_hasLoaded ? TR(VolumeNoDevices) : TR(VolumeChecking), true);
         return;
     }
 
@@ -64,8 +65,8 @@ void VolumeWidget::Draw(IPanelPainter& painter, float width, float /*contentHeig
         const Row& r = m_rows[i];
         float top = RowTop(i);
 
-        std::wstring name = r.info.name;
-        if (r.info.isDefault) name += L"  (default)";
+        const std::wstring name =
+            r.info.isDefault ? Strings::Format(Strings::Id::VolumeDefault, r.info.name.c_str()) : r.info.name;
         painter.DrawLabel(D2D1::RectF(kPaddingX, top, width - kPaddingX, top + kNameHeight),
                           name.c_str(), false);
 
@@ -235,9 +236,9 @@ void VolumeWidget::OnDragMove(float x, float /*y*/, float width, float /*content
 void VolumeWidget::OnDragEnd() { m_dragRow = -1; }
 
 std::wstring VolumeWidget::AccessibleSummary() const {
-    if (m_rows.empty()) return L"Volume. No audio output devices.";
-    return L"Volume. " + std::to_wstring(m_rows.size()) +
-           (m_rows.size() == 1 ? L" output device." : L" output devices.");
+    if (m_rows.empty()) return TR(VolumeSummaryNone);
+    return Strings::Format(m_rows.size() == 1 ? Strings::Id::VolumeSummaryOne : Strings::Id::VolumeSummaryMany,
+                           m_rows.size());
 }
 
 std::wstring VolumeWidget::AccessibleControlText(int controlId) const {
@@ -247,10 +248,10 @@ std::wstring VolumeWidget::AccessibleControlText(int controlId) const {
 
     const Row& r = m_rows[row];
     if (controlId % 2 == kMuteButton) {
-        return r.info.name + (r.info.muted ? L": muted. Activate to unmute."
-                                           : L": unmuted. Activate to mute.");
+        return Strings::Format(r.info.muted ? Strings::Id::VolumeMuted : Strings::Id::VolumeUnmuted,
+                               r.info.name.c_str());
     }
-    return r.info.name + L": volume " + std::to_wstring(r.info.percent) + L" percent.";
+    return Strings::Format(Strings::Id::VolumeLevel, r.info.name.c_str(), static_cast<int>(r.info.percent));
 }
 
 bool VolumeWidget::OnKeyDown(UINT key, int focusedControl) {

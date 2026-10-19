@@ -1,4 +1,5 @@
 #include "Actions.h"
+#include "Strings.h"
 
 #include <windows.h>
 #include <shellapi.h>
@@ -67,20 +68,18 @@ std::wstring DescribeShellError(DWORD error) {
         case ERROR_FILE_NOT_FOUND:
         case ERROR_PATH_NOT_FOUND:
         case ERROR_BAD_PATHNAME:
-            return L"not found";
+            return TR(ShellNotFound);
         case ERROR_ACCESS_DENIED:
-            return L"access denied";
+            return TR(ShellAccessDenied);
         case ERROR_CANCELLED:
-            return L"cancelled";
+            return TR(ShellCancelled);
         case ERROR_NO_ASSOCIATION:
         case SE_ERR_NOASSOC:
-            return L"nothing is set to open that kind of file";
+            return TR(ShellNoAssociation);
         case ERROR_BAD_FORMAT:
-            return L"not a valid program";
+            return TR(ShellBadFormat);
         default: {
-            wchar_t text[48];
-            swprintf_s(text, L"Windows error %lu", error);
-            return text;
+            return Strings::Format(Strings::Id::ShellWindowsError, error);
         }
     }
 }
@@ -94,7 +93,7 @@ bool Launch(const std::wstring& target, const std::wstring& arguments, const std
     // for no interface at all. That window takes the focus, so it is the one thing never done from a
     // panel: say it in the header instead, like every other reason a row cannot open.
     if (NothingOpens(target)) {
-        problem = L"Could not open \"" + what + L"\": " + DescribeShellError(ERROR_NO_ASSOCIATION) + L".";
+        problem = Strings::Format(Strings::Id::CouldNotOpen, what.c_str(), DescribeShellError(ERROR_NO_ASSOCIATION).c_str());
         return false;
     }
 
@@ -126,7 +125,7 @@ bool Launch(const std::wstring& target, const std::wstring& arguments, const std
     // GetLastError.
     const INT_PTR code = reinterpret_cast<INT_PTR>(info.hInstApp);
     if (error == 0 && code > 0 && code <= 32) error = static_cast<DWORD>(code);
-    problem = L"Could not open \"" + what + L"\": " + DescribeShellError(error) + L".";
+    problem = Strings::Format(Strings::Id::CouldNotOpen, what.c_str(), DescribeShellError(error).c_str());
     return false;
 }
 
@@ -157,7 +156,7 @@ bool NothingOpens(const std::wstring& path) {
 bool Run(const QuickAction& action, std::wstring& problem) {
     if (action.target == QuickActions::kShowDesktop) {
         if (ShowDesktopToggle()) return true;
-        problem = L"Windows could not show the desktop.";
+        problem = TR(ShowDesktopFailed);
         return false;
     }
     return Launch(ExpandVariables(action.target), ExpandVariables(action.arguments), action.name, problem);

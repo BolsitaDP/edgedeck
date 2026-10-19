@@ -1,7 +1,8 @@
 // Opens just the Settings window (no tabs, no hotkeys, no single-instance mutex), so it can be
 // inspected while the user's own EdgeDeck keeps running.
 // usage: settingsharness <follow|dark|light> <seconds> [drop|drop=N] [flip] [dpi=N] [window=actions]
-//                        [dropfiles=X,Y,path|path|...]
+//                        [dropfiles=X,Y,path|path|...] [lang=en|es]
+//   lang=es : the windows in that language (the layout of each language is checked separately)
 //   window=actions : host the quick-actions editor instead of Settings, and report its layout
 //   dropfiles=X,Y,paths : drag those files from "Explorer" onto the point
 //           (X,Y) of the editor's client area, given in logical 96-DPI units - a real OLE drag, so
@@ -17,6 +18,7 @@
 #include "Config.h"
 #include "Renderer.h"
 #include "SettingsWindow.h"
+#include "Strings.h"
 
 #include <commctrl.h>
 #include <ole2.h>
@@ -292,6 +294,7 @@ int wmain(int argc, wchar_t** argv) {
     // its own for text - the situation FileDrop::Zone exists for. `ole` asks for that.
     for (int i = 3; i < argc; ++i) {
         if (wcscmp(argv[i], L"ole") == 0) OleInitialize(nullptr);
+        if (wcsncmp(argv[i], L"lang=", 5) == 0) Strings::SetCurrent(Strings::FromCode(argv[i] + 5));
     }
 
     Config::SetCurrentThemeMode(wcscmp(mode, L"dark") == 0    ? ThemeMode::Dark

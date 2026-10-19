@@ -8,6 +8,7 @@
 
 #include "Config.h"
 #include "QuickAction.h"
+#include "Strings.h"
 
 class Tab;
 class SettingsWindow;
@@ -112,6 +113,14 @@ private:
     // A problem found before the tray icon exists (the icon is added last, once the
     // tabs are up), held until it can be shown.
     std::wstring m_startupNotice;
+    void AddStartupNotice(const std::wstring& text);
+    // Found before the settings (and the language) are read, and worded after.
+    bool m_restartedAfterCrash = false;
+    bool m_exitHotkeyTaken = false;
+    // The language the panels were last drawn in, to know when a Save changed it.
+    Language m_language = Language::English;
+    // "EdgeDeck 1.2.0", or with "(paused)" in the current language.
+    std::wstring TrayTip() const;
 
     static constexpr int kExitHotkeyId = 1;
     // Ctrl+Alt+1..9 open the corresponding tab. Ids 2..10 so they cannot clash

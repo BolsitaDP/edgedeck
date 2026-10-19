@@ -3,6 +3,7 @@
 #include "Actions.h"
 #include "Config.h"
 #include "Renderer.h"
+#include "Strings.h"
 
 #include <cwctype>
 
@@ -131,7 +132,7 @@ const wchar_t* QuickActionsWidget::TabIcon() const {
 }
 
 const wchar_t* QuickActionsWidget::PanelTitle() const {
-    return L"Quick Actions";
+    return TR(QuickActionsTitle);
 }
 
 float QuickActionsWidget::PreferredContentHeight(float /*logicalWidth*/) const {
@@ -184,7 +185,7 @@ void QuickActionsWidget::Activate(int controlId, HWND ownerHwnd) {
     }
 }
 
-std::wstring QuickActionsWidget::AccessibleSummary() const { return L"Quick Actions."; }
+std::wstring QuickActionsWidget::AccessibleSummary() const { return TR(QuickActionsSummary); }
 
 std::wstring QuickActionsWidget::AccessibleControlText(int controlId) const {
     if (controlId < 0 || controlId >= RowCount()) return {};

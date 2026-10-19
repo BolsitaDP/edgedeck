@@ -4,6 +4,7 @@
 #include "BadgeColor.h"
 #include "Config.h"
 #include "Renderer.h"
+#include "Strings.h"
 
 #include <cwctype>
 
@@ -52,7 +53,7 @@ std::wstring AgeText(const FILETIME& written) {
         GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, date, 48, nullptr) > 0) {
         return date;
     }
-    return L"a while ago";
+    return TR(RecentAWhileAgo);
 }
 } // namespace
 
@@ -66,7 +67,7 @@ const wchar_t* RecentFilesWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* RecentFilesWidget::PanelTitle() const { return L"Recent files"; }
+const wchar_t* RecentFilesWidget::PanelTitle() const { return TR(RecentTitle); }
 
 std::wstring RecentFilesWidget::Folder() const {
     std::wstring folder = RecentFiles::SanitizeFolder(Config::RecentFolder());
@@ -143,18 +144,18 @@ void RecentFilesWidget::Draw(IPanelPainter& painter, float width, float /*conten
     const PanelTheme& theme = PanelTheme::Current();
 
     if (!m_loaded) {
-        painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kMessageHeight), L"Checking...",
+        painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kMessageHeight), TR(Checking),
                           true);
         return;
     }
     if (!m_folderFound) {
         painter.DrawLabelPair(D2D1::RectF(kPaddingX, 4.0f, width - kPaddingX, kMessageHeight),
-                              L"Folder not found", m_folder.c_str());
+                              TR(RecentFolderNotFound), m_folder.c_str());
         return;
     }
     if (m_rows.empty()) {
         painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kMessageHeight),
-                          L"No files in this folder", true);
+                          TR(RecentNoFiles), true);
     }
 
     for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
@@ -196,7 +197,7 @@ void RecentFilesWidget::Draw(IPanelPainter& painter, float width, float /*conten
     }
     const float labelTop = top + (kFolderRowHeight - kLabelHeight) / 2.0f;
     painter.DrawLabel(D2D1::RectF(icon.right + kGap, labelTop, width - kPaddingX, labelTop + kLabelHeight),
-                      L"Open folder", false);
+                      TR(RecentOpenFolder), false);
 }
 
 int RecentFilesWidget::HitTest(float x, float y, float width, float /*contentHeight*/) const {
@@ -220,22 +221,22 @@ void RecentFilesWidget::Activate(int controlId, HWND ownerHwnd) {
         const RecentFiles::Entry& entry = m_rows[static_cast<size_t>(controlId)].entry;
         ok = Actions::Open(entry.path, entry.name, problem);
     } else {
-        ok = Actions::Open(m_folder, L"the folder", problem);
+        ok = Actions::Open(m_folder, TR(RecentTheFolder), problem);
     }
     if (!ok) ReportProblem(ownerHwnd ? ownerHwnd : m_owner, problem);
 }
 
 std::wstring RecentFilesWidget::AccessibleSummary() const {
-    if (!m_loaded) return L"Recent files.";
-    if (!m_folderFound) return L"Recent files. The folder was not found.";
-    return L"Recent files, " + std::to_wstring(m_rows.size()) + L" shown.";
+    if (!m_loaded) return TR(RecentSummaryLoading);
+    if (!m_folderFound) return TR(RecentSummaryNotFound);
+    return Strings::Format(Strings::Id::RecentSummary, m_rows.size());
 }
 
 std::wstring RecentFilesWidget::AccessibleControlText(int controlId) const {
     if (controlId < 0 || controlId >= ControlCount()) return {};
-    if (controlId == static_cast<int>(m_rows.size())) return L"Open folder";
+    if (controlId == static_cast<int>(m_rows.size())) return TR(RecentOpenFolder);
     const Row& row = m_rows[static_cast<size_t>(controlId)];
-    return row.entry.name + L", " + row.age;
+    return Strings::Format(Strings::Id::RecentItem, row.entry.name.c_str(), row.age.c_str());
 }
 
 bool RecentFilesWidget::OnKeyDown(UINT key, int focusedControl) {

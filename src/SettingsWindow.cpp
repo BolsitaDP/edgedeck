@@ -3,6 +3,7 @@
 #include "Autostart.h"
 #include "DisplayTopology.h"
 #include "RecentFiles.h"
+#include "Strings.h"
 #include "Renderer.h"
 
 #include <commctrl.h>
@@ -38,20 +39,21 @@ constexpr int kIdEdgeCombo = 116;
 constexpr int kIdDelayCombo = 117;
 constexpr int kIdActionsButton = 118;
 constexpr int kIdFolderEdit = 119;
+constexpr int kIdLanguageCombo = 120;
 
 struct TypeEntry {
     WidgetType type;
-    const wchar_t* comboLabel;
-    const wchar_t* listLabel;
+    Strings::Id comboLabel; // what the type list offers
+    Strings::Id listLabel;  // what the tab list calls it: the panel's own title
 };
 constexpr TypeEntry kTypes[] = {
-    {WidgetType::QuickActions, L"Quick Actions", L"Quick Actions"},
-    {WidgetType::Media, L"Media (auto-detect)", L"Media"},
-    {WidgetType::Brightness, L"Brightness (monitors)", L"Brightness"},
-    {WidgetType::Lyrics, L"Lyrics (auto-detect)", L"Lyrics"},
-    {WidgetType::Volume, L"Volume (audio output)", L"Volume"},
-    {WidgetType::Displays, L"Displays (switch monitors)", L"Displays"},
-    {WidgetType::RecentFiles, L"Recent files (a folder)", L"Recent files"},
+    {WidgetType::QuickActions, Strings::Id::TypeQuickActions, Strings::Id::QuickActionsTitle},
+    {WidgetType::Media, Strings::Id::TypeMedia, Strings::Id::MediaTitle},
+    {WidgetType::Brightness, Strings::Id::TypeBrightness, Strings::Id::BrightnessTitle},
+    {WidgetType::Lyrics, Strings::Id::TypeLyrics, Strings::Id::LyricsTitle},
+    {WidgetType::Volume, Strings::Id::TypeVolume, Strings::Id::VolumeTitle},
+    {WidgetType::Displays, Strings::Id::TypeDisplays, Strings::Id::DisplaysTitle},
+    {WidgetType::RecentFiles, Strings::Id::TypeRecent, Strings::Id::RecentTitle},
 };
 constexpr int kTypeCount = static_cast<int>(sizeof(kTypes) / sizeof(kTypes[0]));
 
@@ -70,7 +72,7 @@ const wchar_t kSettingsClassName[] = L"EdgeDeckSettingsWindow";
 
 // The client area in logical (96-DPI) units: what the controls below are laid out in.
 constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 554;
+constexpr int kClientHeight = 586;
 
 // The monitor list is wider than its combo box: a name, an id and "(not connected)" do not fit in
 // the box itself, and the open list is where the choosing is done.
@@ -138,7 +140,7 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
                           mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - height) / 2);
     }
 
-    m_hwnd = CreateWindowExW(exStyle, kSettingsClassName, L"EdgeDeck Settings", style, x, y, width,
+    m_hwnd = CreateWindowExW(exStyle, kSettingsClassName, TR(SettingsTitle), style, x, y, width,
                              height, nullptr, nullptr, hInstance, this);
     if (!m_hwnd) return false;
 
@@ -148,13 +150,13 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
 
 void SettingsWindow::BuildMonitorChoices() {
     m_monitorChoices.clear();
-    m_monitorChoices.push_back({L"", L"Primary monitor"});
+    m_monitorChoices.push_back({L"", TR(SettingsPrimaryMonitor)});
 
     // Every monitor Windows knows of, switched on or not: a tab can be assigned to the TV while
     // the TV is off, and docks to it whenever it is on.
     for (const DisplayTopology::Monitor& m : DisplayTopology::Enumerate()) {
         std::wstring label = m.name == m.id ? m.id : m.name + L" (" + m.id + L")";
-        if (!m.active) label += L" - off";
+        if (!m.active) label = Strings::Format(Strings::Id::SettingsMonitorOff, label.c_str());
         m_monitorChoices.push_back({m.id, std::move(label)});
     }
 
@@ -162,7 +164,7 @@ void SettingsWindow::BuildMonitorChoices() {
     // opening Settings and pressing Save does not quietly move the tab back to the primary one.
     for (const TabSettings& t : m_tabs) {
         if (t.monitor.empty() || MonitorChoiceIndex(t.monitor) >= 0) continue;
-        m_monitorChoices.push_back({t.monitor, t.monitor + L" (not connected)"});
+        m_monitorChoices.push_back({t.monitor, Strings::Format(Strings::Id::SettingsMonitorAbsent, t.monitor.c_str())});
     }
 }
 
@@ -219,29 +221,29 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     // Left: the tabs and the buttons that arrange them. The list runs down to the row the
     // buttons share with Save and Close, so the window is no taller than the right column needs.
-    make(L"STATIC", L"Tabs", 0, 12, 10, 100, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 344, kIdList);
+    make(L"STATIC", TR(SettingsTabs), 0, 12, 10, 100, 18, 0);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY, 12, 30, 190, 376, kIdList);
 
-    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 384, 56, 24, kIdAdd);
+    m_addButton = make(L"BUTTON", TR(ButtonAdd), BS_PUSHBUTTON, 12, 416, 56, 24, kIdAdd);
     // Wide enough for their label with room to spare: "Remove" and "Down" had the
     // text within a pixel or two of the edges, which any other font, language or
     // scale turns into a clipped word.
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 384, 66, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 384, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 384, 50, 24, kIdDown);
+    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON, 72, 416, 60, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON, 136, 416, 48, 24, kIdUp);
+    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON, 188, 416, 48, 24, kIdDown);
 
     // Right: what belongs to the selected tab, then what belongs to the whole app.
-    make(L"STATIC", L"Widget type:", 0, 220, 12, 140, 18, 0);
+    make(L"STATIC", TR(SettingsWidgetType), 0, 220, 12, 160, 18, 0);
     // The list of quick actions is shared by every Quick Actions tab, so it is edited in a window of
     // its own; this is the way in from here (the tray menu and a tab's menu have it too).
-    m_actionsButton = make(L"BUTTON", L"Actions...", BS_PUSHBUTTON, 396, 8, 80, 22, kIdActionsButton);
+    m_actionsButton = make(L"BUTTON", TR(SettingsActions), BS_PUSHBUTTON, 388, 8, 88, 22, kIdActionsButton);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 256,
                        200, kIdTypeCombo);
     for (const TypeEntry& entry : kTypes) {
-        SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.comboLabel));
+        SendMessageW(m_typeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Strings::Get(entry.comboLabel)));
     }
 
-    make(L"STATIC", L"Vertical position:", 0, 220, 60, 160, 18, 0);
+    make(L"STATIC", TR(SettingsPosition), 0, 220, 60, 190, 18, 0);
     m_positionTrackbar = make(TRACKBAR_CLASSW, nullptr, WS_TABSTOP | TBS_HORZ, 220, 78, 190, 28,
                               kIdTrackbar);
     SendMessageW(m_positionTrackbar, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
@@ -249,9 +251,9 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     // The three sizes share a row, in pixels: they used to take a row each, which is most of why
     // the window was as tall as it was.
-    make(L"STATIC", L"Tab width", 0, 220, 114, 80, 18, 0);
-    make(L"STATIC", L"Tab height", 0, 308, 114, 80, 18, 0);
-    make(L"STATIC", L"Panel width", 0, 396, 114, 80, 18, 0);
+    make(L"STATIC", TR(SettingsTabWidth), 0, 220, 114, 84, 18, 0);
+    make(L"STATIC", TR(SettingsTabHeight), 0, 308, 114, 84, 18, 0);
+    make(L"STATIC", TR(SettingsPanelWidth), 0, 396, 114, 80, 18, 0);
     m_tabWidthEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 220, 132, 80, 22,
                           kIdTabWidth);
     m_tabHeightEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 308, 132, 80, 22,
@@ -261,7 +263,7 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     // Where this tab lives: which monitor and which edge of it. The monitor list is filled once,
     // when the window opens (BuildMonitorChoices); the edge is fixed.
-    make(L"STATIC", L"Monitor:", 0, 220, 168, 58, 18, 0);
+    make(L"STATIC", TR(SettingsMonitor), 0, 220, 168, 58, 18, 0);
     m_monitorCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 166,
                           196, 160, kIdMonitorCombo);
     for (const MonitorChoice& choice : m_monitorChoices) {
@@ -269,24 +271,24 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     }
     SendMessageW(m_monitorCombo, CB_SETDROPPEDWIDTH, static_cast<WPARAM>(Scale(kMonitorDropWidth)), 0);
 
-    make(L"STATIC", L"Edge:", 0, 220, 198, 58, 18, 0);
+    make(L"STATIC", TR(SettingsEdge), 0, 220, 198, 58, 18, 0);
     m_edgeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 196, 196,
                        80, kIdEdgeCombo);
     // The order is the ScreenEdge enum's, so the selected index and the stored value agree.
-    for (const wchar_t* label : {L"Right", L"Left"}) {
+    for (const wchar_t* label : {TR(SettingsEdgeRight), TR(SettingsEdgeLeft)}) {
         SendMessageW(m_edgeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
     }
 
     // The folder the Recent files tabs list. It is one setting for all of them, so it is only
     // editable while a Recent files tab is the selected one (otherwise it would be a field that
     // does nothing); a folder dragged onto the window lands here as well.
-    make(L"STATIC", L"Recent folder:", 0, 220, 232, 92, 18, 0);
+    make(L"STATIC", TR(SettingsRecentFolder), 0, 220, 232, 92, 18, 0);
     m_folderEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 314, 230, 162, 22,
                         kIdFolderEdit);
     SendMessageW(m_folderEdit, EM_SETLIMITTEXT, RecentFiles::kMaxFolderLength, 0);
-    SendMessageW(m_folderEdit, EM_SETCUEBANNER, FALSE, reinterpret_cast<LPARAM>(L"Downloads (default)"));
+    SendMessageW(m_folderEdit, EM_SETCUEBANNER, FALSE, reinterpret_cast<LPARAM>(TR(SettingsRecentDefault)));
 
-    m_autostartCheck = make(L"BUTTON", L"Start with Windows", BS_AUTOCHECKBOX | WS_TABSTOP, 220, 266,
+    m_autostartCheck = make(L"BUTTON", TR(StartWithWindows), BS_AUTOCHECKBOX | WS_TABSTOP, 220, 266,
                              256, 22, kIdAutostart);
     // "Enabled" means it will really start - an entry that Task Manager switched
     // off shows as unticked, so ticking it and saving is what turns it back on.
@@ -297,28 +299,35 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // the rest of Windows; forcing either mode is for people whose system setting
     // and preferred panel appearance disagree, which is not rare - plenty of
     // people run a light system and still want the dark panel.
-    make(L"STATIC", L"Theme:", 0, 220, 298, 58, 18, 0);
+    make(L"STATIC", TR(SettingsTheme), 0, 220, 298, 58, 18, 0);
     m_themeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 280, 296,
                         196, 120, kIdThemeCombo);
-    for (const wchar_t* label : {L"Follow Windows", L"Always dark", L"Always light"}) {
+    for (const wchar_t* label : {TR(SettingsThemeFollow), TR(SettingsThemeDark), TR(SettingsThemeLight)}) {
         SendMessageW(m_themeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
     }
     SendMessageW(m_themeCombo, CB_SETCURSEL, static_cast<WPARAM>(ThemeMode()), 0);
 
+    // The language of everything EdgeDeck says. Each is listed in its own words, so a person can
+    // find theirs whatever the interface is in at the moment.
+    make(L"STATIC", TR(SettingsLanguage), 0, 220, 330, 76, 18, 0);
+    m_languageCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 308, 328,
+                           168, 120, kIdLanguageCombo);
+    for (int i = 0; i < Strings::kLanguageCount; ++i) {
+        SendMessageW(m_languageCombo, CB_ADDSTRING, 0,
+                     reinterpret_cast<LPARAM>(Strings::NativeName(static_cast<Language>(i))));
+    }
+    SendMessageW(m_languageCombo, CB_SETCURSEL, static_cast<WPARAM>(Strings::Current()), 0);
+
     // How long the pointer has to rest on a tab before its panel opens. "Instant" is how it has
     // always been; a short wait stops a pointer that is only passing the edge from opening panels.
-    make(L"STATIC", L"Open delay:", 0, 220, 330, 84, 18, 0);
-    m_delayCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 308, 328,
+    make(L"STATIC", TR(SettingsDelay), 0, 220, 362, 84, 18, 0);
+    m_delayCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 308, 360,
                         168, 140, kIdDelayCombo);
     BuildDelayChoices();
     for (int ms : m_delayChoices) {
-        wchar_t label[24];
-        if (ms == 0) {
-            wcscpy_s(label, L"Instant");
-        } else {
-            swprintf_s(label, L"%d ms", ms);
-        }
-        SendMessageW(m_delayCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+        const std::wstring label =
+            ms == 0 ? std::wstring(TR(SettingsDelayInstant)) : Strings::Format(Strings::Id::SettingsDelayMs, ms);
+        SendMessageW(m_delayCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
     }
     {
         const auto it = std::find(m_delayChoices.begin(), m_delayChoices.end(), Config::OpenDelayMs());
@@ -328,27 +337,21 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
 
     // Off lets a hover open panels over a game or a video; the keyboard shortcuts
     // open them either way.
-    m_fullscreenCheck = make(L"BUTTON", L"Don't open over full-screen apps",
-                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 360, 256, 22, kIdFullscreenGuard);
+    m_fullscreenCheck = make(L"BUTTON", TR(SettingsFullscreen),
+                             BS_AUTOCHECKBOX | WS_TABSTOP, 220, 392, 256, 22, kIdFullscreenGuard);
     SendMessageW(m_fullscreenCheck, BM_SETCHECK,
                  Config::FullscreenGuard() ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    m_saveButton = make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON, 330, 384, 70, 26, kIdSave);
-    m_closeButton = make(L"BUTTON", L"Close", BS_PUSHBUTTON, 406, 384, 70, 26, kIdClose);
+    m_saveButton = make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON, 322, 416, 76, 26, kIdSave);
+    m_closeButton = make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON, 402, 416, 74, 26, kIdClose);
 
     // A footer under the button row, across the full width. This used to sit in
     // the bottom-left corner at the same height as the Add / Remove / Up / Down
     // buttons, narrower than its own text, so it painted over them and the
     // buttons showed only their last letters. Statics are transparent to the
     // mouse, which is why the buttons still worked and nobody noticed.
-    make(L"STATIC", L"Keyboard", 0, 12, 424, 100, 18, 0);
-    make(L"STATIC",
-         L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"
-         L"Ctrl+Alt+P: pause or resume the tabs.\r\n"
-         L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"
-         L"In an open panel, arrow keys or the wheel move and adjust,\r\n"
-         L"Enter or Space activate, and Escape unpins and closes it.",
-         0, 12, 444, 464, 102, 0);
+    make(L"STATIC", TR(SettingsKeyboard), 0, 12, 456, 100, 18, 0);
+    make(L"STATIC", TR(SettingsKeyboardHelp), 0, 12, 476, 464, 102, 0);
 }
 
 void SettingsWindow::BuildDelayChoices() {
@@ -364,10 +367,9 @@ void SettingsWindow::BuildDelayChoices() {
 void SettingsWindow::RefreshList(int selectIndex) {
     SendMessageW(m_list, LB_RESETCONTENT, 0, 0);
     for (size_t i = 0; i < m_tabs.size(); ++i) {
-        const wchar_t* typeName = kTypes[TypeIndex(m_tabs[i].widgetType)].listLabel;
-        wchar_t buf[96];
-        swprintf_s(buf, L"%zu: %s", i + 1, typeName);
-        SendMessageW(m_list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(buf));
+        const wchar_t* typeName = Strings::Get(kTypes[TypeIndex(m_tabs[i].widgetType)].listLabel);
+        const std::wstring entry = Strings::Format(Strings::Id::SettingsListEntry, i + 1, typeName);
+        SendMessageW(m_list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.c_str()));
     }
 
     if (m_tabs.empty()) {
@@ -545,10 +547,7 @@ void SettingsWindow::OnSave() {
         // The result used to be thrown away, so a registry write that failed left the
         // box ticked in the user's mind and nothing in Windows.
         if (!Autostart::SetEnabled(wantAutostart) && m_onProblem) {
-            m_onProblem(wantAutostart ? L"Could not turn on Start with Windows: Windows would not "
-                                        L"accept the startup entry."
-                                      : L"Could not turn off Start with Windows: Windows would not "
-                                        L"let the startup entry be removed.");
+            m_onProblem(wantAutostart ? TR(AutostartOnFailed) : TR(AutostartOffFailed));
         }
     }
 
@@ -564,6 +563,9 @@ void SettingsWindow::OnSave() {
     }
 
     Config::SetRecentFolder(m_recentFolder);
+    // Before the owner applies the rest: the panels it lays out again are drawn in the new language.
+    const LRESULT languageSel = SendMessageW(m_languageCombo, CB_GETCURSEL, 0, 0);
+    if (languageSel != CB_ERR) Strings::SetCurrent(static_cast<Language>(languageSel));
 
     if (m_onSave) m_onSave(m_tabs);
     DestroyWindow(m_hwnd);

@@ -1,4 +1,5 @@
 #include "BrightnessControls.h"
+#include "Strings.h"
 
 #include <highlevelmonitorconfigurationapi.h>
 #include <physicalmonitorenumerationapi.h>
@@ -145,7 +146,7 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
             const wchar_t* modelName =
                 (friendlyIt != friendlyNames.end() && !friendlyIt->second.empty())
                     ? friendlyIt->second.c_str()
-                    : L"Generic monitor";
+                    : TR(GenericMonitor);
 
             for (DWORD p = 0; p < count; ++p) {
                 ++number;

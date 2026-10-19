@@ -1,4 +1,5 @@
 #include "Diagnostics.h"
+#include "Strings.h"
 #include "VolumeControls.h"
 
 #include <endpointvolume.h>
@@ -137,7 +138,7 @@ std::wstring FallbackName(const std::wstring& id) {
     if (tail.size() > 2 && tail.front() == L'{' && tail.back() == L'}') {
         tail = tail.substr(1, tail.size() - 2);
     }
-    return tail.empty() ? L"Speakers" : tail;
+    return tail.empty() ? std::wstring(TR(VolumeSpeakers)) : tail;
 }
 
 // Reads level and mute from an endpoint that is already open, straight into the

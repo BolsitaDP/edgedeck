@@ -1,4 +1,5 @@
 #include "BadgeColor.h"
+#include "Strings.h"
 #include "Diagnostics.h"
 #include "Renderer.h"
 #include "MediaWidget.h"
@@ -120,7 +121,7 @@ std::wstring RowSubtitle(const MediaControls::SessionInfo& info) {
     if (!info.artist.empty() && !info.title.empty()) return info.artist + L" - " + info.title;
     if (!info.title.empty()) return info.title;
     if (!info.artist.empty()) return info.artist;
-    return L"No track information";
+    return TR(MediaNoTrack);
 }
 } // namespace
 
@@ -138,7 +139,7 @@ const wchar_t* MediaWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* MediaWidget::PanelTitle() const { return L"Media"; }
+const wchar_t* MediaWidget::PanelTitle() const { return TR(MediaTitle); }
 
 float MediaWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     if (m_state != State::Ready || m_rows.empty()) return 44.0f;
@@ -148,7 +149,7 @@ float MediaWidget::PreferredContentHeight(float /*logicalWidth*/) const {
 
 void MediaWidget::Draw(IPanelPainter& painter, float width, float /*contentHeight*/) {
     if (m_state != State::Ready || m_rows.empty()) {
-        const wchar_t* message = m_state == State::Ready ? L"No media playing" : L"Checking...";
+        const wchar_t* message = m_state == State::Ready ? TR(MediaNothing) : TR(Checking);
         painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kRowHeight), message, true);
         return;
     }
@@ -297,9 +298,9 @@ void MediaWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 
         if (result->code == static_cast<int>(MediaControls::Result::Success)) return discard();
 
-        const wchar_t* text = L"Windows could not control this app.";
+        const wchar_t* text = TR(MediaControlFailed);
         if (result->code == static_cast<int>(MediaControls::Result::Unsupported)) {
-            text = L"This app does not support that control right now.";
+            text = TR(MediaUnsupported);
         }
         ReportProblem(m_owner, text);
         return discard();
@@ -366,11 +367,9 @@ void MediaWidget::EnsureSubscription(HWND ownerHwnd) {
 }
 
 std::wstring MediaWidget::AccessibleSummary() const {
-    if (m_state != State::Ready || m_rows.empty()) return L"Media. No media playing.";
-    std::wstring out = L"Media. ";
-    out += std::to_wstring(m_rows.size());
-    out += (m_rows.size() == 1) ? L" app playing." : L" apps playing.";
-    return out;
+    if (m_state != State::Ready || m_rows.empty()) return TR(MediaSummaryNothing);
+    return Strings::Format(m_rows.size() == 1 ? Strings::Id::MediaSummaryOne : Strings::Id::MediaSummaryMany,
+                           m_rows.size());
 }
 
 std::wstring MediaWidget::AccessibleControlText(int controlId) const {
@@ -382,11 +381,11 @@ std::wstring MediaWidget::AccessibleControlText(int controlId) const {
     const Row& r = m_rows[row];
     std::wstring track = RowSubtitle(r.info);
     switch (button) {
-        case 0: return r.info.displayName + L": previous track. " + track;
+        case 0: return Strings::Format(Strings::Id::MediaPrevious, r.info.displayName.c_str(), track.c_str());
         case 1:
-            return r.info.displayName + L": " + (r.info.isPlaying ? L"pause" : L"play") + L". " +
-                   track;
-        case 2: return r.info.displayName + L": next track. " + track;
+            return Strings::Format(r.info.isPlaying ? Strings::Id::MediaPause : Strings::Id::MediaPlay,
+                                   r.info.displayName.c_str(), track.c_str());
+        case 2: return Strings::Format(Strings::Id::MediaNext, r.info.displayName.c_str(), track.c_str());
         default: return {};
     }
 }

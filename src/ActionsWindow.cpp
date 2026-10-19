@@ -2,6 +2,7 @@
 
 #include "AppIcon.h"
 #include "Renderer.h"
+#include "Strings.h"
 
 #include <commctrl.h>
 #include <commdlg.h>
@@ -29,8 +30,6 @@ const wchar_t kClassName[] = L"EdgeDeckActionsWindow";
 constexpr int kClientWidth = 484;
 constexpr int kClientHeight = 352;
 
-// What a freshly added row says, until the user types a name or picks a file.
-const wchar_t kNewActionName[] = L"New action";
 } // namespace
 
 bool ActionsWindow::Create(HINSTANCE hInstance, std::vector<QuickAction> initial, SaveCallback onSave) {
@@ -78,7 +77,7 @@ bool ActionsWindow::Create(HINSTANCE hInstance, std::vector<QuickAction> initial
                           mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - height) / 2);
     }
 
-    m_hwnd = CreateWindowExW(exStyle, kClassName, L"EdgeDeck Quick Actions", style, x, y, width, height,
+    m_hwnd = CreateWindowExW(exStyle, kClassName, TR(ActionsTitle), style, x, y, width, height,
                              nullptr, nullptr, hInstance, this);
     if (!m_hwnd) return false;
 
@@ -125,38 +124,34 @@ void ActionsWindow::CreateControls(HINSTANCE hInstance) {
         return child;
     };
 
-    make(L"STATIC", L"Actions", 0, 12, 10, 100, 18, 0);
+    make(L"STATIC", TR(ActionsList), 0, 12, 10, 100, 18, 0);
     m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_TABSTOP, 12, 30, 200,
                   236, kIdList);
-    m_addButton = make(L"BUTTON", L"Add", BS_PUSHBUTTON, 12, 274, 56, 24, kIdAdd);
-    m_removeButton = make(L"BUTTON", L"Remove", BS_PUSHBUTTON, 72, 274, 66, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", L"Up", BS_PUSHBUTTON, 142, 274, 34, 24, kIdUp);
-    m_downButton = make(L"BUTTON", L"Down", BS_PUSHBUTTON, 180, 274, 50, 24, kIdDown);
+    m_addButton = make(L"BUTTON", TR(ButtonAdd), BS_PUSHBUTTON, 12, 274, 56, 24, kIdAdd);
+    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON, 72, 274, 60, 24, kIdRemove);
+    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON, 136, 274, 48, 24, kIdUp);
+    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON, 188, 274, 48, 24, kIdDown);
 
     // The right-hand column starts clear of the Down button, which ends at x = 230.
-    make(L"STATIC", L"Name:", 0, 238, 12, 100, 18, 0);
+    make(L"STATIC", TR(ActionsName), 0, 238, 12, 100, 18, 0);
     m_nameEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 30, 234, 22, kIdName);
     SendMessageW(m_nameEdit, EM_SETLIMITTEXT, QuickActions::kMaxNameLength, 0);
 
-    make(L"STATIC", L"Opens:", 0, 238, 62, 100, 18, 0);
-    m_targetEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 80, 150, 22,
+    make(L"STATIC", TR(ActionsOpens), 0, 238, 62, 100, 18, 0);
+    m_targetEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 80, 142, 22,
                         kIdTarget);
     SendMessageW(m_targetEdit, EM_SETLIMITTEXT, QuickActions::kMaxTargetLength, 0);
-    m_browseButton = make(L"BUTTON", L"Browse...", BS_PUSHBUTTON, 394, 79, 78, 24, kIdBrowse);
+    m_browseButton = make(L"BUTTON", TR(ActionsBrowse), BS_PUSHBUTTON, 386, 79, 86, 24, kIdBrowse);
 
-    make(L"STATIC", L"Arguments (optional):", 0, 238, 112, 200, 18, 0);
+    make(L"STATIC", TR(ActionsArguments), 0, 238, 112, 234, 18, 0);
     m_argsEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 130, 234, 22, kIdArgs);
     SendMessageW(m_argsEdit, EM_SETLIMITTEXT, QuickActions::kMaxArgumentsLength, 0);
 
-    make(L"STATIC",
-         L"It can open a program, a document, a folder or a web address (https://...). "
-         L"Variables such as %ProgramFiles% are filled in. "
-         L"You can also drag files and folders here from Explorer.",
-         0, 238, 164, 234, 126, 0);
+    make(L"STATIC", TR(ActionsHelp), 0, 238, 164, 234, 126, 0);
 
-    m_status = make(L"STATIC", L"", 0, 12, 308, 304, 36, 0);
-    make(L"BUTTON", L"Save", BS_DEFPUSHBUTTON | WS_TABSTOP, 326, 312, 70, 26, kIdSave);
-    make(L"BUTTON", L"Close", BS_PUSHBUTTON | WS_TABSTOP, 402, 312, 70, 26, kIdClose);
+    m_status = make(L"STATIC", L"", 0, 12, 308, 298, 36, 0);
+    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 318, 312, 76, 26, kIdSave);
+    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 398, 312, 74, 26, kIdClose);
 }
 
 void ActionsWindow::SetStatus(const wchar_t* text) { SetWindowTextW(m_status, text); }
@@ -165,7 +160,7 @@ void ActionsWindow::RefreshList(int selectIndex) {
     SendMessageW(m_list, LB_RESETCONTENT, 0, 0);
     for (const QuickAction& action : m_actions) {
         SendMessageW(m_list, LB_ADDSTRING, 0,
-                     reinterpret_cast<LPARAM>(action.name.empty() ? L"(no name)" : action.name.c_str()));
+                     reinterpret_cast<LPARAM>(action.name.empty() ? TR(NoName) : action.name.c_str()));
     }
     if (m_actions.empty()) {
         m_selected = -1;
@@ -226,7 +221,7 @@ void ActionsWindow::OnNameEdited() {
     const std::wstring& name = m_actions[static_cast<size_t>(m_selected)].name;
     SendMessageW(m_list, LB_DELETESTRING, static_cast<WPARAM>(m_selected), 0);
     SendMessageW(m_list, LB_INSERTSTRING, static_cast<WPARAM>(m_selected),
-                 reinterpret_cast<LPARAM>(name.empty() ? L"(no name)" : name.c_str()));
+                 reinterpret_cast<LPARAM>(name.empty() ? TR(NoName) : name.c_str()));
     SendMessageW(m_list, LB_SETCURSEL, static_cast<WPARAM>(m_selected), 0);
 }
 
@@ -234,7 +229,7 @@ void ActionsWindow::OnAdd() {
     if (m_actions.size() >= QuickActions::kMaxActions) return;
     StoreControlsIntoSelected();
     QuickAction a;
-    a.name = kNewActionName;
+    a.name = TR(NewAction);
     m_actions.push_back(std::move(a));
     SetStatus(L"");
     RefreshList(static_cast<int>(m_actions.size()) - 1);
@@ -266,10 +261,16 @@ void ActionsWindow::OnBrowse() {
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = m_hwnd;
-    ofn.lpstrFilter = L"Programs and documents\0*.*\0\0";
+    // "Name\0pattern\0\0": the name is translated, so the list is put together here.
+    std::wstring filter = TR(BrowseFilter);
+    filter.push_back(L'\0');
+    filter += L"*.*";
+    filter.push_back(L'\0');
+    filter.push_back(L'\0');
+    ofn.lpstrFilter = filter.c_str();
     ofn.lpstrFile = path;
     ofn.nMaxFile = static_cast<DWORD>(sizeof(path) / sizeof(path[0]));
-    ofn.lpstrTitle = L"Choose what this action opens";
+    ofn.lpstrTitle = TR(BrowseTitle);
     // Not NOCHANGEDIR's absence: the dialog must not move the process's working directory.
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER;
     if (!GetOpenFileNameW(&ofn)) return; // cancelled
@@ -277,7 +278,7 @@ void ActionsWindow::OnBrowse() {
     SetWindowTextW(m_targetEdit, path);
     // A row still called "New action" takes the file's name, which is nearly always what was meant.
     const std::wstring current = TextOf(m_nameEdit);
-    if (current.empty() || current == kNewActionName) {
+    if (current.empty() || current == TR(NewAction)) {
         const std::wstring name = QuickActions::NameFromPath(path);
         SetWindowTextW(m_nameEdit, name.c_str()); // fires OnNameEdited, which updates the list
     }
@@ -316,19 +317,20 @@ void ActionsWindow::OnFilesDropped(std::vector<std::wstring> paths) {
 
     if (added > 0) RefreshList(static_cast<int>(m_actions.size()) - 1);
 
-    wchar_t text[200];
+    using Strings::Id;
+    std::wstring text;
     if (added == 0) {
-        swprintf_s(text, L"The list is full (%zu actions). Remove one to make room.",
-                   QuickActions::kMaxActions);
-    } else if (skipped > 0) {
-        swprintf_s(text, L"Added %zu. The list holds %zu at most, so %zu %ls left out.", added,
-                   QuickActions::kMaxActions, skipped, skipped == 1 ? L"was" : L"were");
+        text = Strings::Format(Id::DropListFull, QuickActions::kMaxActions);
+    } else if (skipped == 1) {
+        text = Strings::Format(Id::DropLeftOutOne, added, QuickActions::kMaxActions);
+    } else if (skipped > 1) {
+        text = Strings::Format(Id::DropLeftOutMany, added, QuickActions::kMaxActions, skipped);
     } else if (added == 1) {
-        swprintf_s(text, L"Added \"%ls\". Press Save to keep it.", lastName.c_str());
+        text = Strings::Format(Id::DropAddedOne, lastName.c_str());
     } else {
-        swprintf_s(text, L"Added %zu actions. Press Save to keep them.", added);
+        text = Strings::Format(Id::DropAddedMany, added);
     }
-    SetStatus(text);
+    SetStatus(text.c_str());
 }
 
 void ActionsWindow::OnSave() {
@@ -346,8 +348,7 @@ void ActionsWindow::OnSave() {
         SendMessageW(m_list, LB_SETCURSEL, i, 0);
         m_selected = static_cast<int>(i);
         LoadSelectedIntoControls();
-        SetStatus(noName ? L"Give this action a name, or remove it."
-                         : L"Say what this action opens (use Browse...), or remove it.");
+        SetStatus(noName ? TR(NeedsName) : TR(NeedsTarget));
         SetFocus(noName ? m_nameEdit : m_targetEdit);
         return;
     }

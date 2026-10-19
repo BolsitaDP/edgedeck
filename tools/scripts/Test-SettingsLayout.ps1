@@ -16,6 +16,9 @@
     Scales to check, as DPI (96 = 100%, 120 = 125%, 144 = 150%, 192 = 200%), separated by
     commas or spaces. A string rather than an array on purpose: `powershell -File` hands a
     comma list to an array parameter as one piece of text and joins its digits.
+.PARAMETER Language
+    The language of the window's texts (en, es): a translation is longer or shorter than the
+    original, and has to fit too.
 .PARAMETER ScreenshotDir
     Also save a picture of the window at each scale into this folder. The window is topmost
     and cropped to its visible bounds, so it holds nothing from the desktop.
@@ -25,6 +28,7 @@ param(
     [string]$Dpis = '96,120,144,168,192,240',
     [ValidateSet('dark', 'light', 'follow')][string]$Theme = 'dark',
     [ValidateSet('settings', 'actions')][string]$Dialog = 'settings',
+    [ValidateSet('en', 'es')][string]$Language = 'en',
     [string]$ToolsDir,
     [string]$ScreenshotDir
 )
@@ -40,6 +44,7 @@ foreach ($dpi in $scales) {
     $out = [IO.Path]::GetTempFileName()
     $harnessArgs = @($Theme, 4, "dpi=$dpi")
     if ($Dialog -eq 'actions') { $harnessArgs += 'window=actions' }
+    $harnessArgs += "lang=$Language"
     $process = Start-Process -FilePath $harness -ArgumentList $harnessArgs -PassThru -RedirectStandardOutput $out
     if ($ScreenshotDir) {
         Start-Sleep -Milliseconds 1800

@@ -1,0 +1,296 @@
+#pragma once
+
+#include <string>
+
+// Every text EdgeDeck shows a person, in each language it speaks. One table, so a string is added in
+// one place with all its translations next to it, and a missing translation is a compile error
+// rather than a blank in the interface. English is the default; the language is a setting
+// ([settings] language=en|es), chosen in the Settings window.
+//
+// Texts with values in them are printf formats (%ls, %zu, %d, ...). Every translation must carry the
+// same specifiers in the same order as the English one - a test checks it - because the arguments
+// are passed once, whatever the language.
+//
+// The log is not translated: it is for whoever reads a bug report, and one language there is easier
+// to search.
+
+enum class Language : int {
+    English = 0,
+    Spanish = 1,
+};
+
+// X(id, English, Spanish)
+#define EDGEDECK_STRINGS(X)                                                                                  \
+    /* ---- shared ---- */                                                                                   \
+    X(Checking, L"Checking...", L"Comprobando...")                                                           \
+    X(ButtonAdd, L"Add", L"Añadir")                                                                          \
+    X(ButtonRemove, L"Remove", L"Quitar")                                                                    \
+    X(ButtonUp, L"Up", L"Subir")                                                                             \
+    X(ButtonDown, L"Down", L"Bajar")                                                                         \
+    X(ButtonSave, L"Save", L"Guardar")                                                                       \
+    X(ButtonClose, L"Close", L"Cerrar")                                                                      \
+    X(StartWithWindows, L"Start with Windows", L"Iniciar con Windows")                                       \
+    X(AutostartOnFailed, L"Could not turn on Start with Windows: Windows would not accept the startup entry.", \
+      L"No se pudo activar el inicio con Windows: Windows no aceptó la entrada de inicio.")                 \
+    X(AutostartOffFailed,                                                                                    \
+      L"Could not turn off Start with Windows: Windows would not let the startup entry be removed.",         \
+      L"No se pudo desactivar el inicio con Windows: Windows no dejó quitar la entrada de inicio.")         \
+    /* ---- opening things ---- */                                                                           \
+    X(ShellNotFound, L"not found", L"no se encontró")                                                        \
+    X(ShellAccessDenied, L"access denied", L"acceso denegado")                                               \
+    X(ShellCancelled, L"cancelled", L"cancelado")                                                            \
+    X(ShellNoAssociation, L"nothing is set to open that kind of file",                                       \
+      L"ningún programa está configurado para abrir ese tipo de archivo")                                    \
+    X(ShellBadFormat, L"not a valid program", L"no es un programa válido")                                   \
+    X(ShellWindowsError, L"Windows error %lu", L"error de Windows %lu")                                      \
+    X(CouldNotOpen, L"Could not open \"%ls\": %ls.", L"No se pudo abrir \"%ls\": %ls.")                      \
+    X(ShowDesktopFailed, L"Windows could not show the desktop.", L"Windows no pudo mostrar el escritorio.") \
+    /* ---- the quick-actions editor ---- */                                                                 \
+    X(ActionsTitle, L"EdgeDeck Quick Actions", L"Acciones rápidas de EdgeDeck")                              \
+    X(ActionsList, L"Actions", L"Acciones")                                                                  \
+    X(ActionsName, L"Name:", L"Nombre:")                                                                     \
+    X(ActionsOpens, L"Opens:", L"Abre:")                                                                     \
+    X(ActionsBrowse, L"Browse...", L"Examinar...")                                                           \
+    X(ActionsArguments, L"Arguments (optional):", L"Argumentos (opcional):")                                 \
+    X(ActionsHelp,                                                                                           \
+      L"It can open a program, a document, a folder or a web address (https://...). Variables such as "     \
+      L"%ProgramFiles% are filled in. You can also drag files and folders here from Explorer.",              \
+      L"Abre un programa, un documento, una carpeta o una web (https://...). Se completan variables como "   \
+      L"%ProgramFiles%. También puedes arrastrar aquí archivos y carpetas del Explorador.")                  \
+    X(NewAction, L"New action", L"Nueva acción")                                                             \
+    X(NoName, L"(no name)", L"(sin nombre)")                                                                 \
+    X(BrowseFilter, L"Programs and documents", L"Programas y documentos")                                    \
+    X(BrowseTitle, L"Choose what this action opens", L"Elige qué abre esta acción")                          \
+    X(DropListFull, L"The list is full (%zu actions). Remove one to make room.",                             \
+      L"La lista está llena (%zu acciones). Quita una para hacer sitio.")                                    \
+    X(DropLeftOutOne, L"Added %zu. The list holds %zu at most, so 1 was left out.",                          \
+      L"Se añadieron %zu. La lista admite %zu como máximo, así que 1 quedó fuera.")                          \
+    X(DropLeftOutMany, L"Added %zu. The list holds %zu at most, so %zu were left out.",                      \
+      L"Se añadieron %zu. La lista admite %zu como máximo, así que %zu quedaron fuera.")                     \
+    X(DropAddedOne, L"Added \"%ls\". Press Save to keep it.", L"Se añadió \"%ls\". Pulsa Guardar para conservarla.") \
+    X(DropAddedMany, L"Added %zu actions. Press Save to keep them.",                                          \
+      L"Se añadieron %zu acciones. Pulsa Guardar para conservarlas.")                                        \
+    X(NeedsName, L"Give this action a name, or remove it.", L"Ponle un nombre a esta acción o quítala.")    \
+    X(NeedsTarget, L"Say what this action opens (use Browse...), or remove it.",                             \
+      L"Indica qué abre esta acción (usa Examinar...) o quítala.")                                           \
+    X(DefaultNotepad, L"Open Notepad", L"Abrir Bloc de notas")                                               \
+    X(DefaultCalculator, L"Open Calculator", L"Abrir Calculadora")                                           \
+    X(DefaultDesktop, L"Show Desktop", L"Mostrar escritorio")                                                \
+    /* ---- the app: notifications, the menu ---- */                                                         \
+    X(CrashRestarted, L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.",            \
+      L"EdgeDeck se cerró de forma inesperada y se reinició. Los detalles están en su registro.")            \
+    X(ExitHotkeyTaken,                                                                                       \
+      L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. You can still exit from the "    \
+      L"EdgeDeck icon in the notification area.",                                                            \
+      L"Otro programa ya usa el atajo para salir (Ctrl+Alt+Q). Puedes salir igualmente desde el icono de "   \
+      L"EdgeDeck en el área de notificación.")                                                               \
+    X(SaveFailedSettings,                                                                                    \
+      L"EdgeDeck could not write its settings file. Your changes will apply for this session but will not "  \
+      L"be kept.",                                                                                           \
+      L"EdgeDeck no pudo escribir su archivo de configuración. Los cambios se aplican en esta sesión, pero " \
+      L"no se conservarán.")                                                                                 \
+    X(SaveFailedActions,                                                                                     \
+      L"EdgeDeck could not write its settings file. Your actions will apply for this session but will not "  \
+      L"be kept.",                                                                                           \
+      L"EdgeDeck no pudo escribir su archivo de configuración. Las acciones se aplican en esta sesión, "     \
+      L"pero no se conservarán.")                                                                            \
+    X(RebuildFailed, L"EdgeDeck could not rebuild its panels. The previous layout is still in place.",       \
+      L"EdgeDeck no pudo reconstruir sus paneles. Se mantiene la disposición anterior.")                     \
+    X(TrayPaused, L"%ls (paused)", L"%ls (en pausa)")                                                        \
+    X(AutostartNowOff, L"EdgeDeck will no longer start with Windows.", L"EdgeDeck ya no se iniciará con Windows.") \
+    X(AutostartNowOn, L"EdgeDeck will start with Windows.", L"EdgeDeck se iniciará con Windows.")            \
+    X(OpenLogFailed, L"EdgeDeck could not open its log file.", L"EdgeDeck no pudo abrir su archivo de registro.") \
+    X(RestartNoPath, L"EdgeDeck could not work out where it is running from to restart.",                    \
+      L"EdgeDeck no pudo averiguar desde dónde se ejecuta para reiniciarse.")                                \
+    X(RestartNoCommand, L"EdgeDeck could not build the command to restart itself. It is still running.",     \
+      L"EdgeDeck no pudo preparar la orden para reiniciarse. Sigue en marcha.")                              \
+    X(RestartNoStart, L"EdgeDeck could not start a new copy of itself. It is still running.",                \
+      L"EdgeDeck no pudo iniciar una copia nueva de sí mismo. Sigue en marcha.")                             \
+    X(MenuSettings, L"Settings...", L"Configuración...")                                                     \
+    X(MenuActions, L"Edit quick actions...", L"Editar acciones rápidas...")                                  \
+    X(MenuPause, L"Pause tabs\tCtrl+Alt+P", L"Pausar pestañas\tCtrl+Alt+P")                                  \
+    X(MenuResume, L"Resume tabs\tCtrl+Alt+P", L"Reanudar pestañas\tCtrl+Alt+P")                              \
+    X(MenuOpenLog, L"Open log", L"Abrir registro")                                                           \
+    X(MenuRestart, L"Restart EdgeDeck", L"Reiniciar EdgeDeck")                                               \
+    X(MenuExit, L"Exit", L"Salir")                                                                           \
+    X(AutostartRepaired,                                                                                     \
+      L"EdgeDeck was set to start with Windows, but pointed at a program that no longer exists, so it "      \
+      L"would not have started. That is fixed now.",                                                         \
+      L"EdgeDeck estaba configurado para iniciarse con Windows, pero apuntaba a un programa que ya no "      \
+      L"existe, así que no se habría iniciado. Ya está corregido.")                                          \
+    X(AutostartBroken,                                                                                       \
+      L"EdgeDeck is set to start with Windows, but pointed at a program that no longer exists and could "    \
+      L"not be fixed automatically. Turn \"Start with Windows\" off and on again in Settings.",              \
+      L"EdgeDeck está configurado para iniciarse con Windows, pero apunta a un programa que ya no existe y " \
+      L"no se pudo corregir solo. Desactiva y vuelve a activar \"Iniciar con Windows\" en Configuración.")   \
+    X(AutostartMissing,                                                                                      \
+      L"EdgeDeck is not set to start with Windows. Right-click its icon in the notification area and "       \
+      L"choose \"Start with Windows\".",                                                                     \
+      L"EdgeDeck no está configurado para iniciarse con Windows. Haz clic derecho en su icono del área de "  \
+      L"notificación y elige \"Iniciar con Windows\".")                                                      \
+    /* ---- Quick Actions ---- */                                                                            \
+    X(QuickActionsTitle, L"Quick Actions", L"Acciones rápidas")                                              \
+    X(QuickActionsSummary, L"Quick Actions.", L"Acciones rápidas.")                                          \
+    /* ---- Recent files ---- */                                                                             \
+    X(RecentTitle, L"Recent files", L"Archivos recientes")                                                   \
+    X(RecentFolderNotFound, L"Folder not found", L"No se encontró la carpeta")                               \
+    X(RecentNoFiles, L"No files in this folder", L"No hay archivos en esta carpeta")                         \
+    X(RecentOpenFolder, L"Open folder", L"Abrir carpeta")                                                    \
+    X(RecentTheFolder, L"the folder", L"la carpeta")                                                         \
+    X(RecentAWhileAgo, L"a while ago", L"hace tiempo")                                                       \
+    X(RecentSummaryLoading, L"Recent files.", L"Archivos recientes.")                                        \
+    X(RecentSummaryNotFound, L"Recent files. The folder was not found.",                                     \
+      L"Archivos recientes. No se encontró la carpeta.")                                                     \
+    X(RecentSummary, L"Recent files, %zu shown.", L"Archivos recientes, se muestran %zu.")                   \
+    X(RecentItem, L"%ls, %ls", L"%ls, %ls")                                                                  \
+    X(AgeJustNow, L"just now", L"ahora mismo")                                                               \
+    X(AgeMinutes, L"%lld min ago", L"hace %lld min")                                                         \
+    X(AgeHours, L"%lld h ago", L"hace %lld h")                                                               \
+    X(AgeYesterday, L"yesterday", L"ayer")                                                                   \
+    X(AgeDays, L"%lld days ago", L"hace %lld días")                                                          \
+    /* ---- Media ---- */                                                                                    \
+    X(MediaTitle, L"Media", L"Multimedia")                                                                   \
+    X(MediaNothing, L"No media playing", L"No se reproduce nada")                                            \
+    X(MediaNoTrack, L"No track information", L"Sin información de la pista")                                 \
+    X(MediaControlFailed, L"Windows could not control this app.", L"Windows no pudo controlar esta app.")   \
+    X(MediaUnsupported, L"This app does not support that control right now.",                                \
+      L"Esta app no admite ese control ahora.")                                                              \
+    X(MediaSummaryNothing, L"Media. No media playing.", L"Multimedia. No se reproduce nada.")                \
+    X(MediaSummaryOne, L"Media. %zu app playing.", L"Multimedia. %zu app reproduciendo.")                    \
+    X(MediaSummaryMany, L"Media. %zu apps playing.", L"Multimedia. %zu apps reproduciendo.")                 \
+    X(MediaPrevious, L"%ls: previous track. %ls", L"%ls: pista anterior. %ls")                               \
+    X(MediaPlay, L"%ls: play. %ls", L"%ls: reproducir. %ls")                                                 \
+    X(MediaPause, L"%ls: pause. %ls", L"%ls: pausar. %ls")                                                   \
+    X(MediaNext, L"%ls: next track. %ls", L"%ls: pista siguiente. %ls")                                      \
+    /* ---- Volume ---- */                                                                                   \
+    X(VolumeTitle, L"Volume", L"Volumen")                                                                    \
+    X(VolumeNoDevices, L"No audio output devices", L"No hay dispositivos de salida de audio")                \
+    X(VolumeChecking, L"Checking audio...", L"Buscando audio...")                                            \
+    X(VolumeDefault, L"%ls  (default)", L"%ls  (predeterminado)")                                            \
+    X(VolumeSpeakers, L"Speakers", L"Altavoces")                                                             \
+    X(VolumeSummaryNone, L"Volume. No audio output devices.", L"Volumen. No hay dispositivos de salida de audio.") \
+    X(VolumeSummaryOne, L"Volume. %zu output device.", L"Volumen. %zu dispositivo de salida.")               \
+    X(VolumeSummaryMany, L"Volume. %zu output devices.", L"Volumen. %zu dispositivos de salida.")            \
+    X(VolumeMuted, L"%ls: muted. Activate to unmute.", L"%ls: silenciado. Actívalo para quitar el silencio.") \
+    X(VolumeUnmuted, L"%ls: unmuted. Activate to mute.", L"%ls: con sonido. Actívalo para silenciar.")       \
+    X(VolumeLevel, L"%ls: volume %d percent.", L"%ls: volumen al %d por ciento.")                            \
+    /* ---- Brightness ---- */                                                                               \
+    X(BrightnessTitle, L"Brightness", L"Brillo")                                                             \
+    X(BrightnessChecking, L"Checking displays...", L"Buscando pantallas...")                                 \
+    X(NoMonitors, L"No monitors found", L"No se encontraron monitores")                                      \
+    X(BrightnessUnavailable, L"Brightness control not available", L"Control de brillo no disponible")        \
+    X(GenericMonitor, L"Generic monitor", L"Monitor genérico")                                               \
+    X(BrightnessSummaryNone, L"Brightness. No monitors found.", L"Brillo. No se encontraron monitores.")     \
+    X(BrightnessSummaryOne, L"Brightness. %zu monitor.", L"Brillo. %zu monitor.")                            \
+    X(BrightnessSummaryMany, L"Brightness. %zu monitors.", L"Brillo. %zu monitores.")                        \
+    X(BrightnessRowUnavailable, L"%ls: brightness control not available.", L"%ls: control de brillo no disponible.") \
+    X(BrightnessLevel, L"%ls: brightness %d percent.", L"%ls: brillo al %d por ciento.")                     \
+    /* ---- Lyrics ---- */                                                                                   \
+    X(LyricsTitle, L"Lyrics", L"Letras")                                                                     \
+    X(LyricsLooking, L"Looking up lyrics...", L"Buscando la letra...")                                       \
+    X(LyricsNothingPlaying, L"Nothing playing right now", L"No se está reproduciendo nada")                  \
+    X(LyricsNone, L"No synced lyrics for this track", L"No hay letra sincronizada para esta pista")          \
+    X(LyricsUnreachable, L"Could not reach the lyrics service", L"No se pudo conectar con el servicio de letras") \
+    X(LyricsSummaryNothing, L"Lyrics. Nothing to show.", L"Letras. Nada que mostrar.")                       \
+    X(LyricsSummaryTrack, L"Lyrics for %ls.", L"Letra de %ls.")                                              \
+    X(LyricsSummaryLine, L"Lyrics for %ls. %ls", L"Letra de %ls. %ls")                                       \
+    /* ---- Displays ---- */                                                                                 \
+    X(DisplaysTitle, L"Displays", L"Pantallas")                                                              \
+    X(ProfileMainMonitors, L"Monitors 1 + 2", L"Monitores 1 + 2")                                            \
+    X(ProfileTvOnly, L"TV only", L"Solo la TV")                                                              \
+    X(ProfileAll, L"All monitors", L"Todos los monitores")                                                   \
+    X(ProfileMainOnly, L"Main monitor only", L"Solo el monitor principal")                                   \
+    X(DisplaysNoOthers, L"No other monitors", L"No hay otros monitores")                                     \
+    X(DisplaysMainMissing, L"Main monitor not found", L"No se encontró el monitor principal")                \
+    X(DisplaysTvMissing, L"TV not connected", L"TV no conectada")                                            \
+    X(DisplaysCount, L"%zu monitors", L"%zu monitores")                                                      \
+    X(DisplaysSwitching, L"Switching...", L"Cambiando...")                                                   \
+    X(DisplaysActive, L"Active", L"Activo")                                                                  \
+    X(DisplaysOneMissing, L"One of those monitors is not connected right now.",                              \
+      L"Uno de esos monitores no está conectado ahora.")                                                     \
+    X(DisplaysApplyFailed, L"Windows could not change the display layout (error %ld).",                      \
+      L"Windows no pudo cambiar la disposición de pantallas (error %ld).")                                   \
+    X(DisplaysSummary, L"Displays.", L"Pantallas.")                                                          \
+    X(DisplaysSummaryActive, L"%ls is active.", L"%ls está activo.")                                         \
+    X(DisplaysRow, L"%ls: %ls", L"%ls: %ls")                                                                 \
+    X(DisplaysRowActive, L"%ls: %ls. Active", L"%ls: %ls. Activo")                                           \
+    /* ---- Settings ---- */                                                                                 \
+    X(SettingsTitle, L"EdgeDeck Settings", L"Configuración de EdgeDeck")                                     \
+    X(SettingsTabs, L"Tabs", L"Pestañas")                                                                    \
+    X(SettingsWidgetType, L"Widget type:", L"Tipo de widget:")                                               \
+    X(SettingsActions, L"Actions...", L"Acciones...")                                                        \
+    X(SettingsPosition, L"Vertical position:", L"Posición vertical:")                                        \
+    X(SettingsTabWidth, L"Tab width", L"Ancho pest.")                                                      \
+    X(SettingsTabHeight, L"Tab height", L"Alto pest.")                                                     \
+    X(SettingsPanelWidth, L"Panel width", L"Ancho panel")                                                    \
+    X(SettingsMonitor, L"Monitor:", L"Monitor:")                                                             \
+    X(SettingsEdge, L"Edge:", L"Borde:")                                                                     \
+    X(SettingsRecentFolder, L"Recent folder:", L"Recientes:")                                                \
+    X(SettingsRecentDefault, L"Downloads (default)", L"Descargas (predeterminada)")                          \
+    X(SettingsTheme, L"Theme:", L"Tema:")                                                                    \
+    X(SettingsLanguage, L"Language:", L"Idioma:")                                                            \
+    X(SettingsDelay, L"Open delay:", L"Retardo:")                                                            \
+    X(SettingsFullscreen, L"Don't open over full-screen apps", L"No abrir sobre pantalla completa")   \
+    X(SettingsKeyboard, L"Keyboard", L"Teclado")                                                             \
+    X(SettingsKeyboardHelp,                                                                                  \
+      L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"                               \
+      L"Ctrl+Alt+P: pause or resume the tabs.\r\n"                                                           \
+      L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"                                    \
+      L"In an open panel, arrow keys or the wheel move and adjust,\r\n"                                      \
+      L"Enter or Space activate, and Escape unpins and closes it.",                                          \
+      L"Ctrl+Alt+1..9: abrir y fijar un panel.   Ctrl+Alt+Q: salir.\r\n"                                     \
+      L"Ctrl+Alt+P: pausar o reanudar las pestañas.\r\n"                                                     \
+      L"Ctrl+Alt+Mayús+1..4: cambiar de monitores (pestaña Pantallas).\r\n"                                  \
+      L"En un panel abierto, las flechas o la rueda mueven y ajustan,\r\n"                                   \
+      L"Intro o Espacio activan, y Escape lo desfija y lo cierra.")                                          \
+    X(SettingsPrimaryMonitor, L"Primary monitor", L"Monitor principal")                                      \
+    X(SettingsMonitorOff, L"%ls - off", L"%ls - apagado")                                                    \
+    X(SettingsMonitorAbsent, L"%ls (not connected)", L"%ls (no conectado)")                                  \
+    X(SettingsEdgeRight, L"Right", L"Derecho")                                                               \
+    X(SettingsEdgeLeft, L"Left", L"Izquierdo")                                                               \
+    X(SettingsThemeFollow, L"Follow Windows", L"Igual que Windows")                                          \
+    X(SettingsThemeDark, L"Always dark", L"Siempre oscuro")                                                  \
+    X(SettingsThemeLight, L"Always light", L"Siempre claro")                                                 \
+    X(SettingsDelayInstant, L"Instant", L"Inmediato")                                                        \
+    X(SettingsDelayMs, L"%d ms", L"%d ms")                                                                   \
+    X(SettingsListEntry, L"%zu: %ls", L"%zu: %ls")                                                           \
+    X(TypeQuickActions, L"Quick Actions", L"Acciones rápidas")                                               \
+    X(TypeMedia, L"Media (auto-detect)", L"Multimedia (automático)")                                         \
+    X(TypeBrightness, L"Brightness (monitors)", L"Brillo (monitores)")                                       \
+    X(TypeLyrics, L"Lyrics (auto-detect)", L"Letras (automático)")                                           \
+    X(TypeVolume, L"Volume (audio output)", L"Volumen (salida de audio)")                                    \
+    X(TypeDisplays, L"Displays (switch monitors)", L"Pantallas (cambiar monitores)")                         \
+    X(TypeRecent, L"Recent files (a folder)", L"Archivos recientes (una carpeta)")
+
+namespace Strings {
+
+enum class Id : int {
+#define EDGEDECK_STRING_ID(id, en, es) id,
+    EDGEDECK_STRINGS(EDGEDECK_STRING_ID)
+#undef EDGEDECK_STRING_ID
+    Count
+};
+
+inline constexpr int kLanguageCount = 2;
+
+Language Current();
+void SetCurrent(Language language);
+
+// "en", "es": what config.txt holds. Anything else read back is English.
+const wchar_t* Code(Language language);
+Language FromCode(const std::wstring& code);
+
+// A language's name in itself ("English", "Español"), which is how a language list is shown: a
+// person looking for their own language recognises it written their own way.
+const wchar_t* NativeName(Language language);
+
+const wchar_t* Get(Id id);
+const wchar_t* Get(Id id, Language language);
+
+// Get(id) used as a printf format with the arguments given.
+std::wstring Format(Id id, ...);
+
+} // namespace Strings
+
+// The text `name` in the current language.
+#define TR(name) ::Strings::Get(::Strings::Id::name)

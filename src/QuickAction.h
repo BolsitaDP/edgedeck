@@ -27,7 +27,7 @@ inline constexpr size_t kMaxTargetLength = 520;
 inline constexpr size_t kMaxArgumentsLength = 260;
 
 // What a fresh install shows: Notepad, Calculator, Show Desktop.
-const std::vector<QuickAction>& Defaults();
+std::vector<QuickAction> Defaults();
 
 // A list as it will be kept: whitespace trimmed, line breaks removed (the config file is one
 // value per line), lengths and count capped, entries with no name or nothing to open dropped.

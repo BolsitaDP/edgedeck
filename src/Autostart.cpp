@@ -1,4 +1,5 @@
 #include "Autostart.h"
+#include "Strings.h"
 
 #include <windows.h>
 
@@ -102,20 +103,16 @@ StartupNote NoteForStartup(State before, Repair repair, bool hintAlreadyShown, b
             // Said every time it happens, because it is a fault and not a preference - but it
             // can only happen once per fault: after a repair the entry is valid.
             if (repair == Repair::Repointed) {
-                note.text = L"EdgeDeck was set to start with Windows, but pointed at a program that "
-                            L"no longer exists, so it would not have started. That is fixed now.";
+                note.text = TR(AutostartRepaired);
             } else {
-                note.text = L"EdgeDeck is set to start with Windows, but pointed at a program that no "
-                            L"longer exists and could not be fixed automatically. Turn "
-                            L"\"Start with Windows\" off and on again in Settings.";
+                note.text = TR(AutostartBroken);
             }
             break;
         case State::NotConfigured:
             // A hint, not a fault, and given once. Only from the installed copy: a build folder or
             // a test copy not being on the startup list is how it should be.
             if (!hintAlreadyShown && installedCopy) {
-                note.text = L"EdgeDeck is not set to start with Windows. Right-click its icon in the "
-                            L"notification area and choose \"Start with Windows\".";
+                note.text = TR(AutostartMissing);
                 note.settlesHint = true;
             }
             break;

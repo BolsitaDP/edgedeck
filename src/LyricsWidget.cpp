@@ -1,4 +1,5 @@
 #include "LyricsWidget.h"
+#include "Strings.h"
 
 #include <algorithm>
 
@@ -23,7 +24,7 @@ const wchar_t* LyricsWidget::TabIcon() const {
     return icon;
 }
 
-const wchar_t* LyricsWidget::PanelTitle() const { return L"Lyrics"; }
+const wchar_t* LyricsWidget::PanelTitle() const { return TR(LyricsTitle); }
 
 float LyricsWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     if (m_state != State::Ready) return kLineHeight * 2.0f;
@@ -33,17 +34,17 @@ float LyricsWidget::PreferredContentHeight(float /*logicalWidth*/) const {
 
 void LyricsWidget::Draw(IPanelPainter& painter, float width, float /*contentHeight*/) {
     if (m_state != State::Ready) {
-        const wchar_t* message = L"Looking up lyrics...";
+        const wchar_t* message = TR(LyricsLooking);
         if (m_state == State::Empty) {
             switch (m_lastStatus) {
                 case LrcLyrics::Status::NothingPlaying:
-                    message = L"Nothing playing right now";
+                    message = TR(LyricsNothingPlaying);
                     break;
                 case LrcLyrics::Status::NoLyrics:
-                    message = L"No synced lyrics for this track";
+                    message = TR(LyricsNone);
                     break;
                 default:
-                    message = L"Could not reach the lyrics service";
+                    message = TR(LyricsUnreachable);
                     break;
             }
         }
@@ -191,9 +192,9 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 }
 
 std::wstring LyricsWidget::AccessibleSummary() const {
-    if (m_state != State::Ready) return L"Lyrics. Nothing to show.";
+    if (m_state != State::Ready) return TR(LyricsSummaryNothing);
     if (m_currentLine < 0 || m_currentLine >= static_cast<int>(m_lines.size())) {
-        return L"Lyrics for " + m_trackKey + L".";
+        return Strings::Format(Strings::Id::LyricsSummaryTrack, m_trackKey.c_str());
     }
-    return L"Lyrics for " + m_trackKey + L". " + m_lines[m_currentLine].text;
+    return Strings::Format(Strings::Id::LyricsSummaryLine, m_trackKey.c_str(), m_lines[m_currentLine].text.c_str());
 }

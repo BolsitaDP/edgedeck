@@ -13,6 +13,7 @@
 #include "VolumeWidget.h"
 #include "DisplayWidget.h"
 #include "SettingsWindow.h"
+#include "Strings.h"
 
 #include <shellapi.h>
 
@@ -91,10 +92,14 @@ App::~App() {
 
 void App::NoteRestartedAfterCrash() {
     Diagnostics::Info("Started after the previous copy crashed (see the Crash lines above)");
-    // Ahead of any other startup notice: it is the more important one, and a second balloon
-    // replaces the first, so the two are joined into one message.
-    const std::wstring crash = L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.";
-    m_startupNotice = m_startupNotice.empty() ? crash : crash + L" " + m_startupNotice;
+    // Said once the settings are read, in their language (see Create).
+    m_restartedAfterCrash = true;
+}
+
+void App::AddStartupNotice(const std::wstring& text) {
+    if (text.empty()) return;
+    if (!m_startupNotice.empty()) m_startupNotice += L" ";
+    m_startupNotice += text;
 }
 
 bool App::Create(HINSTANCE hInstance) {
@@ -104,8 +109,13 @@ bool App::Create(HINSTANCE hInstance) {
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
-    m_settings = Config::LoadOrDefault();
+    m_settings = Config::LoadOrDefault(); // also sets the language
+    m_language = Strings::Current();
     CrashHandler::SetRestartEnabled(Config::RestartAfterCrash()); // the config is read now, not at install
+    // Notes found before the settings were read are worded now. A second balloon replaces the
+    // first, so they are joined into one message, the crash first: it is the more important one.
+    if (m_restartedAfterCrash) AddStartupNotice(TR(CrashRestarted));
+    if (m_exitHotkeyTaken) AddStartupNotice(TR(ExitHotkeyTaken));
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     UpdateDisplayHotkeys();
     CheckAutostart();
@@ -167,10 +177,7 @@ void App::CheckAutostart() {
         !installed.empty() && _wcsicmp(installed.c_str(), Autostart::ThisExePath().c_str()) == 0;
     const Autostart::StartupNote note =
         Autostart::NoteForStartup(before, repair, Config::StartupHintShown(), installedCopy);
-    if (!note.text.empty()) {
-        if (!m_startupNotice.empty()) m_startupNotice += L" ";
-        m_startupNotice += note.text;
-    }
+    AddStartupNotice(note.text);
     if (note.settlesHint) {
         Config::SetStartupHintShown(true);
         if (!Config::Save(m_settings)) Diagnostics::Error("Config: could not record that the startup hint was shown");
@@ -248,9 +255,14 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
         // Saving is the one operation whose failure the user would otherwise
         // never find out about: the tabs would move and then quietly revert on
         // the next launch.
-        ShowBalloon(L"EdgeDeck could not write its settings file. Your changes will apply for "
-                    L"this session but will not be kept.");
+        ShowBalloon(TR(SaveFailedSettings));
     }
+
+    // A new language: the tray tip, and every widget that keeps text it worked out earlier (the
+    // default quick actions' names, "5 min ago") is told, so nothing stays in the old one.
+    const bool languageChanged = Strings::Current() != m_language;
+    m_language = Strings::Current();
+    UpdateTrayTip();
 
     // The theme may have changed in the same Save. The palette is cached and only
     // re-read on demand, so without this the panels would keep painting in the
@@ -275,14 +287,14 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
                 m_tabs[i]->ApplyConfig(MakeTabConfig(settings[i]));
                 // The folder a Recent files tab lists is a setting of its own and may have
                 // changed in this Save; the widget is kept, so it has to be told.
-                if (settings[i].widgetType == WidgetType::RecentFiles) m_tabs[i]->RefreshWidget();
+                if (languageChanged || settings[i].widgetType == WidgetType::RecentFiles) m_tabs[i]->RefreshWidget();
             }
             return;
         }
     }
 
     if (!BuildTabsFrom(settings, m_hInstance)) {
-        ShowBalloon(L"EdgeDeck could not rebuild its panels. The previous layout is still in place.");
+        ShowBalloon(TR(RebuildFailed));
         return;
     }
     // A Displays tab may have just been added or removed.
@@ -302,8 +314,7 @@ void App::OpenActionsEditor() {
 void App::ApplyActions(std::vector<QuickAction> actions) {
     Config::SetQuickActionList(std::move(actions));
     if (!Config::Save(m_settings)) {
-        ShowBalloon(L"EdgeDeck could not write its settings file. Your actions will apply for "
-                    L"this session but will not be kept.");
+        ShowBalloon(TR(SaveFailedActions));
     }
     // Every Quick Actions panel shows the list, and a different number of rows is a different
     // height, so each is told and laid out again - in place, so an open panel stays open.
@@ -326,23 +337,22 @@ void App::UpdateTrayTip() {
     nid.hWnd = m_utilityHwnd;
     nid.uID = kTrayId;
     nid.uFlags = NIF_TIP;
-    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck " EDGEDECK_VERSION_WSTRING L" (paused)"
-                                 : L"EdgeDeck " EDGEDECK_VERSION_WSTRING);
+    wcsncpy_s(nid.szTip, TrayTip().c_str(), _TRUNCATE);
     Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
+std::wstring App::TrayTip() const {
+    const wchar_t* name = L"EdgeDeck " EDGEDECK_VERSION_WSTRING;
+    return m_paused ? Strings::Format(Strings::Id::TrayPaused, name) : std::wstring(name);
 }
 
 void App::ToggleAutostart() {
     const bool wasEnabled = Autostart::IsEnabled();
     if (Autostart::SetEnabled(!wasEnabled)) {
-        ShowBalloon(wasEnabled ? L"EdgeDeck will no longer start with Windows."
-                               : L"EdgeDeck will start with Windows.",
-                    false);
+        ShowBalloon(wasEnabled ? TR(AutostartNowOff) : TR(AutostartNowOn), false);
     } else {
         // Read back after the write, so this is "Windows did not take it" and not a guess.
-        ShowBalloon(wasEnabled ? L"Could not turn off Start with Windows: Windows would not let "
-                                 L"the startup entry be removed."
-                               : L"Could not turn on Start with Windows: Windows would not accept "
-                                 L"the startup entry.");
+        ShowBalloon(wasEnabled ? TR(AutostartOffFailed) : TR(AutostartOnFailed));
     }
 }
 
@@ -351,13 +361,13 @@ void App::OpenLog() {
     const INT_PTR result = log.empty() ? 0
                                        : reinterpret_cast<INT_PTR>(ShellExecuteW(
                                              nullptr, L"open", log.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (result <= 32) ShowBalloon(L"EdgeDeck could not open its log file.");
+    if (result <= 32) ShowBalloon(TR(OpenLogFailed));
 }
 
 void App::Restart() {
     const std::wstring exe = Autostart::ThisExePath();
     if (exe.empty()) {
-        ShowBalloon(L"EdgeDeck could not work out where it is running from to restart.");
+        ShowBalloon(TR(RestartNoPath));
         return;
     }
     // The command line this copy was started with, so whatever it was given is given again,
@@ -366,7 +376,7 @@ void App::Restart() {
     wchar_t command[2048];
     if (!CrashHandler::BuildRelaunchCommandLine(GetCommandLineW(), GetCurrentProcessId(), command,
                                                 sizeof(command) / sizeof(command[0]))) {
-        ShowBalloon(L"EdgeDeck could not build the command to restart itself. It is still running.");
+        ShowBalloon(TR(RestartNoCommand));
         return;
     }
     const std::wstring directory = exe.substr(0, exe.find_last_of(L'\\'));
@@ -377,7 +387,7 @@ void App::Restart() {
     if (!CreateProcessW(exe.c_str(), command, nullptr, nullptr, FALSE, 0, nullptr,
                         directory.empty() ? nullptr : directory.c_str(), &startup, &process)) {
         Diagnostics::Error("Restart: could not start a new copy (%s)", Diagnostics::LastErrorText().c_str());
-        ShowBalloon(L"EdgeDeck could not start a new copy of itself. It is still running.");
+        ShowBalloon(TR(RestartNoStart));
         return;
     }
     CloseHandle(process.hThread);
@@ -399,19 +409,18 @@ void App::RunMenuCommand(UINT command) {
 
 void App::ShowMenu(POINT screenPt, HWND owner) {
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings...");
-    AppendMenuW(menu, MF_STRING, kMenuIdActions, L"Edit quick actions...");
+    AppendMenuW(menu, MF_STRING, kMenuIdSettings, TR(MenuSettings));
+    AppendMenuW(menu, MF_STRING, kMenuIdActions, TR(MenuActions));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kMenuIdPause,
-                m_paused ? L"Resume tabs\tCtrl+Alt+P" : L"Pause tabs\tCtrl+Alt+P");
+    AppendMenuW(menu, MF_STRING, kMenuIdPause, m_paused ? TR(MenuResume) : TR(MenuPause));
     // Ticked from what Windows will really do (an entry Task Manager switched off is not on).
     AppendMenuW(menu, MF_STRING | (Autostart::IsEnabled() ? MF_CHECKED : 0), kMenuIdAutostart,
-                L"Start with Windows");
+                TR(StartWithWindows));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kMenuIdOpenLog, L"Open log");
-    AppendMenuW(menu, MF_STRING, kMenuIdRestart, L"Restart EdgeDeck");
+    AppendMenuW(menu, MF_STRING, kMenuIdOpenLog, TR(MenuOpenLog));
+    AppendMenuW(menu, MF_STRING, kMenuIdRestart, TR(MenuRestart));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
+    AppendMenuW(menu, MF_STRING, kMenuIdExit, TR(MenuExit));
 
     // Standard trick for a NOACTIVATE-owning window's popup menu: briefly take the foreground so
     // the menu dismisses correctly on an outside click, then post WM_NULL per MSDN so
@@ -450,10 +459,8 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
         // here, before the message loop and before any tab: the app sat invisible
         // behind a dialog until someone found and dismissed it. The tray menu
         // still offers Exit, so the shortcut being taken is worth a note, not a stop.
-        // Appended, not assigned: a restart after a crash may already have a note waiting.
-        if (!m_startupNotice.empty()) m_startupNotice += L" ";
-        m_startupNotice += L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. "
-                           L"You can still exit from the EdgeDeck icon in the notification area.";
+        // Worded in Create, once the settings - and so the language - have been read.
+        m_exitHotkeyTaken = true;
         Diagnostics::Error("Hotkey: Ctrl+Alt+Q is already taken by another program");
     }
 
@@ -482,8 +489,7 @@ bool App::AddTrayIcon() {
     // The app's own icon from the resource script, so the notification area
     // shows EdgeDeck rather than the generic application glyph.
     nid.hIcon = AppIcon::Load(instance, true);
-    wcscpy_s(nid.szTip, m_paused ? L"EdgeDeck " EDGEDECK_VERSION_WSTRING L" (paused)"
-                                 : L"EdgeDeck " EDGEDECK_VERSION_WSTRING);
+    wcsncpy_s(nid.szTip, TrayTip().c_str(), _TRUNCATE);
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
     // The shell keeps its own copy of the image; this one is ours to release. (Add is retried

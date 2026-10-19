@@ -1,4 +1,5 @@
 #include "Diagnostics.h"
+#include "Strings.h"
 #include "MediaControls.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -48,7 +49,7 @@ std::wstring PrettyName(winrt::hstring const& aumid) {
     if (name.size() > 4 && name.compare(name.size() - 4, 4, L".exe") == 0) {
         name = name.substr(0, name.size() - 4);
     }
-    return name.empty() ? L"Media" : name;
+    return name.empty() ? std::wstring(TR(MediaTitle)) : name;
 }
 
 SessionInfo DescribeSession(WinRTSession const& session) {

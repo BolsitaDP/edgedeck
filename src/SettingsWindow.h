@@ -83,6 +83,7 @@ private:
     HWND m_delayCombo = nullptr;
     HWND m_actionsButton = nullptr;
     HWND m_folderEdit = nullptr;
+    HWND m_languageCombo = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
     HWND m_upButton = nullptr;
