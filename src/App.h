@@ -129,7 +129,11 @@ private:
     // A problem found before the tray icon exists (the icon is added last, once the
     // tabs are up), held until it can be shown.
     std::wstring m_startupNotice;
-    void AddStartupNotice(const std::wstring& text);
+    // warning: the notification carries the warning icon (a fault) rather than the information one.
+    void AddStartupNotice(const std::wstring& text, bool warning = true);
+    bool m_startupNoticeWarns = false;
+    // No settings file existed when this copy started: the first start on this account.
+    bool m_firstRun = false;
     // Found before the settings (and the language) are read, and worded after.
     bool m_restartedAfterCrash = false;
     // The exit shortcut is owned by another program (the tray menu still has Exit).

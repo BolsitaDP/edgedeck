@@ -143,12 +143,14 @@ ScreenEdge EdgeFromString(const std::wstring& s) {
     return (s == L"left" || s == L"Left") ? ScreenEdge::Left : ScreenEdge::Right;
 }
 
+// What a first start shows: the three tabs that work on any Windows machine. Brightness is not one -
+// it needs external monitors with DDC/CI, and on a laptop it would open to "not available" - and
+// the others are a choice the user makes in Settings.
 std::vector<TabSettings> DefaultTabs() {
     return {
-        {WidgetType::QuickActions, 0.14f, 26.0f, 76.0f, 300.0f},
-        {WidgetType::Media, 0.38f, 26.0f, 76.0f, 320.0f},
-        {WidgetType::Volume, 0.58f, 26.0f, 76.0f, 300.0f},
-        {WidgetType::Brightness, 0.80f, 26.0f, 76.0f, 300.0f},
+        {WidgetType::QuickActions, 0.25f, 26.0f, 76.0f, 300.0f},
+        {WidgetType::Media, 0.45f, 26.0f, 76.0f, 320.0f},
+        {WidgetType::Volume, 0.65f, 26.0f, 76.0f, 300.0f},
     };
 }
 

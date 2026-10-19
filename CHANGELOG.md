@@ -21,6 +21,8 @@ The first public version. EdgeDeck so far:
 ### Behaviour
 - Panels open on hover, never take the focus, and can be pinned open.
 - No panel over a full-screen app; an optional open delay; Pause tabs.
+- A first start shows three tabs that work on any machine (Quick Actions, Media, Volume) and a
+  notification saying where they are and where Settings is.
 - A notification-area icon with Settings, quick actions, pause, Start with Windows, the log and
   restart.
 - English and Spanish, chosen in Settings.

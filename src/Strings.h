@@ -77,6 +77,11 @@ enum class Language : int {
     X(DefaultCalculator, L"Open Calculator", L"Abrir Calculadora")                                           \
     X(DefaultDesktop, L"Show Desktop", L"Mostrar escritorio")                                                \
     /* ---- the app: notifications, the menu ---- */                                                         \
+    X(Welcome,                                                                                               \
+      L"EdgeDeck is running. Rest the pointer on the small tabs at the right edge of your screen to open "   \
+      L"them. Right-click a tab, or this icon, for Settings.",                                               \
+      L"EdgeDeck está en marcha. Deja el puntero sobre las pestañas pequeñas del borde derecho de la "       \
+      L"pantalla para abrirlas. Clic derecho en una pestaña, o en este icono, para la configuración.")       \
     X(CrashRestarted, L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.",            \
       L"EdgeDeck se cerró de forma inesperada y se reinició. Los detalles están en su registro.")            \
     X(ExitHotkeyTaken,                                                                                       \

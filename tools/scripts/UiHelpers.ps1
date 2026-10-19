@@ -180,10 +180,12 @@ function Start-TestApp {
                          separated by `n), e.g. @('edge=left', 'edge=left`nmonitor=SAM0F9D').
     .PARAMETER Raw       Text appended to the config after the tabs, as it is - for sections that
                          are not tabs, such as [action] rows for the Quick Actions panel.
+    .PARAMETER FirstRun  Write no config at all: the copy starts as on a machine that never ran
+                         EdgeDeck (default tabs, the welcome notification).
     .OUTPUTS   An object with Process, Scratch, AppData, Trigger and Log.
     #>
     param([string[]]$Tabs = @('QuickActions'), [string[]]$Settings = @('theme=Dark'), [string]$ToolsDir,
-          [double]$StartupSeconds = 3, [string[]]$TabExtra = @(), [string]$Raw = '')
+          [double]$StartupSeconds = 3, [string[]]$TabExtra = @(), [string]$Raw = '', [switch]$FirstRun)
     $scratch = New-ScratchDir
     $appdata = Join-Path $scratch 'appdata'
     $trigger = Join-Path $scratch 'trig'
@@ -198,7 +200,9 @@ function Start-TestApp {
     }
     if ($Raw) { $text += $Raw.TrimEnd("`n") + "`n" }
     # UTF-8 without a BOM, which is what the app writes: ASCII would turn an accented name into '?'.
-    [IO.File]::WriteAllText("$appdata\EdgeDeck\config.txt", $text, (New-Object Text.UTF8Encoding($false)))
+    if (-not $FirstRun) {
+        [IO.File]::WriteAllText("$appdata\EdgeDeck\config.txt", $text, (New-Object Text.UTF8Encoding($false)))
+    }
 
     $real = $env:LOCALAPPDATA
     $env:LOCALAPPDATA = $appdata

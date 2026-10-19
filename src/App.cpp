@@ -98,10 +98,11 @@ void App::NoteRestartedAfterCrash() {
     m_restartedAfterCrash = true;
 }
 
-void App::AddStartupNotice(const std::wstring& text) {
+void App::AddStartupNotice(const std::wstring& text, bool warning) {
     if (text.empty()) return;
     if (!m_startupNotice.empty()) m_startupNotice += L" ";
     m_startupNotice += text;
+    m_startupNoticeWarns = m_startupNoticeWarns || warning;
 }
 
 bool App::Create(HINSTANCE hInstance) {
@@ -111,12 +112,20 @@ bool App::Create(HINSTANCE hInstance) {
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
+    // No settings file yet: this is the first start on this account. Asked before anything below
+    // writes one.
+    const std::wstring configPath = Config::FilePath();
+    m_firstRun = !configPath.empty() && GetFileAttributesW(configPath.c_str()) == INVALID_FILE_ATTRIBUTES;
+
     m_settings = Config::LoadOrDefault(); // also sets the language
     m_language = Strings::Current();
     CrashHandler::SetRestartEnabled(Config::RestartAfterCrash()); // the config is read now, not at install
     // Notes found before the settings were read are worded now. A second balloon replaces the
     // first, so they are joined into one message, the crash first: it is the more important one.
     if (m_restartedAfterCrash) AddStartupNotice(TR(CrashRestarted));
+    // A first start says what EdgeDeck is and where it is - a few small tabs on the screen edge are
+    // easy to miss - as a notification, not a window: nothing EdgeDeck does takes the focus.
+    if (m_firstRun) AddStartupNotice(TR(Welcome), false);
     CarryOverDisplayLayouts();
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     // After the tabs: the display shortcuts exist only while there is a Displays tab.
@@ -129,7 +138,7 @@ bool App::Create(HINSTANCE hInstance) {
     }
     CheckAutostart();
     AddTrayIcon();
-    if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
+    if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str(), m_startupNoticeWarns);
     return true;
 }
 
@@ -207,6 +216,9 @@ void App::CheckAutostart() {
         !installed.empty() && _wcsicmp(installed.c_str(), Autostart::ThisExePath().c_str()) == 0;
     const Autostart::StartupNote note =
         Autostart::NoteForStartup(before, repair, Config::StartupHintShown(), installedCopy);
+    // The one-time "not set to start with Windows" hint waits for the second start rather than
+    // share the first start's one notification with the welcome; a fault is said either way.
+    if (m_firstRun && note.settlesHint) return;
     AddStartupNotice(note.text);
     if (note.settlesHint) {
         Config::SetStartupHintShown(true);
