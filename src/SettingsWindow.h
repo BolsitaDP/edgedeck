@@ -24,10 +24,16 @@ public:
     // The "Actions..." button: the quick-actions list has a window of its own, which the owner
     // opens. Optional.
     using ActionsCallback = std::function<void()>;
+    // The "Shortcuts..." button: the shortcuts have a window of their own, which the owner opens.
+    using ShortcutsCallback = std::function<void()>;
 
     bool Create(HINSTANCE hInstance, std::vector<TabSettings> initial, SaveCallback onSave,
-                ProblemCallback onProblem = {}, ActionsCallback onEditActions = {});
+                ProblemCallback onProblem = {}, ActionsCallback onEditActions = {},
+                ShortcutsCallback onEditShortcuts = {});
     HWND Hwnd() const { return m_hwnd; }
+
+    // The footer lists the shortcuts; called when they change while the window is open.
+    void RefreshKeyboardHelp();
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -84,6 +90,7 @@ private:
     HWND m_actionsButton = nullptr;
     HWND m_folderEdit = nullptr;
     HWND m_languageCombo = nullptr;
+    HWND m_keyboardHelp = nullptr;
     HWND m_addButton = nullptr;
     HWND m_removeButton = nullptr;
     HWND m_upButton = nullptr;
@@ -116,6 +123,7 @@ private:
     SaveCallback m_onSave;
     ProblemCallback m_onProblem;
     ActionsCallback m_onEditActions;
+    ShortcutsCallback m_onEditShortcuts;
     std::vector<int> m_delayChoices; // milliseconds, parallel to the combo box
 
     // The folder the Recent files tabs list (a setting of the app, not of one tab): held here while

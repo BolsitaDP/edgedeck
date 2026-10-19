@@ -13,6 +13,7 @@
 class Tab;
 class SettingsWindow;
 class ActionsWindow;
+class ShortcutsWindow;
 
 // Shared window class names, registered once by App::Create and referenced
 // by Tab when it creates its own HWNDs.
@@ -92,7 +93,14 @@ private:
 
     // Registers the display-layout shortcuts if a Displays tab exists and drops
     // them if it does not, so they track the tab list through Settings changes.
-    void UpdateDisplayHotkeys();
+    void UpdateDisplayHotkeys(std::vector<std::wstring>* taken = nullptr);
+    // Registers the shortcuts the settings name (and drops the old ones); returns, as shown to a
+    // person, those another program already owns.
+    std::vector<std::wstring> RegisterShortcuts();
+    // The Shortcuts window: keeps and registers the set, and returns what could not be registered
+    // as a sentence (empty when all of it was).
+    void OpenShortcutsEditor();
+    std::wstring ApplyShortcuts(const Shortcuts::Set& set);
     // Passes a layout shortcut to the first Displays tab.
     void SwitchDisplays(int profileIndex);
 
@@ -103,6 +111,7 @@ private:
     std::vector<std::unique_ptr<Tab>> m_tabs;
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     std::unique_ptr<ActionsWindow> m_actionsWindow;
+    std::unique_ptr<ShortcutsWindow> m_shortcutsWindow;
     // What the tabs were last built from. Kept so a change to one global (the startup hint, the
     // Quick Actions list) can be saved without reading the file back and losing a change that
     // is only in memory.
@@ -116,7 +125,8 @@ private:
     void AddStartupNotice(const std::wstring& text);
     // Found before the settings (and the language) are read, and worded after.
     bool m_restartedAfterCrash = false;
-    bool m_exitHotkeyTaken = false;
+    // The exit shortcut is owned by another program (the tray menu still has Exit).
+    bool m_exitShortcutTaken = false;
     // The language the panels were last drawn in, to know when a Save changed it.
     Language m_language = Language::English;
     // "EdgeDeck 1.2.0", or with "(paused)" in the current language.

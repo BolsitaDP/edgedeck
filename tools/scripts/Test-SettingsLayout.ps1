@@ -27,7 +27,7 @@
 param(
     [string]$Dpis = '96,120,144,168,192,240',
     [ValidateSet('dark', 'light', 'follow')][string]$Theme = 'dark',
-    [ValidateSet('settings', 'actions')][string]$Dialog = 'settings',
+    [ValidateSet('settings', 'actions', 'shortcuts')][string]$Dialog = 'settings',
     [ValidateSet('en', 'es')][string]$Language = 'en',
     [string]$ToolsDir,
     [string]$ScreenshotDir
@@ -43,12 +43,13 @@ $scales = @($Dpis -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { [int]
 foreach ($dpi in $scales) {
     $out = [IO.Path]::GetTempFileName()
     $harnessArgs = @($Theme, 4, "dpi=$dpi")
-    if ($Dialog -eq 'actions') { $harnessArgs += 'window=actions' }
+    if ($Dialog -ne 'settings') { $harnessArgs += "window=$Dialog" }
     $harnessArgs += "lang=$Language"
     $process = Start-Process -FilePath $harness -ArgumentList $harnessArgs -PassThru -RedirectStandardOutput $out
     if ($ScreenshotDir) {
         Start-Sleep -Milliseconds 1800
-        $window = @(Get-Wins $(if ($Dialog -eq 'actions') { 'EdgeDeckActionsWindow' } else { 'EdgeDeckSettingsWindow' }) -ProcessId $process.Id)[0]
+        $class = @{ settings = 'EdgeDeckSettingsWindow'; actions = 'EdgeDeckActionsWindow'; shortcuts = 'EdgeDeckShortcutsWindow' }[$Dialog]
+        $window = @(Get-Wins $class -ProcessId $process.Id)[0]
         if ($window) {
             $v = Get-VisibleRect $window.Hwnd
             Take-Shot $v.L $v.T $v.Width $v.Height (Join-Path $ScreenshotDir "settings-$dpi.png")

@@ -21,6 +21,8 @@ The first public version. EdgeDeck so far:
 - A notification-area icon with Settings, quick actions, pause, Start with Windows, the log and
   restart.
 - English and Spanish, chosen in Settings.
+- Configurable system-wide shortcuts (exit, pause, open tab 1-9, switch displays 1-4), each of which
+  can be turned off; a shortcut another program owns is reported instead of silently missing.
 - Light, dark and high-contrast themes that follow Windows and its accent colour.
 - A crash leaves a log line and a minidump and restarts EdgeDeck once.
 

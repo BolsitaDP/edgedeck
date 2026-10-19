@@ -182,6 +182,7 @@ bool g_restartAfterCrash = true;
 int g_openDelayMs = 0;
 bool g_startupHintShown = false;
 std::wstring g_recentFolder;             // empty means Downloads, resolved where it is used
+Shortcuts::Set g_shortcuts;
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
@@ -219,6 +220,9 @@ void SetQuickActionList(std::vector<QuickAction> list) {
     g_quickActions = QuickActions::Sanitize(std::move(list));
 }
 
+Shortcuts::Set ShortcutSet() { return g_shortcuts; }
+void SetShortcutSet(const Shortcuts::Set& set) { g_shortcuts = set; }
+
 std::wstring RecentFolder() { return g_recentFolder; }
 void SetRecentFolder(const std::wstring& folder) { g_recentFolder = RecentFiles::SanitizeFolder(folder); }
 
@@ -254,6 +258,7 @@ std::vector<TabSettings> LoadOrDefault() {
     g_openDelayMs = 0;
     g_startupHintShown = false;
     g_recentFolder.clear();
+    g_shortcuts = Shortcuts::Set{};
     g_quickActions.clear();
     Strings::SetCurrent(Language::English); // absent means the default, like everything here
     TabSettings current;
@@ -333,6 +338,11 @@ std::vector<TabSettings> LoadOrDefault() {
             }
             if (key == L"recentFolder") g_recentFolder = RecentFiles::SanitizeFolder(value);
             if (key == L"language") Strings::SetCurrent(Strings::FromCode(value));
+            // Each keeps its default when the value does not parse: a typo must not switch it off.
+            if (key == L"shortcutExit") Shortcuts::Parse(value, g_shortcuts.exit);
+            if (key == L"shortcutPause") Shortcuts::Parse(value, g_shortcuts.pause);
+            if (key == L"shortcutTabs") Shortcuts::ParseModifiers(value, g_shortcuts.tabModifiers);
+            if (key == L"shortcutDisplays") Shortcuts::ParseModifiers(value, g_shortcuts.displayModifiers);
             continue;
         }
 
@@ -380,6 +390,10 @@ bool Save(const std::vector<TabSettings>& tabs) {
     file << L"[settings]\n";
     file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
     file << L"language=" << Strings::Code(Strings::Current()) << L"\n";
+    file << L"shortcutExit=" << Shortcuts::Format(g_shortcuts.exit) << L"\n";
+    file << L"shortcutPause=" << Shortcuts::Format(g_shortcuts.pause) << L"\n";
+    file << L"shortcutTabs=" << Shortcuts::FormatModifiers(g_shortcuts.tabModifiers) << L"\n";
+    file << L"shortcutDisplays=" << Shortcuts::FormatModifiers(g_shortcuts.displayModifiers) << L"\n";
     if (!g_tvMonitor.empty()) file << L"tvMonitor=" << g_tvMonitor << L"\n";
     if (!g_mainMonitor.empty()) file << L"mainMonitor=" << g_mainMonitor << L"\n";
     file << L"fullscreenGuard=" << (g_fullscreenGuard ? L"1" : L"0") << L"\n";

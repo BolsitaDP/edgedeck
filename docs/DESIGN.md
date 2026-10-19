@@ -188,6 +188,17 @@ before the dump and the restart. Throwing from inside a `std::terminate` handler
 CRT fail-fasts first - so the handler builds the exception record itself. Stack is reserved so a stack
 overflow can be reported. A real `__fastfail` bypasses every handler by design.
 
+## Shortcuts
+
+The system-wide shortcuts are `RegisterHotKey` registrations on a hidden window - not keyboard
+hooks. Which ones, is a setting (`Shortcuts.h`): exit and pause are whole chords, opening a tab and
+switching displays are modifiers plus a digit, and any can be off. Every shortcut needs Ctrl, Alt or
+Win (a Shift+letter would take that letter from everything the user types), and a set where two
+would be the same keys is refused before it is saved. They are registered after the settings are
+read (and after the tabs: the display ones exist only while there is a Displays tab), and again
+after every change; one another program owns is logged and named in the Shortcuts window, and a
+taken exit shortcut is also said once at start-up, with the tray menu's Exit as the way out.
+
 ## Configuration
 
 `config.txt` is UTF-8 (a BOM is tolerated), one `key=value` per line, in `[settings]`, `[tab]` and

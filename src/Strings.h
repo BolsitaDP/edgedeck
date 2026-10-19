@@ -80,10 +80,10 @@ enum class Language : int {
     X(CrashRestarted, L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.",            \
       L"EdgeDeck se cerró de forma inesperada y se reinició. Los detalles están en su registro.")            \
     X(ExitHotkeyTaken,                                                                                       \
-      L"The exit shortcut (Ctrl+Alt+Q) is already taken by another program. You can still exit from the "    \
-      L"EdgeDeck icon in the notification area.",                                                            \
-      L"Otro programa ya usa el atajo para salir (Ctrl+Alt+Q). Puedes salir igualmente desde el icono de "   \
-      L"EdgeDeck en el área de notificación.")                                                               \
+      L"The exit shortcut (%ls) is already taken by another program. You can still exit from the EdgeDeck "  \
+      L"icon in the notification area, or choose other keys in Settings > Shortcuts.",                       \
+      L"Otro programa ya usa el atajo para salir (%ls). Puedes salir desde el icono de EdgeDeck en el área " \
+      L"de notificación, o elegir otras teclas en Configuración > Atajos.")                                  \
     X(SaveFailedSettings,                                                                                    \
       L"EdgeDeck could not write its settings file. Your changes will apply for this session but will not "  \
       L"be kept.",                                                                                           \
@@ -108,8 +108,8 @@ enum class Language : int {
       L"EdgeDeck no pudo iniciar una copia nueva de sí mismo. Sigue en marcha.")                             \
     X(MenuSettings, L"Settings...", L"Configuración...")                                                     \
     X(MenuActions, L"Edit quick actions...", L"Editar acciones rápidas...")                                  \
-    X(MenuPause, L"Pause tabs\tCtrl+Alt+P", L"Pausar pestañas\tCtrl+Alt+P")                                  \
-    X(MenuResume, L"Resume tabs\tCtrl+Alt+P", L"Reanudar pestañas\tCtrl+Alt+P")                              \
+    X(MenuPause, L"Pause tabs", L"Pausar pestañas")                                                          \
+    X(MenuResume, L"Resume tabs", L"Reanudar pestañas")                                                      \
     X(MenuOpenLog, L"Open log", L"Abrir registro")                                                           \
     X(MenuRestart, L"Restart EdgeDeck", L"Reiniciar EdgeDeck")                                               \
     X(MenuExit, L"Exit", L"Salir")                                                                           \
@@ -233,16 +233,40 @@ enum class Language : int {
     X(SettingsFullscreen, L"Don't open over full-screen apps", L"No abrir sobre pantalla completa")   \
     X(SettingsKeyboard, L"Keyboard", L"Teclado")                                                             \
     X(SettingsKeyboardHelp,                                                                                  \
-      L"Ctrl+Alt+1..9: open and pin a panel.   Ctrl+Alt+Q: exit EdgeDeck.\r\n"                               \
-      L"Ctrl+Alt+P: pause or resume the tabs.\r\n"                                                           \
-      L"Ctrl+Alt+Shift+1..4: switch monitors (needs a Displays tab).\r\n"                                    \
+      L"%ls: open and pin a panel.   %ls: exit EdgeDeck.\r\n"                                                \
+      L"%ls: pause or resume the tabs.\r\n"                                                                  \
+      L"%ls: switch monitors (needs a Displays tab).\r\n"                                                    \
       L"In an open panel, arrow keys or the wheel move and adjust,\r\n"                                      \
       L"Enter or Space activate, and Escape unpins and closes it.",                                          \
-      L"Ctrl+Alt+1..9: abrir y fijar un panel.   Ctrl+Alt+Q: salir.\r\n"                                     \
-      L"Ctrl+Alt+P: pausar o reanudar las pestañas.\r\n"                                                     \
-      L"Ctrl+Alt+Mayús+1..4: cambiar de monitores (pestaña Pantallas).\r\n"                                  \
+      L"%ls: abrir y fijar un panel.   %ls: salir.\r\n"                                                      \
+      L"%ls: pausar o reanudar las pestañas.\r\n"                                                            \
+      L"%ls: cambiar de monitores (pestaña Pantallas).\r\n"                                                  \
       L"En un panel abierto, las flechas o la rueda mueven y ajustan,\r\n"                                   \
       L"Intro o Espacio activan, y Escape lo desfija y lo cierra.")                                          \
+    X(SettingsShortcuts, L"Shortcuts...", L"Atajos...")                                                      \
+    /* ---- the shortcuts window ---- */                                                                     \
+    X(ShortcutsTitle, L"EdgeDeck Shortcuts", L"Atajos de EdgeDeck")                                          \
+    X(ShortcutExitLabel, L"Exit EdgeDeck:", L"Salir de EdgeDeck:")                                           \
+    X(ShortcutPauseLabel, L"Pause or resume:", L"Pausar o reanudar:")                                        \
+    X(ShortcutTabsLabel, L"Open tab 1 to 9:", L"Abrir pestaña 1 a 9:")                                       \
+    X(ShortcutDisplaysLabel, L"Switch displays 1 to 4:", L"Cambiar pantallas 1 a 4:")                        \
+    X(ShortcutsHelp,                                                                                         \
+      L"Click a box and press the keys you want. Backspace leaves it without a shortcut. Each one needs "    \
+      L"Ctrl, Alt or Win.",                                                                                  \
+      L"Haz clic en un cuadro y pulsa las teclas que quieras. Retroceso lo deja sin atajo. Cada uno "        \
+      L"necesita Ctrl, Alt o Win.")                                                                          \
+    X(ShortcutOff, L"Off", L"Desactivado")                                                                   \
+    X(ShortcutNone, L"no shortcut", L"sin atajo")                                                            \
+    X(ShortcutNameExit, L"Exit", L"Salir")                                                                   \
+    X(ShortcutNamePause, L"Pause", L"Pausar")                                                                \
+    X(ShortcutNameTabs, L"Open tab", L"Abrir pestaña")                                                       \
+    X(ShortcutNameDisplays, L"Switch displays", L"Cambiar pantallas")                                        \
+    X(ShortcutNeedsModifier, L"\"%ls\" needs Ctrl, Alt or Win, or it would take the key from everything you type.", \
+      L"\"%ls\" necesita Ctrl, Alt o Win; si no, le quitaría la tecla a todo lo que escribes.")              \
+    X(ShortcutClash, L"\"%ls\" and \"%ls\" would be the same keys.", L"\"%ls\" y \"%ls\" serían las mismas teclas.") \
+    X(ShortcutTaken, L"Saved, but another program already uses %ls. Choose other keys for it.",              \
+      L"Guardado, pero otro programa ya usa %ls. Elige otras teclas para ese atajo.")                        \
+    X(KeyShift, L"Shift", L"Mayús")                                                                          \
     X(SettingsPrimaryMonitor, L"Primary monitor", L"Monitor principal")                                      \
     X(SettingsMonitorOff, L"%ls - off", L"%ls - apagado")                                                    \
     X(SettingsMonitorAbsent, L"%ls (not connected)", L"%ls (no conectado)")                                  \

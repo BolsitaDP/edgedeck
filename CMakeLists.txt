@@ -89,6 +89,10 @@ add_executable(EdgeDeck WIN32
     src/RecentFilesWidget.h
     src/Strings.cpp
     src/Strings.h
+    src/Shortcuts.cpp
+    src/Shortcuts.h
+    src/ShortcutsWindow.cpp
+    src/ShortcutsWindow.h
     src/PanelImage.h
     src/FileDrop.cpp
     src/FileDrop.h

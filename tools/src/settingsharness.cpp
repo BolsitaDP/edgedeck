@@ -4,6 +4,7 @@
 //                        [dropfiles=X,Y,path|path|...] [lang=en|es]
 //   lang=es : the windows in that language (the layout of each language is checked separately)
 //   window=actions : host the quick-actions editor instead of Settings, and report its layout
+//   window=shortcuts : host the shortcuts window instead
 //   dropfiles=X,Y,paths : drag those files from "Explorer" onto the point
 //           (X,Y) of the editor's client area, given in logical 96-DPI units - a real OLE drag, so
 //           it goes through the same lookup of the window under the pointer a user's drag does -
@@ -18,6 +19,7 @@
 #include "Config.h"
 #include "Renderer.h"
 #include "SettingsWindow.h"
+#include "ShortcutsWindow.h"
 #include "Strings.h"
 
 #include <commctrl.h>
@@ -253,12 +255,12 @@ static void ReportEditor(HWND window) {
 int wmain(int argc, wchar_t** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     setvbuf(stdout, nullptr, _IONBF, 0);
-    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
+    INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES | ICC_HOTKEY_CLASS};
     InitCommonControlsEx(&icc);
 
     const wchar_t* mode = argc > 1 ? argv[1] : L"follow";
     const int seconds = argc > 2 ? _wtoi(argv[2]) : 8;
-    bool drop = false, flip = false, hostActions = false;
+    bool drop = false, flip = false, hostActions = false, hostShortcuts = false;
     int dropIndex = 1;
     UINT simDpi = 0;
     bool dropFiles = false;
@@ -287,6 +289,7 @@ int wmain(int argc, wchar_t** argv) {
         else if (wcsncmp(argv[i], L"drop=", 5) == 0) { drop = true; dropIndex = _wtoi(argv[i] + 5); }
         else if (wcscmp(argv[i], L"flip") == 0) flip = true;
         else if (wcscmp(argv[i], L"window=actions") == 0) hostActions = true;
+        else if (wcscmp(argv[i], L"window=shortcuts") == 0) hostShortcuts = true;
         else if (wcsncmp(argv[i], L"dpi=", 4) == 0) simDpi = static_cast<UINT>(_wtoi(argv[i] + 4));
     }
 
@@ -314,7 +317,20 @@ int wmain(int argc, wchar_t** argv) {
 
     SettingsWindow settings;
     ActionsWindow editor;
-    if (hostActions) {
+    ShortcutsWindow shortcuts;
+    if (hostShortcuts) {
+        // A combination the list does not offer, so the window's added entry is laid out too.
+        Shortcuts::Set set;
+        set.displayModifiers = MOD_WIN | MOD_SHIFT | MOD_ALT;
+        if (!shortcuts.Create(GetModuleHandleW(nullptr), set, [](const Shortcuts::Set& kept) {
+                printf("saved: exit=%ls pause=%ls tabs=%ls displays=%ls\n", Shortcuts::Format(kept.exit).c_str(),
+                       Shortcuts::Format(kept.pause).c_str(), Shortcuts::FormatModifiers(kept.tabModifiers).c_str(),
+                       Shortcuts::FormatModifiers(kept.displayModifiers).c_str());
+                return std::wstring();
+            })) {
+            return 1;
+        }
+    } else if (hostActions) {
         // A full list, so the buttons that depend on the count are in their usual state.
         std::vector<QuickAction> list = QuickActions::Defaults();
         list.push_back({L"M\u00FAsica", L"%USERPROFILE%\\M\u00FAsica\\lista.m3u", L"--shuffle"});
@@ -329,7 +345,7 @@ int wmain(int argc, wchar_t** argv) {
     } else if (!settings.Create(GetModuleHandleW(nullptr), tabs, [](const std::vector<TabSettings>&) {})) {
         return 1;
     }
-    const auto windowHandle = [&] { return hostActions ? editor.Hwnd() : settings.Hwnd(); };
+    const auto windowHandle = [&] { return hostShortcuts ? shortcuts.Hwnd() : hostActions ? editor.Hwnd() : settings.Hwnd(); };
     HWND hwnd = windowHandle();
 
     printf("window DPI as created: %u\n", GetDpiForWindow(hwnd));

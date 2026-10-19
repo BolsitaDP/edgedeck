@@ -13,6 +13,7 @@
 #include "VolumeWidget.h"
 #include "DisplayWidget.h"
 #include "SettingsWindow.h"
+#include "ShortcutsWindow.h"
 #include "Strings.h"
 
 #include <shellapi.h>
@@ -34,7 +35,7 @@ constexpr UINT kMenuIdRestart = 114;
 
 // Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
 // with them, and a chord nothing else claims.
-constexpr int kExitHotkeyVk = 'Q';
+
 
 // Broadcast by the shell after it (re)builds the notification area, which it
 // does whenever Explorer restarts. Every icon is destroyed at that point and the
@@ -115,9 +116,15 @@ bool App::Create(HINSTANCE hInstance) {
     // Notes found before the settings were read are worded now. A second balloon replaces the
     // first, so they are joined into one message, the crash first: it is the more important one.
     if (m_restartedAfterCrash) AddStartupNotice(TR(CrashRestarted));
-    if (m_exitHotkeyTaken) AddStartupNotice(TR(ExitHotkeyTaken));
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
-    UpdateDisplayHotkeys();
+    // After the tabs: the display shortcuts exist only while there is a Displays tab.
+    RegisterShortcuts();
+    // The exit shortcut being taken is worth a note (the tray menu still has Exit); the others
+    // are in the log, and in the Shortcuts window when it is used.
+    if (m_exitShortcutTaken) {
+        AddStartupNotice(Strings::Format(Strings::Id::ExitHotkeyTaken,
+                                         Shortcuts::Display(Config::ShortcutSet().exit).c_str()));
+    }
     CheckAutostart();
     AddTrayIcon();
     if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
@@ -183,7 +190,7 @@ void App::CheckAutostart() {
         if (!Config::Save(m_settings)) Diagnostics::Error("Config: could not record that the startup hint was shown");
     }
 }
-void App::UpdateDisplayHotkeys() {
+void App::UpdateDisplayHotkeys(std::vector<std::wstring>* taken) {
     static_assert(kDisplayHotkeyCount == DisplayWidget::kProfileCount,
                   "one shortcut per Displays layout");
     if (!m_utilityHwnd) return;
@@ -197,16 +204,19 @@ void App::UpdateDisplayHotkeys() {
     const bool hasDisplaysTab = std::any_of(m_tabs.begin(), m_tabs.end(), [](const auto& tab) {
         return tab->WidgetType() == WidgetType::Displays;
     });
-    if (!hasDisplaysTab) return;
+    const UINT modifiers = Config::ShortcutSet().displayModifiers;
+    if (!hasDisplaysTab || modifiers == 0) return;
 
+    bool anyTaken = false;
     for (int i = 0; i < kDisplayHotkeyCount; ++i) {
-        if (!RegisterHotKey(m_utilityHwnd, kDisplayHotkeyBase + i, MOD_CONTROL | MOD_ALT | MOD_SHIFT,
-                            '1' + i)) {
-            // Logged, not shown: another program owning a chord is not worth a
-            // dialog, and the tab's buttons still work.
-            Diagnostics::Error("Hotkey: Ctrl+Alt+Shift+%d is already taken by another program",
-                               i + 1);
-        }
+        if (!RegisterHotKey(m_utilityHwnd, kDisplayHotkeyBase + i, modifiers, '1' + i)) anyTaken = true;
+    }
+    if (anyTaken) {
+        // Logged, not shown: another program owning a chord is not worth a dialog, and the tab's
+        // buttons still work. The Shortcuts window says so when it asked.
+        const std::wstring shown = Shortcuts::DisplayFamily(modifiers, kDisplayHotkeyCount);
+        Diagnostics::Error("Hotkey: %ls is already taken by another program", shown.c_str());
+        if (taken) taken->push_back(shown);
     }
 }
 
@@ -246,7 +256,7 @@ void App::OpenSettings() {
                                  ApplySettings(settings);
                              },
                              [this](const wchar_t* problem) { ShowBalloon(problem); },
-                             [this] { OpenActionsEditor(); });
+                             [this] { OpenActionsEditor(); }, [this] { OpenShortcutsEditor(); });
 }
 
 void App::ApplySettings(const std::vector<TabSettings>& settings) {
@@ -309,6 +319,28 @@ void App::OpenActionsEditor() {
     m_actionsWindow = std::make_unique<ActionsWindow>();
     m_actionsWindow->Create(m_hInstance, Config::QuickActionList(),
                             [this](std::vector<QuickAction> list) { ApplyActions(std::move(list)); });
+}
+
+void App::OpenShortcutsEditor() {
+    if (m_shortcutsWindow && IsWindow(m_shortcutsWindow->Hwnd())) {
+        SetForegroundWindow(m_shortcutsWindow->Hwnd());
+        return;
+    }
+    m_shortcutsWindow = std::make_unique<ShortcutsWindow>();
+    m_shortcutsWindow->Create(m_hInstance, Config::ShortcutSet(),
+                              [this](const Shortcuts::Set& set) { return ApplyShortcuts(set); });
+}
+
+std::wstring App::ApplyShortcuts(const Shortcuts::Set& set) {
+    Config::SetShortcutSet(set);
+    if (!Config::Save(m_settings)) ShowBalloon(TR(SaveFailedSettings));
+    const std::vector<std::wstring> taken = RegisterShortcuts();
+    // The Settings window, if open, lists the keys in its footer.
+    if (m_settingsWindow && IsWindow(m_settingsWindow->Hwnd())) m_settingsWindow->RefreshKeyboardHelp();
+    if (taken.empty()) return {};
+    std::wstring list;
+    for (const std::wstring& shown : taken) list += (list.empty() ? L"" : L", ") + shown;
+    return Strings::Format(Strings::Id::ShortcutTaken, list.c_str());
 }
 
 void App::ApplyActions(std::vector<QuickAction> actions) {
@@ -412,7 +444,11 @@ void App::ShowMenu(POINT screenPt, HWND owner) {
     AppendMenuW(menu, MF_STRING, kMenuIdSettings, TR(MenuSettings));
     AppendMenuW(menu, MF_STRING, kMenuIdActions, TR(MenuActions));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kMenuIdPause, m_paused ? TR(MenuResume) : TR(MenuPause));
+    // The menu shows the shortcut beside the command, as Windows menus do - the one set now.
+    std::wstring pause = m_paused ? TR(MenuResume) : TR(MenuPause);
+    const Shortcut pauseKeys = Config::ShortcutSet().pause;
+    if (!pauseKeys.Off()) pause += L"\t" + Shortcuts::Display(pauseKeys);
+    AppendMenuW(menu, MF_STRING, kMenuIdPause, pause.c_str());
     // Ticked from what Windows will really do (an entry Task Manager switched off is not on).
     AppendMenuW(menu, MF_STRING | (Autostart::IsEnabled() ? MF_CHECKED : 0), kMenuIdAutostart,
                 TR(StartWithWindows));
@@ -454,25 +490,44 @@ bool App::CreateUtilityWindow(HINSTANCE hInstance) {
                                      0, 0, 0, nullptr, nullptr, hInstance, nullptr);
     if (!m_utilityHwnd) return false;
 
-    if (!RegisterHotKey(m_utilityHwnd, kExitHotkeyId, MOD_CONTROL | MOD_ALT, kExitHotkeyVk)) {
-        // Held until the tray icon exists. This used to be a MessageBox, raised
-        // here, before the message loop and before any tab: the app sat invisible
-        // behind a dialog until someone found and dismissed it. The tray menu
-        // still offers Exit, so the shortcut being taken is worth a note, not a stop.
-        // Worded in Create, once the settings - and so the language - have been read.
-        m_exitHotkeyTaken = true;
-        Diagnostics::Error("Hotkey: Ctrl+Alt+Q is already taken by another program");
-    }
-
-    for (int i = 0; i < kOpenHotkeyCount; ++i) {
-        RegisterHotKey(m_utilityHwnd, kOpenHotkeyBase + i, MOD_CONTROL | MOD_ALT, '1' + i);
-    }
-    // Logged, not shown: another program owning the chord is not worth a dialog, and the tray
-    // menu has the same command.
-    if (!RegisterHotKey(m_utilityHwnd, kPauseHotkeyId, MOD_CONTROL | MOD_ALT, 'P')) {
-        Diagnostics::Error("Hotkey: Ctrl+Alt+P is already taken by another program");
-    }
+    // The shortcuts are registered once the settings say which they are (RegisterShortcuts).
     return true;
+}
+
+std::vector<std::wstring> App::RegisterShortcuts() {
+    std::vector<std::wstring> taken;
+    if (!m_utilityHwnd) return taken;
+    const Shortcuts::Set set = Config::ShortcutSet();
+
+    // Everything is dropped first, so this one call serves start-up and every change;
+    // unregistering a key that was never registered is a no-op.
+    UnregisterHotKey(m_utilityHwnd, kExitHotkeyId);
+    UnregisterHotKey(m_utilityHwnd, kPauseHotkeyId);
+    for (int i = 0; i < kOpenHotkeyCount; ++i) UnregisterHotKey(m_utilityHwnd, kOpenHotkeyBase + i);
+
+    // Another program owning a chord is not worth a dialog: it is logged, said in the Shortcuts
+    // window, and - for exit only - said once at start-up. The menu has every command anyway.
+    auto noteTaken = [&](const std::wstring& shown) {
+        Diagnostics::Error("Hotkey: %ls is already taken by another program", shown.c_str());
+        taken.push_back(shown);
+    };
+    m_exitShortcutTaken = false;
+    if (!set.exit.Off() && !RegisterHotKey(m_utilityHwnd, kExitHotkeyId, set.exit.modifiers, set.exit.key)) {
+        m_exitShortcutTaken = true;
+        noteTaken(Shortcuts::Display(set.exit));
+    }
+    if (!set.pause.Off() && !RegisterHotKey(m_utilityHwnd, kPauseHotkeyId, set.pause.modifiers, set.pause.key)) {
+        noteTaken(Shortcuts::Display(set.pause));
+    }
+    if (set.tabModifiers != 0) {
+        bool anyTaken = false;
+        for (int i = 0; i < kOpenHotkeyCount; ++i) {
+            if (!RegisterHotKey(m_utilityHwnd, kOpenHotkeyBase + i, set.tabModifiers, '1' + i)) anyTaken = true;
+        }
+        if (anyTaken) noteTaken(Shortcuts::DisplayFamily(set.tabModifiers, kOpenHotkeyCount));
+    }
+    UpdateDisplayHotkeys(&taken);
+    return taken;
 }
 
 bool App::AddTrayIcon() {
@@ -533,6 +588,11 @@ int App::RunMessageLoop() {
         const HWND actionsHwnd =
             (s_instance && s_instance->m_actionsWindow) ? s_instance->m_actionsWindow->Hwnd() : nullptr;
         if (actionsHwnd && IsWindow(actionsHwnd) && IsDialogMessage(actionsHwnd, &msg)) {
+            continue;
+        }
+        const HWND shortcutsHwnd =
+            (s_instance && s_instance->m_shortcutsWindow) ? s_instance->m_shortcutsWindow->Hwnd() : nullptr;
+        if (shortcutsHwnd && IsWindow(shortcutsHwnd) && IsDialogMessage(shortcutsHwnd, &msg)) {
             continue;
         }
 

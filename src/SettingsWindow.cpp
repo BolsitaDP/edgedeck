@@ -40,6 +40,7 @@ constexpr int kIdDelayCombo = 117;
 constexpr int kIdActionsButton = 118;
 constexpr int kIdFolderEdit = 119;
 constexpr int kIdLanguageCombo = 120;
+constexpr int kIdShortcutsButton = 121;
 
 struct TypeEntry {
     WidgetType type;
@@ -82,12 +83,13 @@ constexpr int kMonitorDropWidth = 330;
 
 bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initial,
                              SaveCallback onSave, ProblemCallback onProblem,
-                             ActionsCallback onEditActions) {
+                             ActionsCallback onEditActions, ShortcutsCallback onEditShortcuts) {
     m_tabs = std::move(initial);
     m_recentFolder = Config::RecentFolder();
     m_onSave = std::move(onSave);
     m_onProblem = std::move(onProblem);
     m_onEditActions = std::move(onEditActions);
+    m_onEditShortcuts = std::move(onEditShortcuts);
     BuildMonitorChoices();
 
     static bool classRegistered = false;
@@ -351,7 +353,19 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     // buttons showed only their last letters. Statics are transparent to the
     // mouse, which is why the buttons still worked and nobody noticed.
     make(L"STATIC", TR(SettingsKeyboard), 0, 12, 456, 100, 18, 0);
-    make(L"STATIC", TR(SettingsKeyboardHelp), 0, 12, 476, 464, 102, 0);
+    make(L"BUTTON", TR(SettingsShortcuts), BS_PUSHBUTTON | WS_TABSTOP, 388, 451, 88, 22, kIdShortcutsButton);
+    m_keyboardHelp = make(L"STATIC", L"", 0, 12, 476, 464, 102, 0);
+    RefreshKeyboardHelp();
+}
+
+void SettingsWindow::RefreshKeyboardHelp() {
+    if (!m_keyboardHelp) return;
+    const Shortcuts::Set set = Config::ShortcutSet();
+    const std::wstring text = Strings::Format(
+        Strings::Id::SettingsKeyboardHelp, Shortcuts::DisplayFamily(set.tabModifiers, Shortcuts::kTabCount).c_str(),
+        Shortcuts::Display(set.exit).c_str(), Shortcuts::Display(set.pause).c_str(),
+        Shortcuts::DisplayFamily(set.displayModifiers, Shortcuts::kDisplayCount).c_str());
+    SetWindowTextW(m_keyboardHelp, text.c_str());
 }
 
 void SettingsWindow::BuildDelayChoices() {
@@ -684,6 +698,8 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 OnSave();
             } else if (id == kIdActionsButton) {
                 if (m_onEditActions) m_onEditActions();
+            } else if (id == kIdShortcutsButton) {
+                if (m_onEditShortcuts) m_onEditShortcuts();
             } else if (id == kIdClose) {
                 DestroyWindow(hwnd);
             }

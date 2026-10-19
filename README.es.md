@@ -72,7 +72,8 @@ pases `-RemoveSettings`.
 ### Teclado
 
 Los paneles nunca le quitan el foco a la app que estás usando, así que se manejan con el teclado
-mientras el puntero está sobre ellos.
+mientras el puntero está sobre ellos. Los atajos globales de abajo son los predeterminados: cámbialos,
+o desactiva cualquiera, en **Configuración > Atajos...**; por ejemplo, si otro programa ya usa uno.
 
 | Teclas | Qué hacen |
 |---|---|
@@ -96,6 +97,7 @@ EdgeDeck cerrado.
 | Ajuste | En Configuración | En `config.txt` |
 |---|---|---|
 | Idioma | **Idioma**: English, Español | `language=es` |
+| Atajos | **Atajos...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` desactiva uno) |
 | Tema | **Tema**: igual que Windows, siempre oscuro, siempre claro | `theme=Follow` |
 | Retardo de apertura | **Retardo**: cuánto debe quedarse el puntero antes de abrir | `openDelayMs=0` |
 | Apps a pantalla completa | **No abrir sobre pantalla completa** | `fullscreenGuard=1` |

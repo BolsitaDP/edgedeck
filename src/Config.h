@@ -8,6 +8,7 @@
 #include "PanelWidget.h"
 #include "Placement.h"
 #include "QuickAction.h"
+#include "Shortcuts.h"
 
 // The user-configurable subset of a tab's layout. Tab's own TabConfig also
 // carries fixed constants (corner radius, animation timing) that aren't
@@ -127,6 +128,11 @@ void SetQuickActionList(std::vector<QuickAction> list);
 // Held in memory like the theme and written by Save ([settings] recentFolder=...).
 std::wstring RecentFolder();
 void SetRecentFolder(const std::wstring& folder);
+
+// The system-wide keyboard shortcuts (see Shortcuts.h). Absent or unreadable values are the
+// defaults; written by Save as shortcutExit=, shortcutPause=, shortcutTabs=, shortcutDisplays=.
+Shortcuts::Set ShortcutSet();
+void SetShortcutSet(const Shortcuts::Set& set);
 
 // Whether the one-time "EdgeDeck is not set to start with Windows" note has been shown, so it is
 // said once and not at every launch.

@@ -69,7 +69,8 @@ To uninstall, run `uninstall.ps1` from the same zip. Your settings are kept unle
 ### Keyboard
 
 Panels never take the focus from the app you are using, so they are driven from the keyboard while
-the pointer is over them.
+the pointer is over them. The system-wide shortcuts below are the defaults: change them, or turn any
+of them off, in **Settings > Shortcuts...** - for example when another program already uses one.
 
 | Keys | What they do |
 |---|---|
@@ -92,6 +93,7 @@ plain text file you can also edit by hand while EdgeDeck is closed.
 | Setting | In Settings | In `config.txt` |
 |---|---|---|
 | Language | **Language**: English, Español | `language=en` |
+| Shortcuts | **Shortcuts...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` turns one off) |
 | Theme | **Theme**: follow Windows, always dark, always light | `theme=Follow` |
 | Open delay | **Open delay**: how long the pointer must rest before a panel opens | `openDelayMs=0` |
 | Full-screen apps | **Don't open over full-screen apps** | `fullscreenGuard=1` |
