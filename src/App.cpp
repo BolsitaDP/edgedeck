@@ -135,6 +135,18 @@ bool App::Create(HINSTANCE hInstance) {
     s_instance = this;
     m_hInstance = hInstance;
 
+    // The log's lines carry the time only. This one says which day, and which build wrote what
+    // follows - what a bug report's log tail needs, and it costs one line per start.
+    SYSTEMTIME today{};
+    GetLocalTime(&today);
+#if defined(_M_ARM64)
+    const char* architecture = "ARM64";
+#else
+    const char* architecture = "x64";
+#endif
+    Diagnostics::Info("EdgeDeck %s (%s) started, %04u-%02u-%02u", EDGEDECK_VERSION_STRING, architecture,
+                      today.wYear, today.wMonth, today.wDay);
+
     if (!Tab::RegisterClasses(hInstance)) return false;
     if (!CreateUtilityWindow(hInstance)) return false;
 
