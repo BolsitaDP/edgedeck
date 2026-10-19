@@ -89,6 +89,8 @@ add_executable(EdgeDeck WIN32
     src/ActionIcons.cpp
     src/ActionIcons.h
     src/BadgeColor.cpp
+    src/BugReport.cpp
+    src/BugReport.h
     src/BadgeColor.h
     src/RecentFiles.cpp
     src/RecentFiles.h

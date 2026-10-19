@@ -20,6 +20,7 @@ void RunRecentFilesTests();
 void RunStringsTests();
 void RunShortcutsTests();
 void RunDisplayLayoutsTests();
+void RunBugReportTests();
 void RunCrashTests();
 
 int wmain() {
@@ -65,6 +66,8 @@ int wmain() {
     RunShortcutsTests();
     std::printf("\n");
     RunDisplayLayoutsTests();
+    std::printf("\n");
+    RunBugReportTests();
     std::printf("\n");
     RunCrashTests();
 

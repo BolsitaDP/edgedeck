@@ -68,7 +68,8 @@ EdgeDeck abre la última release; EdgeDeck nunca lo comprueba por su cuenta.
   pulsarla para soltarlo.
 - **Clic derecho en una pestaña, o en el icono de EdgeDeck del área de notificación,** para el
   menú: Configuración, Editar acciones rápidas, Pausar pestañas, Iniciar con Windows, Abrir
-  registro, Reiniciar y Salir. Clic izquierdo en el icono abre Configuración.
+  registro, Reiniciar, Buscar actualizaciones, Informar de un problema y Salir. Clic izquierdo en el
+  icono abre Configuración.
 - **Configuración** es donde se añaden y colocan las pestañas, y donde están el tema, el idioma, el
   retardo de apertura y las demás opciones de abajo.
 
@@ -116,7 +117,10 @@ contraste.
 
 Si algo falla, EdgeDeck lo anota en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log` (*Abrir registro* en el
 menú). Tras un cierre inesperado se reinicia una vez y deja un pequeño volcado junto al registro,
-que es lo más útil para adjuntar a un informe de error.
+que es lo más útil para adjuntar a un informe de error. *Informar de un problema...* en el menú abre
+un informe de error nuevo con tus versiones de EdgeDeck y de Windows y tus monitores ya rellenados, y
+deja el final del registro en el portapapeles para pegarlo (tu carpeta de usuario va oculta); nada se
+envía hasta que lo publiques.
 
 Si `config.txt` no se puede leer, o lo guardó un EdgeDeck más nuevo, EdgeDeck lo avisa al iniciar y
 guarda una copia como `config.backup.txt` antes de escribir encima.

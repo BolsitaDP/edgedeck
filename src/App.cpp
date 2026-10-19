@@ -1,6 +1,7 @@
 #include "App.h"
 #include "AppIcon.h"
 #include "Autostart.h"
+#include "BugReport.h"
 #include "CrashHandler.h"
 #include "Diagnostics.h"
 #include "Tab.h"
@@ -34,6 +35,7 @@ constexpr UINT kMenuIdAutostart = 112;
 constexpr UINT kMenuIdOpenLog = 113;
 constexpr UINT kMenuIdRestart = 114;
 constexpr UINT kMenuIdUpdates = 115;
+constexpr UINT kMenuIdReport = 116;
 
 // Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
 // with them, and a chord nothing else claims.
@@ -475,6 +477,40 @@ void App::OpenReleasesPage() {
     if (result <= 32) ShowBalloon(TR(UpdatesOpenFailed));
 }
 
+void App::ReportProblem() {
+    const BugReport::Facts facts = BugReport::Gather(EDGEDECK_VERSION_WSTRING);
+    const bool copied = CopyToClipboard(BugReport::ClipboardText(facts));
+    const std::wstring url = BugReport::IssueUrl(EDGEDECK_HOMEPAGE_WSTRING, facts);
+    const INT_PTR result =
+        reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) {
+        ShowBalloon(TR(ReportOpenFailed));
+    } else {
+        ShowBalloon(copied ? TR(ReportLogCopied) : TR(ReportNoClipboard), !copied);
+    }
+}
+
+bool App::CopyToClipboard(const std::wstring& text) {
+    if (!OpenClipboard(m_utilityHwnd)) return false;
+    bool done = false;
+    if (EmptyClipboard()) {
+        const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+        if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+            if (void* target = GlobalLock(memory)) {
+                memcpy(target, text.c_str(), bytes);
+                GlobalUnlock(memory);
+                // The clipboard owns the memory once it takes it, and only then.
+                done = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+            }
+            if (!done) GlobalFree(memory);
+        }
+    }
+    CloseClipboard();
+    if (!done) Diagnostics::Error("Report: could not put the log on the clipboard (%s)",
+                                  Diagnostics::LastErrorText().c_str());
+    return done;
+}
+
 void App::Restart() {
     const std::wstring exe = Autostart::ThisExePath();
     if (exe.empty()) {
@@ -514,6 +550,7 @@ void App::RunMenuCommand(UINT command) {
         case kMenuIdOpenLog: OpenLog(); break;
         case kMenuIdRestart: Restart(); break;
         case kMenuIdUpdates: OpenReleasesPage(); break;
+        case kMenuIdReport: ReportProblem(); break;
         case kMenuIdExit: RequestExit(); break;
         default: break;
     }
@@ -536,6 +573,7 @@ void App::ShowMenu(POINT screenPt, HWND owner) {
     AppendMenuW(menu, MF_STRING, kMenuIdOpenLog, TR(MenuOpenLog));
     AppendMenuW(menu, MF_STRING, kMenuIdRestart, TR(MenuRestart));
     AppendMenuW(menu, MF_STRING, kMenuIdUpdates, TR(MenuUpdates));
+    AppendMenuW(menu, MF_STRING, kMenuIdReport, TR(MenuReport));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kMenuIdExit, TR(MenuExit));
 

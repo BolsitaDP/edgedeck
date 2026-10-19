@@ -123,6 +123,13 @@ enum class Language : int {
     X(MenuOpenLog, L"Open log", L"Abrir registro")                                                           \
     X(MenuRestart, L"Restart EdgeDeck", L"Reiniciar EdgeDeck")                                               \
     X(MenuUpdates, L"Check for updates...", L"Buscar actualizaciones...")                                    \
+    X(MenuReport, L"Report a problem...", L"Informar de un problema...")                                     \
+    X(ReportLogCopied, L"The end of EdgeDeck's log is on the clipboard: paste it into the report's Log box.", \
+      L"El final del registro de EdgeDeck está en el portapapeles: pégalo en el campo Log del informe.")      \
+    X(ReportNoClipboard, L"EdgeDeck could not put its log on the clipboard. Menu > Open log shows it.",       \
+      L"EdgeDeck no pudo copiar su registro al portapapeles. Menú > Abrir registro lo muestra.")             \
+    X(ReportOpenFailed, L"EdgeDeck could not open the report page in the browser.",                          \
+      L"EdgeDeck no pudo abrir la página del informe en el navegador.")                                      \
     X(UpdatesOpenFailed, L"EdgeDeck could not open its releases page in the browser.",                       \
       L"EdgeDeck no pudo abrir su página de versiones en el navegador.")                                     \
     X(MenuExit, L"Exit", L"Salir")                                                                           \

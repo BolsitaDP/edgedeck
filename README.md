@@ -64,7 +64,8 @@ EdgeDeck never checks on its own.
 - **Pin a panel** with the pin in its top-right corner to keep it open; click the pin again to let
   it go.
 - **Right-click a tab, or the EdgeDeck icon in the notification area,** for the menu: Settings,
-  Edit quick actions, Pause tabs, Start with Windows, Open log, Restart and Exit. Left-clicking
+  Edit quick actions, Pause tabs, Start with Windows, Open log, Restart, Check for updates, Report a
+  problem and Exit. Left-clicking
   the notification-area icon opens Settings.
 - **Settings** is where tabs are added and arranged, and where the theme, language, open delay and
   the other options below live.
@@ -111,7 +112,10 @@ The panels follow your Windows accent colour, light or dark mode, and high-contr
 
 If something goes wrong, EdgeDeck writes it to `%LOCALAPPDATA%\EdgeDeck\edgedeck.log` (*Open log* in
 the menu). After a crash it restarts itself once and leaves a small crash dump next to the log,
-which is the most useful thing to attach to a bug report.
+which is the most useful thing to attach to a bug report. *Report a problem...* in the menu opens a
+new bug report with your EdgeDeck and Windows versions and your monitors filled in, and puts the end
+of the log on the clipboard to paste into it (your user folder is masked); nothing is sent until you
+post it.
 
 If `config.txt` cannot be read, or was saved by a newer EdgeDeck, EdgeDeck says so when it starts
 and keeps a copy as `config.backup.txt` before anything writes over it.

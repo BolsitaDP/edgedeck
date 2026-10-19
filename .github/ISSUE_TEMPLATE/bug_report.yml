@@ -7,6 +7,9 @@ body:
       value: |
         Thanks for reporting. For a security problem, please use a private report instead
         (Security > Report a vulnerability).
+
+        EdgeDeck's menu > *Report a problem...* opens this form with the version, Windows and
+        monitors filled in, and puts the end of the log on the clipboard for the Log box.
   - type: textarea
     id: what
     attributes:

@@ -58,6 +58,10 @@ public:
     void Restart();
     // The menu's "Check for updates": opens the project's latest release in the browser.
     void OpenReleasesPage();
+    // "Report a problem...": opens the new-issue form filled in, with the end of the log on the
+    // clipboard (see BugReport).
+    void ReportProblem();
+    bool CopyToClipboard(const std::wstring& text);
 
     // A message for the user that does not need an answer, shown by the
     // notification-area icon. The non-modal way to say "that failed": a

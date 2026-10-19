@@ -4,7 +4,9 @@ Thanks for helping. Bug reports, translations, documentation and code are all we
 
 ## Reporting a bug
 
-Open an issue with the bug template. What helps most:
+The quickest way is EdgeDeck's menu > *Report a problem...*: it opens the bug template with the
+version, Windows and monitors filled in, and puts the end of the log on the clipboard. Otherwise,
+open an issue with the bug template. What helps most:
 
 - your Windows version, display scaling and monitor setup (how many, which is primary);
 - what you did, what happened, and what you expected;
