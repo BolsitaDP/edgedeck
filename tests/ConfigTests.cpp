@@ -4,6 +4,7 @@
 #include "TestHarness.h"
 
 #include "Config.h"
+#include "Strings.h"
 
 #include <string>
 #include <vector>
@@ -189,6 +190,7 @@ void TestEmptyFileUsesDefaults() {
     ScopedConfig guard;
     DeleteFileW(ConfigPath().c_str());
     CHECK(!Config::LoadOrDefault().empty());
+    Strings::SetCurrent(Language::English); // a first start took Windows' language
 }
 
 void TestThemeModeRoundTrips() {
@@ -591,6 +593,7 @@ void TestAFileThatIsNotSettingsIsKeptAside() {
     DeleteFileW(ConfigPath().c_str());
     Config::LoadOrDefault();
     CHECK(Config::LastLoadProblem() == Config::LoadProblem::None); // a first start is not a problem
+    Strings::SetCurrent(Language::English); // and it took Windows' language
     DeleteFileW(BackupPath().c_str());
 }
 

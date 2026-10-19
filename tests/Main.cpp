@@ -1,5 +1,6 @@
 // Single entry point for the test binary. Each suite file exposes one
 // Run*Tests() function; this just calls them in order and reports.
+#include "Strings.h"
 #include "TestHarness.h"
 
 #include <filesystem>
@@ -37,40 +38,22 @@ int wmain() {
     if (!ec) SetEnvironmentVariableW(L"LOCALAPPDATA", scratch.c_str());
 
     std::printf("EdgeDeck unit tests\n\n");
-    RunLyricsTests();
-    std::printf("\n");
-    RunConfigTests();
-    std::printf("\n");
-    RunDisplayTests();
-    std::printf("\n");
-    RunLayeredTests();
-    std::printf("\n");
-    RunNoticeTests();
-    std::printf("\n");
-    RunAutostartTests();
-    std::printf("\n");
-    RunFullscreenTests();
-    std::printf("\n");
-    RunPlacementTests();
-    std::printf("\n");
-    RunIconTests();
-    std::printf("\n");
-    RunQuickActionTests();
-    std::printf("\n");
-    RunActionIconTests();
-    std::printf("\n");
-    RunRecentFilesTests();
-    std::printf("\n");
-    RunStringsTests();
-    std::printf("\n");
-    RunShortcutsTests();
-    std::printf("\n");
-    RunDisplayLayoutsTests();
-    std::printf("\n");
-    RunBugReportTests();
-    std::printf("\n");
-    RunCrashTests();
-
+    // Each suite starts in English, whatever the one before left behind. A config.txt that does
+    // not exist means a first start, which takes Windows' language: on a machine set to Spanish
+    // a suite that deletes the file would otherwise hand the next one Spanish texts to compare.
+    using Suite = void (*)();
+    const Suite suites[] = {RunLyricsTests,      RunConfigTests,      RunDisplayTests,    RunLayeredTests,
+                            RunNoticeTests,      RunAutostartTests,   RunFullscreenTests, RunPlacementTests,
+                            RunIconTests,        RunQuickActionTests, RunActionIconTests, RunRecentFilesTests,
+                            RunStringsTests,     RunShortcutsTests,   RunDisplayLayoutsTests, RunBugReportTests,
+                            RunCrashTests};
+    bool first = true;
+    for (const Suite suite : suites) {
+        if (!first) std::printf("\n");
+        first = false;
+        Strings::SetCurrent(Language::English);
+        suite();
+    }
     const int failures = testing::Summary();
     std::filesystem::remove_all(scratch, ec);
     return failures;

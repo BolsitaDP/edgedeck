@@ -1,5 +1,7 @@
 #include "Strings.h"
 
+#include <windows.h>
+
 #include <cstdarg>
 #include <cstdio>
 
@@ -33,6 +35,12 @@ const wchar_t* Code(Language language) { return language == Language::Spanish ? 
 Language FromCode(const std::wstring& code) {
     return (code == L"es" || code == L"ES") ? Language::Spanish : Language::English;
 }
+
+Language ForWindowsLanguage(unsigned short langId) {
+    return PRIMARYLANGID(langId) == LANG_SPANISH ? Language::Spanish : Language::English;
+}
+
+Language FromWindows() { return ForWindowsLanguage(GetUserDefaultUILanguage()); }
 
 const wchar_t* NativeName(Language language) {
     return language == Language::Spanish ? L"Español" : L"English";

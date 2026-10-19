@@ -103,6 +103,28 @@ void TestTheLanguageIsUsedAndKept() {
     Strings::SetCurrent(Language::English);
 }
 
+void TestAFirstStartSpeaksWindowsLanguage() {
+    TEST("Strings: a first start is in Windows' language when EdgeDeck speaks it, English otherwise");
+    CHECK(Strings::ForWindowsLanguage(0x0C0A) == Language::Spanish); // es-ES
+    CHECK(Strings::ForWindowsLanguage(0x080A) == Language::Spanish); // es-MX
+    CHECK(Strings::ForWindowsLanguage(0x240A) == Language::Spanish); // es-CO
+    CHECK(Strings::ForWindowsLanguage(0x0409) == Language::English); // en-US
+    CHECK(Strings::ForWindowsLanguage(0x040C) == Language::English); // fr-FR: not spoken, the default
+    CHECK(Strings::ForWindowsLanguage(0) == Language::English);
+
+    // No config.txt at all: Windows' language. Whatever this machine's is, that is what is used.
+    wchar_t dir[MAX_PATH] = {};
+    GetEnvironmentVariableW(L"LOCALAPPDATA", dir, MAX_PATH);
+    const std::wstring config = std::wstring(dir) + L"\\EdgeDeck\\config.txt";
+    DeleteFileW(config.c_str());
+    for (const Language before : {Language::English, Language::Spanish}) {
+        Strings::SetCurrent(before);
+        Config::LoadOrDefault();
+        CHECK(Strings::Current() == Strings::FromWindows());
+    }
+    Strings::SetCurrent(Language::English);
+}
+
 void TestNotificationsFitTheirBox() {
     TEST("Strings: what a notification says on its own fits the 255 characters Windows shows");
     for (int lang = 0; lang < Strings::kLanguageCount; ++lang) {
@@ -128,4 +150,5 @@ void RunStringsTests() {
     TestEveryTextExistsInEveryLanguage();
     TestTranslationsTakeTheSameArguments();
     TestTheLanguageIsUsedAndKept();
+    TestAFirstStartSpeaksWindowsLanguage();
 }

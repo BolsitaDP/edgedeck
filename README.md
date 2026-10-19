@@ -98,7 +98,7 @@ plain text file you can also edit by hand while EdgeDeck is closed.
 
 | Setting | In Settings | In `config.txt` |
 |---|---|---|
-| Language | **Language**: English, Español | `language=en` |
+| Language (at first, Windows' own if it is Spanish, else English) | **Language**: English, Español | `language=en` |
 | Shortcuts | **Shortcuts...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` turns one off) |
 | Theme | **Theme**: follow Windows, always dark, always light | `theme=Follow` |
 | Open delay | **Open delay**: how long the pointer must rest before a panel opens | `openDelayMs=0` |

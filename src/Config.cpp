@@ -312,6 +312,11 @@ std::vector<TabSettings> LoadOrDefault() {
         // is the user's settings, which the next Save would otherwise replace with the defaults.
         if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
             KeepAside(path, LoadProblem::Unreadable);
+        } else {
+            // Nothing chosen yet: Windows' own language, if EdgeDeck speaks it, so a first start
+            // - its welcome included - is in a language its user reads. A file without the key
+            // stays English (below): that is a choice already made, by staying with the default.
+            Strings::SetCurrent(Strings::FromWindows());
         }
         return DefaultTabs();
     }

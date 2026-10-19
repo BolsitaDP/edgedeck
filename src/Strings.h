@@ -341,6 +341,12 @@ void SetCurrent(Language language);
 const wchar_t* Code(Language language);
 Language FromCode(const std::wstring& code);
 
+// The language EdgeDeck speaks for a Windows display language (a LANGID): the one with the same
+// primary language - any Spanish, from Spain or Mexico or anywhere - else English. A first start
+// uses it, before there is a choice in config.txt to read; FromWindows asks Windows for the user's.
+Language ForWindowsLanguage(unsigned short langId);
+Language FromWindows();
+
 // A language's name in itself ("English", "Español"), which is how a language list is shown: a
 // person looking for their own language recognises it written their own way.
 const wchar_t* NativeName(Language language);

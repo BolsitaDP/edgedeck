@@ -102,7 +102,7 @@ EdgeDeck cerrado.
 
 | Ajuste | En Configuración | En `config.txt` |
 |---|---|---|
-| Idioma | **Idioma**: English, Español | `language=es` |
+| Idioma (al principio, el de Windows si es español; si no, inglés) | **Idioma**: English, Español | `language=es` |
 | Atajos | **Atajos...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` desactiva uno) |
 | Tema | **Tema**: igual que Windows, siempre oscuro, siempre claro | `theme=Follow` |
 | Retardo de apertura | **Retardo**: cuánto debe quedarse el puntero antes de abrir | `openDelayMs=0` |
