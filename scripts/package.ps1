@@ -6,9 +6,9 @@
 .DESCRIPTION
     Writes, into dist\ (git-ignored):
 
-      EdgeDeck-<version>-win-x64.zip      EdgeDeck.exe, Install.cmd, install.ps1, uninstall.ps1,
+      EdgeDeck-<version>-win-<arch>.zip   EdgeDeck.exe, Install.cmd, install.ps1, uninstall.ps1,
                                           README.txt, LICENSE.txt. Unzip anywhere and run Install.cmd.
-      EdgeDeck-<version>-win-x64.pdb      the symbols for exactly that executable, kept apart
+      EdgeDeck-<version>-win-<arch>.pdb   the symbols for exactly that executable, kept apart
                                           because they are 12 MB and only a crash dump needs them.
 
     The executable needs nothing else: the C/C++ runtime is linked in, so there is no
@@ -18,6 +18,10 @@
 
 .PARAMETER Version
     major.minor.patch. With -Build it is also what the build is stamped with.
+
+.PARAMETER Architecture
+    x64 (the default) or arm64, for Windows on ARM. Each has its own build folder (build,
+    build-arm64) and its own package name (win-x64, win-arm64).
 
 .PARAMETER Build
     Configure and build first (Release). Without it the existing build\Release is packaged, so
@@ -29,6 +33,7 @@
 [CmdletBinding()]
 param(
     [string]$Version,
+    [ValidateSet('x64', 'arm64')][string]$Architecture = 'x64',
     [switch]$Build,
     [string]$Configuration = 'Release',
     [string]$OutDir
@@ -36,7 +41,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$buildDir = Join-Path $repo 'build'
+$buildDir = Join-Path $repo $(if ($Architecture -eq 'x64') { 'build' } else { 'build-arm64' })
+$cmakeArch = if ($Architecture -eq 'x64') { 'x64' } else { 'ARM64' }
 if (-not $OutDir) { $OutDir = Join-Path $repo 'dist' }
 
 # The version of an existing build, so a package made from it says what it is.
@@ -56,7 +62,7 @@ if ($Build) {
     if (-not $cmake) { $cmake = 'C:\Program Files\CMake\bin\cmake.exe' }
     if (-not (Test-Path -LiteralPath $cmake)) { throw 'CMake was not found. Install it or add it to PATH.' }
     # Quoted: PowerShell otherwise splits -DNAME=1.2.0 at the dots before CMake sees it.
-    & $cmake -S $repo -B $buildDir -G 'Visual Studio 17 2022' -A x64 "-DEDGEDECK_VERSION=$Version"
+    & $cmake -S $repo -B $buildDir -G 'Visual Studio 17 2022' -A $cmakeArch "-DEDGEDECK_VERSION=$Version"
     if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
     & $cmake --build $buildDir --config $Configuration
     if ($LASTEXITCODE -ne 0) { throw 'Build failed; nothing was packaged.' }
@@ -73,7 +79,7 @@ if ($fileVersion -ne $Version) {
     throw "The executable at $exe is version $fileVersion, not $Version. Build it with -Build -Version $Version."
 }
 
-$name = "EdgeDeck-$Version-win-x64"
+$name = "EdgeDeck-$Version-win-$Architecture"
 $stage = Join-Path $OutDir $name
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null

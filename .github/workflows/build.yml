@@ -47,3 +47,29 @@ jobs:
         with:
           name: EdgeDeck-symbols
           path: dist/*.pdb
+
+  # Windows on ARM. Built and packaged, tests included in the build so they still compile; they
+  # cannot run here, on an x64 runner. The code has nothing architecture-specific, and this is
+  # what keeps it that way.
+  arm64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build-arm64 -G "Visual Studio 17 2022" -A ARM64
+
+      - name: Build
+        run: cmake --build build-arm64 --config Release -- /m
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1 -Architecture arm64
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgeDeck-package-arm64
+          path: |
+            dist/*.zip
+            dist/*.sha256

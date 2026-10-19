@@ -33,5 +33,5 @@ The first public version. EdgeDeck so far:
 
 ### Distribution
 - A release zip with an installer that needs no administrator rights, an uninstaller, and the C++
-  runtime built in.
+  runtime built in; x64 and ARM64.
 - MIT license.

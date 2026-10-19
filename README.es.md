@@ -45,7 +45,8 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 Necesitas Windows 10 (versión 1809 o posterior) o Windows 11, de 64 bits.
 
 1. Descarga `EdgeDeck-<versión>-win-x64.zip` de la
-   [última release](https://github.com/BolsitaDP/edgedeck/releases/latest).
+   [última release](https://github.com/BolsitaDP/edgedeck/releases/latest)
+   (`win-arm64` para un equipo Windows on ARM).
 2. Descomprímelo donde quieras y haz doble clic en **`Install.cmd`**. Hace una sola pregunta —si
    EdgeDeck debe iniciarse con Windows— e instala solo para tu usuario, sin permisos de
    administrador.
@@ -128,7 +129,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 El runtime de C++ va enlazado dentro del ejecutable, así que `EdgeDeck.exe` funciona en un Windows
 recién instalado sin ningún redistribuible. Para usar tu compilación como lo hace la release, usa
-`scripts\install.ps1 -Build`; `scripts\package.ps1` genera el zip de la release.
+`scripts\install.ps1 -Build`; `scripts\package.ps1` genera el zip de la release (`-Architecture arm64`
+para Windows on ARM, que necesita las herramientas de compilación ARM64 de MSVC).
 
 ## Contribuir
 

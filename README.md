@@ -44,7 +44,8 @@ several of the same kind, on the left or right edge of any monitor.
 You need Windows 10 (version 1809 or later) or Windows 11, 64-bit.
 
 1. Download `EdgeDeck-<version>-win-x64.zip` from the
-   [latest release](https://github.com/BolsitaDP/edgedeck/releases/latest).
+   [latest release](https://github.com/BolsitaDP/edgedeck/releases/latest)
+   (`win-arm64` for a Windows on ARM machine).
 2. Unzip it anywhere and double-click **`Install.cmd`**. It asks one question - whether EdgeDeck
    should start with Windows - and installs for your user only, without administrator rights.
 
@@ -123,7 +124,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 The C++ runtime is linked into the executable, so `EdgeDeck.exe` runs on a clean Windows without
 any redistributable. To run your build the way the release does, use
-`scripts\install.ps1 -Build`; `scripts\package.ps1` makes the release zip.
+`scripts\install.ps1 -Build`; `scripts\package.ps1` makes the release zip (`-Architecture arm64` for
+Windows on ARM, which needs the MSVC ARM64 build tools).
 
 ## Contributing
 

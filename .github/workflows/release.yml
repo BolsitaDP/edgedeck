@@ -38,6 +38,11 @@ jobs:
         shell: pwsh
         run: ./scripts/package.ps1 -Version ${{ steps.version.outputs.version }}
 
+      # Windows on ARM: the same version, built here too (it cannot be tested on this runner).
+      - name: Package for ARM64
+        shell: pwsh
+        run: ./scripts/package.ps1 -Architecture arm64 -Build -Version ${{ steps.version.outputs.version }}
+
       - name: Publish
         shell: pwsh
         env:
