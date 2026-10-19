@@ -36,7 +36,7 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 | **Archivos recientes** | Los archivos más nuevos de una carpeta (Descargas por defecto), con hace cuánto llegó cada uno. Clic para abrirlo. |
 | **Multimedia** | Cada app que está reproduciendo algo —Spotify, una pestaña del navegador, VLC— con anterior, reproducir/pausa y siguiente. |
 | **Volumen** | Un deslizador y un botón de silencio por cada dispositivo de salida de audio. |
-| **Brillo** | Un deslizador de brillo por cada monitor externo compatible con DDC/CI. |
+| **Brillo** | Un deslizador de brillo por cada monitor externo compatible con DDC/CI, y para la pantalla integrada de un portátil. |
 | **Letras** | La letra sincronizada de lo que suene, de LRCLIB. |
 | **Pantallas** | Un clic para cambiar qué monitores están encendidos. Guarda tus propias disposiciones (por ejemplo "monitores del escritorio" o "solo la TV") en **Disposiciones...**; sin ninguna guardada ofrece todos los monitores y cada uno solo. |
 

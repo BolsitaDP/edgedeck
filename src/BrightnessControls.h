@@ -9,7 +9,8 @@
 #include <vector>
 
 // Per-monitor brightness through the Windows monitor-configuration API
-// (DDC/CI over dxva2). DDC/CI is slow (tens to hundreds of ms per call), so
+// (DDC/CI over dxva2), and for a laptop's built-in screen - which has no DDC/CI -
+// through WMI (LaptopBrightness). DDC/CI is slow (tens to hundreds of ms per call), so
 // everything here runs on a short-lived thread-pool job started by an
 // explicit user action (opening the panel, releasing a slider) and reports
 // back with PostMessage - no resident thread, timer or polling.
@@ -30,6 +31,8 @@ struct MonitorInfo {
 class MonitorHandle {
 public:
     virtual ~MonitorHandle() = default;
+    // Writes the brightness (0-100), blocking for as long as the monitor takes. False on failure.
+    virtual bool Set(int percent) = 0;
 };
 
 struct MonitorList : AsyncEnvelope {

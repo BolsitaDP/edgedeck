@@ -209,6 +209,7 @@ enum class Language : int {
     X(NoMonitors, L"No monitors found", L"No se encontraron monitores")                                      \
     X(BrightnessUnavailable, L"Brightness control not available", L"Control de brillo no disponible")        \
     X(GenericMonitor, L"Generic monitor", L"Monitor genérico")                                               \
+    X(BuiltInDisplay, L"Built-in display", L"Pantalla integrada")                                            \
     X(BrightnessSummaryNone, L"Brightness. No monitors found.", L"Brillo. No se encontraron monitores.")     \
     X(BrightnessSummaryOne, L"Brightness. %zu monitor.", L"Brillo. %zu monitor.")                            \
     X(BrightnessSummaryMany, L"Brightness. %zu monitors.", L"Brillo. %zu monitores.")                        \

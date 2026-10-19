@@ -141,6 +141,13 @@ monitors keep brightness in non-volatile memory. A rejected write puts the row b
 the hardware confirmed. Core Audio volume is an in-process call, so the volume slider writes on every
 move and the panel re-reads while open, to follow volume keys pressed elsewhere.
 
+A laptop's built-in screen has no DDC/CI; its backlight is the display driver's, offered through WMI
+(`root\WMI`: `WmiMonitorBrightness` to read, `WmiMonitorBrightnessMethods.WmiSetBrightness` to
+write), as Windows' own slider uses it. WMI is a COM service with a cost to load, so it is asked only
+when the display configuration says a monitor is built in (`outputTechnology` internal or embedded)
+and DDC/CI did not reach it - a desktop never loads it. The WMI panel is matched to the monitor by
+the EDID id in both names, or, with exactly one of each, taken as that one (`LaptopBrightness`).
+
 **Lyrics** come from LRCLIB over one shared WinHTTP session with keep-alive and explicit timeouts
 (5 s resolve/connect/send, 8 s receive - WinHTTP's defaults are about 60 s, enough to hold a pool
 thread a minute), a 4 MB response cap, and a local cache (`lyrics_cache`); "no lyrics" is cached for

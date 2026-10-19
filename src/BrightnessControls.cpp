@@ -1,4 +1,5 @@
 #include "BrightnessControls.h"
+#include "LaptopBrightness.h"
 #include "Strings.h"
 
 #include <highlevelmonitorconfigurationapi.h>
@@ -22,9 +23,31 @@ public:
     ConcreteHandle(const ConcreteHandle&) = delete;
     ConcreteHandle& operator=(const ConcreteHandle&) = delete;
 
+    bool Set(int percent) override {
+        percent = std::clamp(percent, 0, 100);
+        const DWORD range = maxRaw - minRaw;
+        const DWORD raw = minRaw + static_cast<DWORD>((percent * range + 50) / 100);
+        return SetMonitorBrightness(handle, raw) != FALSE;
+    }
+
     HANDLE handle;
     DWORD minRaw;
     DWORD maxRaw;
+};
+
+// A laptop's built-in screen, set through WMI by the key WMI knows it by.
+class BuiltInHandle : public MonitorHandle {
+public:
+    explicit BuiltInHandle(std::wstring instance) : instanceName(std::move(instance)) {}
+    bool Set(int percent) override { return LaptopBrightness::Set(instanceName, percent); }
+    std::wstring instanceName;
+};
+
+// What the display configuration says about one monitor, by its GDI device name.
+struct DisplayFacts {
+    std::wstring friendlyName; // from the EDID ("DELL U2723QE"); empty for a generic one
+    std::wstring edidId;       // "GSM7768", from the monitor's device path
+    bool builtIn = false;      // a laptop's own screen (LaptopBrightness::IsBuiltIn)
 };
 
 BOOL CALLBACK CollectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
@@ -70,8 +93,8 @@ std::wstring FriendlyName(const wchar_t* gdiDeviceName) {
 // monitor: the display-config topology is process-wide and doesn't change while
 // we iterate, so re-querying it inside the loop was pure duplicated work
 // (O(monitors^2) buffer allocations on every panel open).
-std::unordered_map<std::wstring, std::wstring> BuildFriendlyNameMap() {
-    std::unordered_map<std::wstring, std::wstring> names;
+std::unordered_map<std::wstring, DisplayFacts> BuildDisplayFacts() {
+    std::unordered_map<std::wstring, DisplayFacts> names;
 
     UINT32 pathCount = 0, modeCount = 0;
     if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
@@ -98,7 +121,15 @@ std::unordered_map<std::wstring, std::wstring> BuildFriendlyNameMap() {
         target.header.id = paths[i].targetInfo.id;
         if (DisplayConfigGetDeviceInfo(&target.header) != ERROR_SUCCESS) continue;
 
-        names.emplace(source.viewGdiDeviceName, target.monitorFriendlyDeviceName);
+        DisplayFacts facts;
+        facts.friendlyName = target.monitorFriendlyDeviceName;
+        facts.builtIn = LaptopBrightness::IsBuiltIn(paths[i].targetInfo.outputTechnology);
+        // "\\?\DISPLAY#GSM7768#5&187c0955&0&UID4353#{...}": the id is the part after the first '#'.
+        const std::wstring path = target.monitorDevicePath;
+        const size_t first = path.find(L'#');
+        const size_t second = first == std::wstring::npos ? first : path.find(L'#', first + 1);
+        if (second != std::wstring::npos) facts.edidId = path.substr(first + 1, second - first - 1);
+        names.emplace(source.viewGdiDeviceName, std::move(facts));
     }
     return names;
 }
@@ -115,7 +146,14 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
         std::vector<HMONITOR> monitors;
         EnumDisplayMonitors(nullptr, nullptr, CollectMonitor, reinterpret_cast<LPARAM>(&monitors));
 
-        const auto friendlyNames = BuildFriendlyNameMap();
+        const auto displays = BuildDisplayFacts();
+        // Built-in screens DDC/CI did not reach: rows waiting for WMI, asked once for all of them.
+        struct Waiting {
+            size_t row;
+            std::wstring edidId;
+        };
+        std::vector<Waiting> builtInRows;
+        size_t builtInCount = 0;
 
         // Primary monitor first so row 1 is the screen the tabs live on.
         std::vector<MONITORINFOEXW> details;
@@ -135,18 +173,34 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
 
         size_t number = 0;
         for (size_t idx = 0; idx < ordered.size(); ++idx) {
+            const auto factsIt = displays.find(details[idx].szDevice);
+            const DisplayFacts facts = factsIt != displays.end() ? factsIt->second : DisplayFacts{};
+            if (facts.builtIn) ++builtInCount;
+            const wchar_t* modelName = !facts.friendlyName.empty() ? facts.friendlyName.c_str()
+                                       : facts.builtIn            ? TR(BuiltInDisplay)
+                                                                  : TR(GenericMonitor);
+
             DWORD count = 0;
-            if (!GetNumberOfPhysicalMonitorsFromHMONITOR(ordered[idx], &count) || count == 0) {
+            std::vector<PHYSICAL_MONITOR> physical;
+            if (GetNumberOfPhysicalMonitorsFromHMONITOR(ordered[idx], &count) && count > 0) {
+                physical.resize(count);
+                if (!GetPhysicalMonitorsFromHMONITOR(ordered[idx], count, physical.data())) physical.clear();
+            }
+            if (physical.empty()) {
+                // A built-in screen may have no physical-monitor handle at all; it still gets its
+                // row, for WMI to fill in below. Anything else without one is not listed, as before.
+                if (!facts.builtIn) continue;
+                ++number;
+                MonitorInfo info;
+                wchar_t label[192];
+                swprintf_s(label, L"%zu: %s", number, modelName);
+                info.name = label;
+                info.devicePath = L"builtin:" + facts.edidId;
+                builtInRows.push_back({list->infos.size(), facts.edidId});
+                list->infos.push_back(std::move(info));
+                list->handles.push_back(nullptr);
                 continue;
             }
-            std::vector<PHYSICAL_MONITOR> physical(count);
-            if (!GetPhysicalMonitorsFromHMONITOR(ordered[idx], count, physical.data())) continue;
-
-            auto friendlyIt = friendlyNames.find(details[idx].szDevice);
-            const wchar_t* modelName =
-                (friendlyIt != friendlyNames.end() && !friendlyIt->second.empty())
-                    ? friendlyIt->second.c_str()
-                    : TR(GenericMonitor);
 
             for (DWORD p = 0; p < count; ++p) {
                 ++number;
@@ -166,8 +220,23 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
                 } else {
                     DestroyPhysicalMonitor(h);
                     list->handles.push_back(nullptr);
+                    if (facts.builtIn) builtInRows.push_back({list->infos.size(), facts.edidId});
                 }
                 list->infos.push_back(std::move(info));
+            }
+        }
+
+        // Only now, and only with a built-in screen DDC/CI could not reach: WMI is a COM service
+        // with a cost to load, and a desktop never needs it.
+        if (!builtInRows.empty()) {
+            const std::vector<LaptopBrightness::Panel> panels = LaptopBrightness::Read();
+            for (const Waiting& waiting : builtInRows) {
+                const int match = LaptopBrightness::MatchPanel(panels, waiting.edidId, builtInCount);
+                if (match < 0) continue;
+                const LaptopBrightness::Panel& panel = panels[static_cast<size_t>(match)];
+                list->infos[waiting.row].supported = true;
+                list->infos[waiting.row].percent = panel.percent;
+                list->handles[waiting.row] = std::make_shared<BuiltInHandle>(panel.instanceName);
             }
         }
     } catch (...) {
@@ -191,12 +260,10 @@ winrt::fire_and_forget SetAsync(std::shared_ptr<MonitorHandle> monitor, int perc
     co_await winrt::resume_background();
 
     bool succeeded = false;
-    auto* concrete = static_cast<ConcreteHandle*>(monitor.get());
-    if (concrete) {
-        percent = std::clamp(percent, 0, 100);
-        DWORD range = concrete->maxRaw - concrete->minRaw;
-        DWORD raw = concrete->minRaw + static_cast<DWORD>((percent * range + 50) / 100);
-        succeeded = SetMonitorBrightness(concrete->handle, raw) != FALSE;
+    try {
+        if (monitor) succeeded = monitor->Set(percent);
+    } catch (...) {
+        // Nothing here throws on purpose; a write that did is a write that failed.
     }
     result->succeeded = succeeded;
     PostOrDelete(notifyWindow, notifyMessage, result);

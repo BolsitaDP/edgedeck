@@ -22,6 +22,7 @@ void RunStringsTests();
 void RunShortcutsTests();
 void RunDisplayLayoutsTests();
 void RunBugReportTests();
+void RunLaptopBrightnessTests();
 void RunCrashTests();
 
 int wmain() {
@@ -45,7 +46,7 @@ int wmain() {
     const Suite suites[] = {RunLyricsTests,      RunConfigTests,      RunDisplayTests,    RunLayeredTests,
                             RunNoticeTests,      RunAutostartTests,   RunFullscreenTests, RunPlacementTests,
                             RunIconTests,        RunQuickActionTests, RunActionIconTests, RunRecentFilesTests,
-                            RunStringsTests,     RunShortcutsTests,   RunDisplayLayoutsTests, RunBugReportTests,
+                            RunStringsTests,     RunShortcutsTests,   RunDisplayLayoutsTests, RunBugReportTests, RunLaptopBrightnessTests,
                             RunCrashTests};
     bool first = true;
     for (const Suite suite : suites) {

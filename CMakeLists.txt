@@ -91,6 +91,8 @@ add_executable(EdgeDeck WIN32
     src/BadgeColor.cpp
     src/BugReport.cpp
     src/BugReport.h
+    src/LaptopBrightness.cpp
+    src/LaptopBrightness.h
     src/BadgeColor.h
     src/RecentFiles.cpp
     src/RecentFiles.h
@@ -160,6 +162,7 @@ target_link_libraries(EdgeDeck PRIVATE
     propsys
     shlwapi
     uuid
+    wbemuuid
     avrt
 )
 if (MSVC)

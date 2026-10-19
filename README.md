@@ -35,7 +35,7 @@ several of the same kind, on the left or right edge of any monitor.
 | **Recent files** | The newest files in a folder (Downloads by default), with how long ago each arrived. Click one to open it. |
 | **Media** | Every app that is playing something - Spotify, a browser tab, VLC - with previous, play/pause and next. |
 | **Volume** | A slider and a mute button for each audio output device. |
-| **Brightness** | A brightness slider for each external monitor that supports DDC/CI. |
+| **Brightness** | A brightness slider for each external monitor that supports DDC/CI, and for a laptop's built-in screen. |
 | **Lyrics** | Synced lyrics for whatever is playing, from LRCLIB. |
 | **Displays** | One click to switch which monitors are on. Save your own layouts (for example "desk monitors" or "just the TV") in **Layouts...**; with none saved it offers all monitors and each one alone. |
 
