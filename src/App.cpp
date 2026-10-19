@@ -866,6 +866,18 @@ LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 
     switch (msg) {
+        case WM_QUERYENDSESSION:
+            return TRUE; // nothing to save: settings are written when they change
+        case WM_ENDSESSION:
+            // The session is ending, or - ENDSESSION_CLOSEAPP - an installer's Restart Manager needs
+            // EdgeDeck closed to replace it. Either way the notification-area icon goes now, so none
+            // is left behind; for an installer EdgeDeck also exits, as Exit in the menu would,
+            // rather than wait to be terminated.
+            if (wParam && s_instance) {
+                s_instance->RemoveTrayIcon();
+                if (lParam & ENDSESSION_CLOSEAPP) s_instance->RequestExit();
+            }
+            return 0;
         case WM_HOTKEY:
             if (!s_instance) break;
             if (wParam == kExitHotkeyId) {
