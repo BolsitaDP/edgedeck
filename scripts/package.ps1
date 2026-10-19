@@ -113,7 +113,7 @@ Edge tabs for Windows: small tabs on the screen edge, each opening a panel when 
 on it (quick actions, media, volume, brightness, lyrics, monitors).
 
 Install:    double-click Install.cmd
-Uninstall:  run uninstall.ps1 (PowerShell), or delete the installed folder and the startup entry.
+Uninstall:  Settings > Apps > Installed apps > EdgeDeck > Uninstall (or run uninstall.ps1).
 
 Installs to %LOCALAPPDATA%\EdgeDeck\bin for the current user, creates a desktop shortcut, and
 (if you say yes) starts with Windows. Nothing outside your user profile is touched and no

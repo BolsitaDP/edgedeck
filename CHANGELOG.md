@@ -42,4 +42,5 @@ The first public version. EdgeDeck so far:
   runtime built in; x64 and ARM64.
 - Listed in Windows' installed apps (per user), with its version and an Uninstall button.
 - *Check for updates* in the menu opens the latest release; nothing is checked in the background.
+- Each release carries its winget manifests, for installing with `winget` once they are accepted.
 - MIT license.

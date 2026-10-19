@@ -95,4 +95,21 @@ Texts live in `src/Strings.h`, one `X(Id, English, Spanish)` entry per text.
   that runs.
 - CI builds the app, the tests and the tools, and runs the unit tests; it must pass.
 
+## Releasing
+
+For maintainers. A release is a tag; everything else is the `release` workflow.
+
+1. Rehearse (optional, publishes nothing): Actions > release > *Run workflow* with the version.
+   It builds, tests and packages both architectures and keeps the zips, the notes it would publish
+   (from `## [Unreleased]`) and the winget manifests as a build artifact.
+2. In CHANGELOG.md, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and commit. The
+   workflow refuses a tag whose version has no section there.
+3. Tag and push: `git tag vX.Y.Z` and `git push origin vX.Y.Z`. The workflow publishes the
+   release with the x64 and ARM64 zips, their symbols and SHA256s, and
+   `EdgeDeck-X.Y.Z-winget-manifests.zip`.
+4. winget: unzip the manifests into a fork of
+   [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) (they are already in its
+   `manifests/b/BolsitaDP/EdgeDeck/X.Y.Z` layout) and open a pull request. `scripts/winget.ps1`
+   makes the same files locally and validates them with `winget validate`.
+
 By contributing you agree that your contribution is licensed under the [MIT license](LICENSE).
