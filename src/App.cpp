@@ -106,6 +106,20 @@ void App::AddStartupNotice(const std::wstring& text, bool warning) {
     m_startupNoticeWarns = m_startupNoticeWarns || warning;
 }
 
+// A settings file that could not be read, or was written by a newer EdgeDeck, has been copied aside
+// by Config before anything writes over it; the user is told, since what they see is not what they
+// set.
+void App::NoteConfigProblem() {
+    const Config::LoadProblem problem = Config::LastLoadProblem();
+    if (problem == Config::LoadProblem::None) return;
+    const std::wstring backup = Config::LastBackupPath();
+    Diagnostics::Error("Config: %s; %s", problem == Config::LoadProblem::Newer ? "written by a newer version"
+                                                                              : "could not be read, using defaults",
+                       backup.empty() ? "no copy could be made" : "copied to config.backup.txt");
+    AddStartupNotice(problem == Config::LoadProblem::Newer ? TR(ConfigNewer) : TR(ConfigUnreadable));
+    if (!backup.empty()) AddStartupNotice(Strings::Format(Strings::Id::ConfigBackupKept, Config::kBackupFileName));
+}
+
 bool App::Create(HINSTANCE hInstance) {
     s_instance = this;
     m_hInstance = hInstance;
@@ -124,6 +138,7 @@ bool App::Create(HINSTANCE hInstance) {
     // Notes found before the settings were read are worded now. A second balloon replaces the
     // first, so they are joined into one message, the crash first: it is the more important one.
     if (m_restartedAfterCrash) AddStartupNotice(TR(CrashRestarted));
+    NoteConfigProblem();
     // A first start says what EdgeDeck is and where it is - a few small tabs on the screen edge are
     // easy to miss - as a notification, not a window: nothing EdgeDeck does takes the focus.
     if (m_firstRun) AddStartupNotice(TR(Welcome), false);

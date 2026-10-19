@@ -46,14 +46,26 @@ bool ReadUtf8File(const std::wstring& path, std::wstring& out) {
         static_cast<unsigned char>(bytes[1]) == 0xBB && static_cast<unsigned char>(bytes[2]) == 0xBF) {
         start = 3; // a byte order mark, which an editor may have added
     }
-    const int length = MultiByteToWideChar(CP_UTF8, 0, bytes.data() + start,
-                                           static_cast<int>(bytes.size() - start), nullptr, 0);
-    out.assign(static_cast<size_t>(length > 0 ? length : 0), L'\0');
-    if (length > 0) {
-        MultiByteToWideChar(CP_UTF8, 0, bytes.data() + start, static_cast<int>(bytes.size() - start),
-                            out.data(), length);
+    const char* text = bytes.data() + start;
+    const int textLength = static_cast<int>(bytes.size() - start);
+    // Bytes that are not UTF-8 are a file an editor saved in the system's code page ("ANSI", what
+    // older Notepads wrote): read that way, an accented name keeps its accent instead of becoming
+    // a replacement character - which the next Save would then write for good.
+    UINT codePage = CP_UTF8;
+    int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, textLength, nullptr, 0);
+    if (length <= 0 && textLength > 0) {
+        codePage = CP_ACP;
+        length = MultiByteToWideChar(CP_ACP, 0, text, textLength, nullptr, 0);
     }
+    out.assign(static_cast<size_t>(length > 0 ? length : 0), L'\0');
+    if (length > 0) MultiByteToWideChar(codePage, 0, text, textLength, out.data(), length);
     return true;
+}
+
+// Whether the text has anything in it but blank lines. A NUL counts: a file of zeros is what a
+// power cut can leave behind, and it is not an empty file.
+bool HasContent(const std::wstring& text) {
+    return text.find_first_not_of(L" \t\r\n") != std::wstring::npos;
 }
 
 bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
@@ -102,7 +114,8 @@ bool ParseFloat(const std::wstring& text, float& out) {
 
     wchar_t* end = nullptr;
     errno = 0;
-    const double value = _wcstod_l(trimmed.c_str(), &end, invariantLocale());    if (end == trimmed.c_str() || *end != L'\0') return false;
+    const double value = _wcstod_l(trimmed.c_str(), &end, invariantLocale());
+    if (end == trimmed.c_str() || *end != L'\0') return false;
     if (errno == ERANGE) return false;
     if (!std::isfinite(value)) return false;
 
@@ -188,6 +201,17 @@ Shortcuts::Set g_shortcuts;
 std::vector<DisplayLayouts::Layout> g_layouts; // empty means the automatic ones
 bool g_layoutsCarried = false;
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
+LoadProblem g_loadProblem = LoadProblem::None;
+std::wstring g_backupPath;
+
+// Copies a file LoadOrDefault could not fully read to config.backup.txt beside it, before a Save
+// replaces it, and remembers what was found.
+void KeepAside(const std::wstring& path, LoadProblem problem) {
+    g_loadProblem = problem;
+    const size_t slash = path.find_last_of(L'\\');
+    const std::wstring backup = path.substr(0, slash + 1) + kBackupFileName;
+    if (CopyFileW(path.c_str(), backup.c_str(), FALSE)) g_backupPath = backup;
+}
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
 // case it was typed in.
@@ -252,13 +276,25 @@ std::wstring FilePath() {
     return dir + L"\\config.txt";
 }
 
+LoadProblem LastLoadProblem() { return g_loadProblem; }
+std::wstring LastBackupPath() { return g_backupPath; }
+
 std::vector<TabSettings> LoadOrDefault() {
     std::vector<TabSettings> result;
+    g_loadProblem = LoadProblem::None;
+    g_backupPath.clear();
     const std::wstring path = FilePath();
     if (path.empty()) return DefaultTabs();
 
     std::wstring contents;
-    if (!ReadUtf8File(path, contents)) return DefaultTabs();
+    if (!ReadUtf8File(path, contents)) {
+        // No file is a first start; a file that cannot be read (far too big, locked, unreadable)
+        // is the user's settings, which the next Save would otherwise replace with the defaults.
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            KeepAside(path, LoadProblem::Unreadable);
+        }
+        return DefaultTabs();
+    }
     std::wistringstream file(contents);
     file.imbue(std::locale::classic());
 
@@ -283,6 +319,8 @@ std::vector<TabSettings> LoadOrDefault() {
     bool inSettings = false;
     bool inAction = false;
     bool inLayout = false;
+    bool sawSection = false;
+    float fileVersion = 1.0f; // no configVersion key: a file from before there was one
 
     auto flush = [&] {
         if (inAction) actions.push_back(action);
@@ -301,6 +339,7 @@ std::vector<TabSettings> LoadOrDefault() {
 
         if (line == L"[tab]" || line == L"[settings]" || line == L"[action]" || line == L"[layout]") {
             flush();
+            sawSection = true;
             inTab = line == L"[tab]";
             inSettings = line == L"[settings]";
             inAction = line == L"[action]";
@@ -329,6 +368,7 @@ std::vector<TabSettings> LoadOrDefault() {
         }
 
         if (inSettings) {
+            if (key == L"configVersion") ParseFloat(value, fileVersion);
             if (key == L"theme") g_themeMode = ThemeModeFromString(value);
             if (key == L"tvMonitor") g_tvMonitor = Upper(value);
             if (key == L"mainMonitor") g_mainMonitor = Upper(value);
@@ -382,6 +422,15 @@ std::vector<TabSettings> LoadOrDefault() {
     g_quickActions = QuickActions::Sanitize(std::move(actions));
     g_layouts = DisplayLayouts::Sanitize(std::move(layouts));
 
+    // Text without a single section is not a settings file - zeros left by a power cut, or a file
+    // saved over by mistake. A newer EdgeDeck's file is read, but this version would drop what it
+    // does not know. Either way the file is kept aside before anything writes over it.
+    if (!sawSection && HasContent(contents)) {
+        KeepAside(path, LoadProblem::Unreadable);
+    } else if (fileVersion > static_cast<float>(kFileVersion)) {
+        KeepAside(path, LoadProblem::Newer);
+    }
+
     // An empty but perfectly valid file (the user removed every tab) is honoured
     // as "no tabs"; a file we could not make sense of falls back to defaults.
     return result.empty() ? DefaultTabs() : result;
@@ -400,6 +449,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     // the default, so the file says what it means rather than what was
     // changed.
     file << L"[settings]\n";
+    file << L"configVersion=" << kFileVersion << L"\n";
     file << L"theme=" << ThemeModeToString(g_themeMode) << L"\n";
     file << L"language=" << Strings::Code(Strings::Current()) << L"\n";
     file << L"shortcutExit=" << Shortcuts::Format(g_shortcuts.exit) << L"\n";

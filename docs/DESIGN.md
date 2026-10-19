@@ -209,10 +209,16 @@ taken exit shortcut is also said once at start-up, with the tray menu's Exit as 
 
 ## Configuration
 
-`config.txt` is UTF-8 (a BOM is tolerated), one `key=value` per line, in `[settings]`, `[tab]` and
-`[action]` sections. Unknown keys are ignored, which is what makes adding one a compatible change;
-every value is clamped on load exactly as the Settings window clamps it. It is written only on Save,
-to a temporary file swapped in atomically.
+`config.txt` is UTF-8 (a BOM is tolerated; bytes that are not UTF-8 are read in the system code
+page, as an editor saving "ANSI" wrote them), one `key=value` per line, in `[settings]`, `[tab]`,
+`[action]` and `[layout]` sections. Unknown keys are ignored, which is what makes adding one a
+compatible change; every value is clamped on load exactly as the Settings window clamps it. It is
+written only on Save, to a temporary file swapped in atomically.
+
+`[settings] configVersion=` is the format (`Config::kFileVersion`; a file without it is version 1).
+Raise it only for a change an older EdgeDeck would get wrong, not for a new key. A file with a
+higher version, or one with no section at all (a power cut's zeros, a file saved over), is copied
+to `config.backup.txt` before the next Save can replace it, and the user is told at startup.
 
 ## Translations
 

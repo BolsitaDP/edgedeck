@@ -26,10 +26,13 @@ The first public version. EdgeDeck so far:
 - A notification-area icon with Settings, quick actions, pause, Start with Windows, the log and
   restart.
 - English and Spanish, chosen in Settings.
-- Configurable system-wide shortcuts (exit, pause, open tab 1-9, switch displays 1-4), each of which
+- Configurable system-wide shortcuts (exit, pause, open tab 1-9, switch displays 1-9), each of which
   can be turned off; a shortcut another program owns is reported instead of silently missing.
 - Light, dark and high-contrast themes that follow Windows and its accent colour.
 - A crash leaves a log line and a minidump and restarts EdgeDeck once.
+- A settings file that cannot be read, or that a newer version wrote, is copied to
+  `config.backup.txt` before it is replaced, and EdgeDeck says so. A file saved as ANSI by an editor
+  keeps its accents.
 
 ### Distribution
 - A release zip with an installer that needs no administrator rights, an uninstaller, and the C++

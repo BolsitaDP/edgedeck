@@ -113,6 +113,9 @@ If something goes wrong, EdgeDeck writes it to `%LOCALAPPDATA%\EdgeDeck\edgedeck
 the menu). After a crash it restarts itself once and leaves a small crash dump next to the log,
 which is the most useful thing to attach to a bug report.
 
+If `config.txt` cannot be read, or was saved by a newer EdgeDeck, EdgeDeck says so when it starts
+and keeps a copy as `config.backup.txt` before anything writes over it.
+
 ## Building from source
 
 You need CMake 3.20 or later and Visual Studio 2022 (or its Build Tools) with the C++ desktop

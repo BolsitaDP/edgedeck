@@ -549,7 +549,99 @@ void TestStartupHintIsRememberedOnce() {
     Config::SetStartupHintShown(false);
 }
 
+namespace {
+
+std::wstring BackupPath() { return ConfigDir() + L"\\" + Config::kBackupFileName; }
+
+std::string ReadBytes(const std::wstring& path) {
+    std::string bytes;
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return bytes;
+    bytes.resize(64 * 1024);
+    DWORD read = 0;
+    ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr);
+    bytes.resize(read);
+    CloseHandle(file);
+    return bytes;
+}
+
+void TestAFileThatIsNotSettingsIsKeptAside() {
+    TEST("Config: a file that is not settings at all is copied aside before the defaults replace it");
+    ScopedConfig guard;
+    const std::string garbage = "this is my shopping list\nmilk\n";
+    for (const std::string& bytes : {garbage, std::string(300, '\0')}) { // text, then a power cut's zeros
+        DeleteFileW(BackupPath().c_str());
+        ScopedConfig::WriteRaw(bytes);
+        CHECK(!Config::LoadOrDefault().empty());
+        CHECK(Config::LastLoadProblem() == Config::LoadProblem::Unreadable);
+        CHECK(Config::LastBackupPath() == BackupPath());
+        CHECK(ReadBytes(BackupPath()) == bytes);
+    }
+
+    // Nothing to keep: no file, an empty one, a blank one, and a damaged but readable one.
+    for (const char* bytes : {"", "\r\n\n  \n", "[tab]\nwidget=M"}) {
+        DeleteFileW(BackupPath().c_str());
+        ScopedConfig::WriteRaw(bytes);
+        Config::LoadOrDefault();
+        CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+        CHECK(Config::LastBackupPath().empty());
+        CHECK(GetFileAttributesW(BackupPath().c_str()) == INVALID_FILE_ATTRIBUTES);
+    }
+    DeleteFileW(ConfigPath().c_str());
+    Config::LoadOrDefault();
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::None); // a first start is not a problem
+    DeleteFileW(BackupPath().c_str());
+}
+
+void TestANewerVersionsFileIsReadAndKeptAside() {
+    TEST("Config: a newer version's file is read as far as it can be, copied aside, and Save marks its own");
+    ScopedConfig guard;
+    DeleteFileW(BackupPath().c_str());
+    ScopedConfig::Write(L"[settings]\nconfigVersion=2\ntheme=Light\n[tab]\nwidget=Volume\n[gadget]\nsize=3\n");
+    const auto tabs = Config::LoadOrDefault();
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::Newer);
+    CHECK(Config::CurrentThemeMode() == ThemeMode::Light);
+    CHECK(tabs.size() == 1 && tabs[0].widgetType == WidgetType::Volume);
+    CHECK(ReadBytes(BackupPath()).find("[gadget]") != std::string::npos);
+
+    // This version's own file says which it is, and reads back without a problem.
+    CHECK(Config::Save(tabs));
+    CHECK(ReadBytes(ConfigPath()).find("configVersion=1\n") != std::string::npos);
+    Config::LoadOrDefault();
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+
+    // The same version, or one from before the key existed, is not newer.
+    ScopedConfig::Write(L"[settings]\nconfigVersion=1\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+    ScopedConfig::Write(L"[settings]\nconfigVersion=soon\n[tab]\nwidget=Media\n");
+    Config::LoadOrDefault();
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+    DeleteFileW(BackupPath().c_str());
+    Config::SetCurrentThemeMode(ThemeMode::Follow);
+}
+
+void TestAFileInTheSystemCodePageKeepsItsAccents() {
+    TEST("Config: a file saved as ANSI by an editor is read in the system code page, not as broken UTF-8");
+    ScopedConfig guard;
+    // "M\xFAsica" is "Música" in Windows-1252, and not valid UTF-8 (0xFA starts no UTF-8 sequence).
+    const std::string ansiName = "M\xFA" "sica";
+    ScopedConfig::WriteRaw("[action]\nname=" + ansiName + "\ntarget=player.exe\n");
+    Config::LoadOrDefault();
+    wchar_t expected[16] = {};
+    MultiByteToWideChar(CP_ACP, 0, ansiName.data(), static_cast<int>(ansiName.size()), expected, 15);
+    const auto list = Config::QuickActionList();
+    CHECK(list.size() == 1 && list[0].name == expected);
+    CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+}
+
+} // namespace
+
 void RunConfigTests() {
+    TestAFileThatIsNotSettingsIsKeptAside();
+    TestANewerVersionsFileIsReadAndKeptAside();
+    TestAFileInTheSystemCodePageKeepsItsAccents();
     TestQuickActionsDefaultToTheOriginalThree();
     TestQuickActionsRoundTripWithAccents();
     TestQuickActionsFromAHandEditedFile();

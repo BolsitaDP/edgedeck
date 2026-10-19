@@ -118,6 +118,9 @@ Si algo falla, EdgeDeck lo anota en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log` (*Abr
 menú). Tras un cierre inesperado se reinicia una vez y deja un pequeño volcado junto al registro,
 que es lo más útil para adjuntar a un informe de error.
 
+Si `config.txt` no se puede leer, o lo guardó un EdgeDeck más nuevo, EdgeDeck lo avisa al iniciar y
+guarda una copia como `config.backup.txt` antes de escribir encima.
+
 ## Compilar desde el código
 
 Necesitas CMake 3.20 o posterior y Visual Studio 2022 (o sus Build Tools) con la carga de trabajo

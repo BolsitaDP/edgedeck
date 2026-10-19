@@ -76,6 +76,27 @@ ThemeMode ThemeModeFromString(const std::wstring& value);
 // Also picks up the global [settings] section as a side effect.
 std::vector<TabSettings> LoadOrDefault();
 
+// The format Save writes, as [settings] configVersion=. A file without the key is from before
+// there was one, and is version 1. A higher number is a newer EdgeDeck's file: it is read as far
+// as this version understands it, and what it does not understand is lost at the next Save -
+// which is why such a file is copied aside first (below).
+inline constexpr int kFileVersion = 1;
+
+// What the last LoadOrDefault found wrong with the file as a whole - a bad value is put right
+// on its own and is not one of these.
+enum class LoadProblem {
+    None,
+    Unreadable, // there is a file, but not one this can read: the defaults were used
+    Newer,      // written by a newer EdgeDeck (configVersion above kFileVersion)
+};
+LoadProblem LastLoadProblem();
+
+// When the last LoadOrDefault found a problem, the file was copied here (config.backup.txt beside
+// it) so that the next Save cannot destroy it. Empty when there was nothing to copy, or the copy
+// failed.
+std::wstring LastBackupPath();
+inline constexpr const wchar_t* kBackupFileName = L"config.backup.txt";
+
 // The current theme preference, and the setter the dialog uses. Held in memory
 // and persisted by the next Save, which writes it alongside the tabs rather
 // than as a separate file write.

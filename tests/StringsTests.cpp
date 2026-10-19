@@ -110,6 +110,14 @@ void TestNotificationsFitTheirBox() {
                                Strings::Id::AutostartBroken, Strings::Id::SaveFailedSettings}) {
             CHECK(wcslen(Strings::Get(id, static_cast<Language>(lang))) <= 255);
         }
+        // A settings problem is said with the copy's name, and after a crash, in the same balloon.
+        const auto language = static_cast<Language>(lang);
+        for (Strings::Id id : {Strings::Id::ConfigUnreadable, Strings::Id::ConfigNewer}) {
+            const size_t length = wcslen(Strings::Get(Strings::Id::CrashRestarted, language)) + 1 +
+                                  wcslen(Strings::Get(id, language)) + 1 +
+                                  wcslen(Strings::Get(Strings::Id::ConfigBackupKept, language)) + 32;
+            CHECK(length <= 255);
+        }
     }
 }
 

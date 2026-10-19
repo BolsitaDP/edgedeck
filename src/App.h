@@ -133,6 +133,7 @@ private:
     std::wstring m_startupNotice;
     // warning: the notification carries the warning icon (a fault) rather than the information one.
     void AddStartupNotice(const std::wstring& text, bool warning = true);
+    void NoteConfigProblem();
     bool m_startupNoticeWarns = false;
     // No settings file existed when this copy started: the first start on this account.
     bool m_firstRun = false;

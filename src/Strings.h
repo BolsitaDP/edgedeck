@@ -82,6 +82,11 @@ enum class Language : int {
       L"them. Right-click a tab, or this icon, for Settings.",                                               \
       L"EdgeDeck está en marcha. Deja el puntero sobre las pestañas pequeñas del borde derecho de la "       \
       L"pantalla para abrirlas. Clic derecho en una pestaña, o en este icono, para la configuración.")       \
+    X(ConfigUnreadable, L"EdgeDeck could not read its settings file and started with the defaults.",         \
+      L"EdgeDeck no pudo leer su archivo de configuración y empezó con los valores predeterminados.")         \
+    X(ConfigNewer, L"A newer EdgeDeck saved these settings; what this version does not know will be lost.",  \
+      L"Un EdgeDeck más nuevo guardó esta configuración; lo que esta versión no conoce se perderá.")         \
+    X(ConfigBackupKept, L"A copy was kept as %ls.", L"Se guardó una copia como %ls.")                        \
     X(CrashRestarted, L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.",            \
       L"EdgeDeck se cerró de forma inesperada y se reinició. Los detalles están en su registro.")            \
     X(ExitHotkeyTaken,                                                                                       \
