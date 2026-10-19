@@ -7,7 +7,7 @@
     Writes, into dist\ (git-ignored):
 
       EdgeDeck-<version>-win-x64.zip      EdgeDeck.exe, Install.cmd, install.ps1, uninstall.ps1,
-                                          README.txt. Unzip anywhere and run Install.cmd.
+                                          README.txt, LICENSE.txt. Unzip anywhere and run Install.cmd.
       EdgeDeck-<version>-win-x64.pdb      the symbols for exactly that executable, kept apart
                                           because they are 12 MB and only a crash dump needs them.
 
@@ -81,6 +81,8 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item -LiteralPath $exe -Destination (Join-Path $stage 'EdgeDeck.exe')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $stage
+# The licence travels with every copy: MIT asks for the notice to be included.
+Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 
 # A double-click for people who do not want to open a terminal: asks the one question that matters
 # and runs the installer with the right switches. cmd, not PowerShell, because a .ps1 is opened in
