@@ -201,7 +201,13 @@ bool IsInTemporaryFolder(const std::wstring& path) {
     wchar_t temp[MAX_PATH + 1];
     const DWORD length = GetTempPathW(MAX_PATH + 1, temp);
     if (length == 0 || length > MAX_PATH) return false;
-    return IsInFolder(longForm(path), longForm(std::wstring(temp, length)));
+    // Either may be in either form - TMP is often set in short names ("C:\Users\RUNNER~1\..."),
+    // and only a path that exists can be made long - so every pairing is tried.
+    const std::wstring tempAsGiven(temp, length);
+    const std::wstring tempLong = longForm(tempAsGiven);
+    const std::wstring pathLong = longForm(path);
+    return IsInFolder(path, tempAsGiven) || IsInFolder(path, tempLong) || IsInFolder(pathLong, tempAsGiven) ||
+           IsInFolder(pathLong, tempLong);
 }
 
 } // namespace Autostart
