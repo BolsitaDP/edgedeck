@@ -1,0 +1,20 @@
+name: Feature request
+description: An idea for EdgeDeck
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would it help you do?
+      description: The situation you are in and what is missing - more useful than a proposed solution alone.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+  - type: markdown
+    attributes:
+      value: |
+        EdgeDeck keeps a few rules: nothing runs while nothing happens, it never takes the focus,
+        and it should cost next to nothing. Ideas that fit them are the easiest to take on.

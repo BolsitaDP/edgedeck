@@ -1,10 +1,117 @@
 # EdgeDeck
 
-EdgeDeck es una utilidad nativa y ligera para Windows: varias pestañas pequeñas ancladas al borde de un monitor (por defecto el derecho del principal, pero cada pestaña puede ir al borde izquierdo y a cualquier monitor), cada una con su propio panel desplegable.
+[![build](https://github.com/BolsitaDP/edgedeck/actions/workflows/build.yml/badge.svg)](https://github.com/BolsitaDP/edgedeck/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Compilación
+*[Leer en español](README.es.md)*
 
-Requiere Windows 10 versión 1809 o posterior, CMake 3.20+, Visual Studio 2022 Build Tools con C++ para escritorio y un Windows SDK.
+EdgeDeck puts small tabs on the edge of your screen. Rest the pointer on one and a panel slides
+out: launchers, media controls, volume, monitor brightness, synced lyrics, display layouts, your
+newest downloads. Move away and it slides back.
+
+It is a native Windows utility written in C++ with Win32 and Direct2D - no Electron, no web view,
+no .NET - and it is built to be forgotten about:
+
+- **It never takes the focus.** Panels open without stealing the keyboard from the app you are
+  typing in, and nothing EdgeDeck does pops a dialog in front of you.
+- **It costs next to nothing.** About 20 MB of memory and no CPU at all while idle: no polling,
+  no timers, no global mouse hooks. Everything happens in response to an event.
+- **It stays out of your way.** Panels do not open over a full-screen game or video, and
+  *Pause tabs* hides everything until you want it back.
+- **It sends nothing anywhere.** No telemetry, no accounts. The only network request is the
+  Lyrics tab asking [LRCLIB](https://lrclib.net) for the song that is playing, and only if you
+  add that tab.
+
+<!-- Screenshots: to be added. -->
+
+## The tabs
+
+Each tab shows one kind of panel. Add, remove, move and resize them in Settings; you can have
+several of the same kind, on the left or right edge of any monitor.
+
+| Tab | What its panel does |
+|---|---|
+| **Quick Actions** | Your own list of things to open - programs, documents, folders, web addresses - each with its icon. Edit it in its own window, or drag files and shortcuts onto it from Explorer. |
+| **Recent files** | The newest files in a folder (Downloads by default), with how long ago each arrived. Click one to open it. |
+| **Media** | Every app that is playing something - Spotify, a browser tab, VLC - with previous, play/pause and next. |
+| **Volume** | A slider and a mute button for each audio output device. |
+| **Brightness** | A brightness slider for each external monitor that supports DDC/CI. |
+| **Lyrics** | Synced lyrics for whatever is playing, from LRCLIB. |
+| **Displays** | One click to switch which monitors are on (for example, desktop monitors or just the TV). |
+
+## Install
+
+You need Windows 10 (version 1809 or later) or Windows 11, 64-bit.
+
+1. Download `EdgeDeck-<version>-win-x64.zip` from the
+   [latest release](https://github.com/BolsitaDP/edgedeck/releases/latest).
+2. Unzip it anywhere and double-click **`Install.cmd`**. It asks one question - whether EdgeDeck
+   should start with Windows - and installs for your user only, without administrator rights.
+
+EdgeDeck is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher. Each
+release lists the SHA-256 of its zip so you can check the download is the published one.
+
+To uninstall, run `uninstall.ps1` from the same zip. Your settings are kept unless you pass
+`-RemoveSettings`.
+
+## Using it
+
+- **Rest the pointer on a tab** to open its panel. It stays open while the pointer is on the tab or
+  the panel, and closes a moment after you leave.
+- **Pin a panel** with the pin in its top-right corner to keep it open; click the pin again to let
+  it go.
+- **Right-click a tab, or the EdgeDeck icon in the notification area,** for the menu: Settings,
+  Edit quick actions, Pause tabs, Start with Windows, Open log, Restart and Exit. Left-clicking
+  the notification-area icon opens Settings.
+- **Settings** is where tabs are added and arranged, and where the theme, language, open delay and
+  the other options below live.
+
+### Keyboard
+
+Panels never take the focus from the app you are using, so they are driven from the keyboard while
+the pointer is over them.
+
+| Keys | What they do |
+|---|---|
+| `Ctrl+Alt+1` ... `Ctrl+Alt+9` | Open and pin tab 1 to 9 |
+| `Ctrl+Alt+P` | Pause or resume the tabs |
+| `Ctrl+Alt+Q` | Exit EdgeDeck |
+| `Ctrl+Alt+Shift+1` ... `4` | Switch the display layout without opening the panel (only while there is a Displays tab) |
+| Arrow keys | Move between the controls of the open panel; left and right also adjust a slider |
+| Mouse wheel | Adjust the focused control |
+| `Enter` / `Space` | Activate the focused control |
+| `Esc` | Unpin and close the panel |
+
+Screen readers are told what each panel and control is.
+
+## Settings
+
+Everything is set from the Settings window and saved to `%LOCALAPPDATA%\EdgeDeck\config.txt`, a
+plain text file you can also edit by hand while EdgeDeck is closed.
+
+| Setting | In Settings | In `config.txt` |
+|---|---|---|
+| Language | **Language**: English, Español | `language=en` |
+| Theme | **Theme**: follow Windows, always dark, always light | `theme=Follow` |
+| Open delay | **Open delay**: how long the pointer must rest before a panel opens | `openDelayMs=0` |
+| Full-screen apps | **Don't open over full-screen apps** | `fullscreenGuard=1` |
+| Start with Windows | **Start with Windows** | (the Windows startup list) |
+| Recent files folder | **Recent folder**, or drop a folder on the window | `recentFolder=` (empty: Downloads) |
+| Each tab | type, monitor, edge, vertical position, tab and panel size | a `[tab]` section each |
+| Quick actions | **Actions...** | an `[action]` section each |
+| Restart after a crash | - | `restartAfterCrash=1` |
+| The TV and the main monitor, for Displays | - | `tvMonitor=`, `mainMonitor=` (EDID ids) |
+
+The panels follow your Windows accent colour, light or dark mode, and high-contrast colours.
+
+If something goes wrong, EdgeDeck writes it to `%LOCALAPPDATA%\EdgeDeck\edgedeck.log` (*Open log* in
+the menu). After a crash it restarts itself once and leaves a small crash dump next to the log,
+which is the most useful thing to attach to a bug report.
+
+## Building from source
+
+You need CMake 3.20 or later and Visual Studio 2022 (or its Build Tools) with the C++ desktop
+workload and a Windows SDK.
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -12,251 +119,17 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Es una aplicación de subsistema Windows: no abre consola ni aparece en la barra de tareas.
+The C++ runtime is linked into the executable, so `EdgeDeck.exe` runs on a clean Windows without
+any redistributable. To run your build the way the release does, use
+`scripts\install.ps1 -Build`; `scripts\package.ps1` makes the release zip.
 
-El runtime de C/C++ va **dentro** del `.exe` (`/MT`), no en `MSVCP140.dll` ni `VCRUNTIME140*.dll`: esas DLL vienen del "Visual C++ Redistributable", que un Windows recién instalado no trae, y un `EdgeDeck.exe` copiado a una máquina así no arrancaría (error de DLL que falta). Así solo depende de DLL del propio sistema (`dumpbin /dependents EdgeDeck.exe` lo comprueba). Cuesta unos 300 KB más de disco y nada en memoria ni en CPU: medido contra el enlazado dinámico, mismo working set (20 MB), mismos hilos y handles, y 0 de CPU en reposo.
+## Contributing
 
-### Instalar
+Bug reports, translations and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains
+how the code is organised, the rules every change keeps (the main one: EdgeDeck must stay
+nearly free to run), and how to test. The design notes behind the less obvious decisions are in
+[docs/DESIGN.md](docs/DESIGN.md), and the desktop test tools in [tools/README.md](tools/README.md).
 
-No ejecutes EdgeDeck directamente desde `build/Release`: Windows no deja que una compilación sobrescriba un `.exe` que está en marcha, así que cada recompilación obligaba a cerrarlo antes. En su lugar:
+## License
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Build
-```
-
-Compila, copia el resultado a `%LOCALAPPDATA%\EdgeDeck\bin\EdgeDeck.exe`, apunta a esa copia el acceso directo del escritorio (y la entrada de "Start with Windows", si está activada) y lo vuelve a abrir. Como la copia en marcha ya no es la salida del build, **compilar a secas con CMake no la toca**; solo cierra y reabre EdgeDeck cuando ejecutas el script, que es cuando quieres la versión nueva. La configuración vive en `%LOCALAPPDATA%\EdgeDeck\config.txt` y el script no la toca. Opciones: `-NoLaunch` (no abrirlo al terminar), `-CreateShortcut` (crear el acceso directo si no existe), `-EnableAutostart` (activar "Start with Windows": crea la entrada de inicio y quita la marca del Administrador de tareas; sin él solo se **reaprunta** una entrada que ya existiera, para no deshacer lo que se eligió en Settings) y `-Configuration` (por defecto `Release`).
-
-**Ejecútalo desde un PowerShell normal**, no desde el terminal de una app empaquetada (MSIX, como el escritorio de Claude). Esas apps redirigen en silencio las escrituras en `%LOCALAPPDATA%` y en `HKCU` a un almacén privado propio: la copia "sale bien", la entrada de inicio "se crea", y al iniciar sesión Windows no encuentra ni el programa ni la entrada, así que EdgeDeck no arranca y nada avisa. Es lo que pasó durante días. El script lo detecta (escribe un fichero marcador y mira si aparece en el almacén de algún paquete) y se niega con un mensaje claro; `-AllowSandbox` lo fuerza, solo para probar el propio script.
-
-EdgeDeck solo admite una instancia a la vez, así que una copia abierta desde `build/Release` mientras la instalada está en marcha se cierra sola al arrancar.
-
-#### Instalarlo en otra máquina, sin compilar
-
-Cada compilación del CI sube un paquete (`EdgeDeck-package`), y una etiqueta `vX.Y.Z` publica una *release* de GitHub con el mismo `.zip`, sus símbolos (`.pdb`, 12 MB, aparte porque solo hacen falta para leer un volcado de fallo) y su SHA256. El `.zip` lleva `EdgeDeck.exe`, `Install.cmd`, `install.ps1`, `uninstall.ps1` y un `README.txt`: se descomprime donde sea y **`Install.cmd`** (doble clic) pregunta una sola cosa —si debe iniciarse con Windows— e instala para el usuario actual, sin administrador y sin tocar nada fuera de su perfil. No hay que instalar el runtime de Visual C++ (va dentro del `.exe`). El ejecutable no está firmado, así que SmartScreen puede avisar: el SHA256 publicado permite comprobarlo.
-
-`scripts\package.ps1 [-Build] [-Version 1.2.0]` hace ese mismo paquete en local (en `dist\`). Se niega a empaquetar un `.exe` cuya versión no sea la pedida: un paquete llamado 1.2.0 alrededor de un ejecutable 1.0.0 es justo el error que evita. La versión (`-DEDGEDECK_VERSION=major.minor.patch`; la *release* la toma de la etiqueta) es la que ve el Explorador en las propiedades del archivo y el tooltip del icono de notificación. **Entrecomilla ese argumento en PowerShell**: sin comillas lo parte por los puntos.
-
-`scripts\uninstall.ps1` lo desinstala: para el proceso, borra la entrada de inicio y la marca del Administrador de tareas, el acceso directo (solo si apunta a la copia instalada) y `%LOCALAPPDATA%\EdgeDeck\bin`. La configuración y el log se conservan, a menos que se pase `-RemoveSettings`.
-
-## Uso
-
-- Pasa el cursor sobre una pestaña para abrir su panel. Mientras el cursor siga sobre la pestaña o su panel, el panel permanece abierto, incluso si haces clic en algo de su interior. Se cierra solo cuando sacas el cursor (tras una breve espera). El panel se abre a 5 píxeles lógicos de la pestaña (se escalan con el monitor), no pegado a ella, para que se lean como dos formas separadas; esa franja no es de ninguna de las dos ventanas, pero cruzarla lleva milisegundos y la espera de 320 ms antes de cerrar absorbe el paso (`Test-TabPlacement` lo comprueba moviendo el cursor un píxel cada vez de la pestaña al panel).
-- **Sobre una app a pantalla completa no se abre solo.** Las pestañas viven en un borde por el que el ratón pasa constantemente (en un juego se empuja contra él), así que un panel saltando encima de la partida o del vídeo es la sorpresa. Si la ventana en primer plano cubre el monitor de la pestaña de borde a borde, rozarla no abre el panel. Se pregunta solo en el momento del hover (sin sondeo ni hooks), se compara el área cliente con el monitor (un maximizado normal deja la barra de tareas sin cubrir, así que no cuenta; un juego sin bordes sí, incluso si esconde el título fuera de pantalla), solo cuenta lo que está en *ese* monitor (un vídeo a pantalla completa en la TV no impide abrir el panel en el principal) y se ignoran el escritorio y la barra de tareas. Los atajos de teclado `Ctrl+Alt+1`..`9` son una orden, no un roce, y abren el panel siempre; es la vía para, por ejemplo, ajustar el volumen en mitad de una película. En Settings, **Don't open over full-screen apps** lo desactiva (`fullscreenGuard=0` en `[settings]`).
-  El deslizamiento empieza con el panel **fuera del escritorio**, y DWM no conserva la imagen de una ventana con alfa por píxel presentada ahí: la primera pintada se perdía y el panel no se veía —deslizamiento incluido— hasta que el cursor entraba en él y provocaba otra. Se dibuja otra vez en el primer fotograma en que toca su monitor (`m_panelPaintedOnScreen`). Los scripts que miraban ventanas (existe, está donde debe) pasaban sin ver nada; `Test-PanelPaint` mira píxeles.
-- **Retardo de apertura.** En Settings, **Open delay** (*Instant*, 150, 300, 500 u 800 ms; `openDelayMs=` en `[settings]`, de 0 a 1000). Con retardo, el puntero tiene que *quedarse* sobre la pestaña ese tiempo: uno que solo pasa rozando el borde no abre nada. El temporizador existe únicamente entre llegar a una pestaña cerrada y o bien irse o bien cumplirse el plazo (un EdgeDeck en reposo sigue sin ningún temporizador), y al cumplirse se vuelve a preguntar si el puntero sigue ahí y si hay una app a pantalla completa delante. Los atajos de teclado nunca esperan. Por defecto es *Instant*, como siempre.
-- Cada panel tiene un botón de chincheta arriba a la derecha. Al fijarla (chincheta azul y vertical) el panel queda abierto aunque muevas el mouse fuera o hagas clic en cualquier otro sitio, hasta que vuelvas a pulsarla (chincheta hueca e inclinada).
-- Clic derecho en cualquier pestaña → **Settings...** abre la ventana de configuración: tipo de widget por pestaña, monitor y borde, posición vertical, tamaño de la pestaña y del panel, y la casilla **Start with Windows**. Los cambios se aplican al guardar y se escriben en `%LOCALAPPDATA%\EdgeDeck\config.txt`. La ventana se escala con la del monitor donde se abre (y vuelve a ajustarse sola al arrastrarla a otro con distinta escala): el diseño está en unidades lógicas de 96 DPI y se redondea por bordes, no por tamaños, para que dos controles contiguos no se solapen un píxel a escalas fraccionarias como 125 % o 175 %. Sigue el tema de los paneles (incluido el desplegable *Theme*): barra de título, fondo y controles oscuros cuando el panel es oscuro, y el aspecto normal del sistema cuando es claro o Windows está en alto contraste.
-- **Monitor y borde por pestaña.** En Settings, **Monitor** (*Primary monitor* o cualquiera de los que Windows conoce, por su nombre y su código EDID; el apagado sale marcado "- off") y **Edge** (*Right* o *Left*). En `config.txt` son `edge=left` y `monitor=SAM0F9D` dentro de cada `[tab]`; sin ellas, la pestaña va al borde derecho del monitor principal, como siempre. Un monitor que no está encendido (la TV apagada desde la pestaña Displays, un cable desenchufado) **no es un error**: la pestaña se queda en el principal para seguir a mano, la elección se conserva (Settings la muestra como "(not connected)" y guardar no la borra) y en cuanto el monitor vuelve —al recibir `WM_DISPLAYCHANGE`, que ya reorganizaba las pestañas— regresa a él. Solo hay bordes izquierdo y derecho: arriba o abajo exigirían girar la pestaña y el panel.
-
-  El panel se desliza desde fuera del borde, y si hay **otro monitor justo al otro lado de ese borde** (aquí, el borde izquierdo del ultrawide toca al 1080p) se vería salir de él durante los 200 ms de la animación. Para esos casos —y solo esos— la ventana del panel lleva una región que la recorta a su propio monitor mientras se desliza, y se quita al llegar. Se decide al calcular la disposición (`MonitorFromRect` sobre la posición cerrada), así que quien no tiene vecino no paga nada. El orden importa: al entrar se mueve la ventana y luego se recorta, y al salir primero se recorta y luego se mueve, porque la ventana y su región no cambian en el mismo instante y el fotograma intermedio no puede enseñar un trozo en el monitor vecino (una primera versión lo hacía en 1 de cada ~460 fotogramas, y lo cazó el test de píxeles).
-- **Acciones rápidas editables.** Cada fila del panel *Quick Actions* es una entrada de tu lista: un nombre y qué abre —un programa, un documento, una carpeta o una dirección web (`https://...`)—, con argumentos opcionales. Se editan en su propia ventana (**Actions...** en Settings, **Edit quick actions...** en el menú de la bandeja y en el de cualquier pestaña): Add, Remove, Up, Down, *Browse...* para elegir un archivo y, si la fila aún se llama "New action", toma el nombre del archivo. Se aplican al guardar, en su sitio: un panel abierto se queda abierto y solo cambia de alto. La lista es una para todas las pestañas Quick Actions. Hasta 12 filas; sin ninguna guardada salen las tres de siempre (Notepad, Calculator, Show Desktop). Se guardan en `config.txt` como secciones `[action]` (`name=`, `target=`, `args=`); `builtin:desktop` es "mostrar el escritorio". Se expanden las variables (`%ProgramFiles%\...`). Una fila que no puede abrirse **no** abre ningún cuadro de diálogo (`SEE_MASK_FLAG_NO_UI`): el motivo sale como aviso en la cabecera del panel ("Could not open "X": not found."). Al guardar, una fila sin nombre o sin destino no se descarta en silencio: la ventana se queda, la señala y lo dice.
-- **Un icono por fila.** Cada fila del panel *Quick Actions* muestra el icono de lo que abre: el de un programa (`.exe`, `.dll`, `.ico`), el de una carpeta o el del programa al que apunta un acceso directo (`.lnk`, que se lee a mano: icono propio si lo trae, si no el de su destino). Lo que no tiene icono propio —un documento, una dirección web, una app de la Tienda, un programa que ya no está— lleva una insignia con la inicial del nombre en el mismo sitio, así que los nombres quedan alineados. Los iconos **no se piden al shell** (`SHGetFileInfo`, la lista de imágenes del sistema, `IShellLink`), que es lo obvio y cuesta ~8 MB, ~100 handles y dos hilos la primera vez y no los devuelve; se leen del propio archivo (`PrivateExtractIcons`), que cuesta unos 0,4 MB. Se buscan en un hilo corto la primera vez que se abre el panel (un recurso de red que no contesta no debe congelarlo) y se recuerdan hasta que cambia la lista; con el panel cerrado no corre nada.
-- **Arrastrar para añadir.** En el editor de acciones se pueden **arrastrar archivos, carpetas o accesos directos desde el Explorador**: cada uno es una fila nueva, con el nombre del archivo sin la extensión (una carpeta conserva el suyo, `v1.2` incluido) y lo arrastrado como destino. Si no caben (12 como máximo) lo dice la línea de estado, y no se guarda nada hasta pulsar *Save*.
-- **Sin "¿Cómo quieres abrir este archivo?".** Una fila (de Quick Actions o de Recent files) que apunta a un archivo cuyo tipo no tiene programa no se le pasa a Windows, que mostraría su ventana "Abrir con" y se llevaría el foco aunque se le pida no mostrar nada: el panel dice "nothing is set to open that kind of file" en su cabecera. Se distingue porque la respuesta del sistema para ese tipo es `OpenWith.exe`; una consulta que simplemente falla (accesos directos, tipos de apps de la Tienda como `.png` o `.mp3`) no cuenta, porque esos sí se abren.
-- Clic derecho → **Exit**, o `Ctrl+Alt+Q` desde cualquier lugar, cierra la aplicación.
-- EdgeDeck también vive en el **área de notificación**: clic izquierdo en el icono abre Settings, clic derecho abre el menú (el mismo que el clic derecho de una pestaña): *Settings...*, *Edit quick actions...*, *Pause tabs / Resume tabs* (`Ctrl+Alt+P`), *Start with Windows* (marcado según lo que Windows va a hacer de verdad), *Open log*, *Restart EdgeDeck* y *Exit*. Es la vía de escape cuando las pestañas quedan fuera de pantalla (p. ej. desconectas el monitor) o si no tienes ninguna pestaña. El tooltip del icono lleva la versión y dice "(paused)" cuando toca.
-- **Pausa.** *Pause tabs* oculta las pestañas y cierra cualquier panel (también los fijados) hasta reanudar: para un juego o una presentación, donde el puntero empujado contra el borde no debe encontrar nada. Los atajos de teclado siguen funcionando, que son deliberados. No se recuerda entre sesiones: una pausa que sobreviviera a un reinicio parecería una app rota. Reconstruir las pestañas desde Settings estando en pausa no las trae de vuelta.
-- **Reiniciar** arranca una copia nueva con los mismos argumentos y se cierra; la nueva espera (hasta 10 s) a que la anterior termine, porque esa aún tiene el bloqueo de instancia única, y no se anuncia como un fallo (usa `--previous-pid` sin `--restarted-after-crash`).
-- **Un aviso, una vez, si no arranca con Windows.** Al iniciar, solo desde la copia instalada, si no hay ninguna entrada de inicio EdgeDeck lo dice una vez (`startupHintShown=1` en `[settings]` lo recuerda) y señala el menú. Una entrada que apunta a un archivo que ya no existe se repara y se avisa siempre, porque eso es un fallo y no una preferencia. Una entrada que el usuario desactivó en el Administrador de tareas es suya: no se avisa.
-
-## Teclado
-
-Los paneles nunca roban el foco de la aplicación que estés usando, así que se manejan desde el teclado mientras el puntero está sobre ellos:
-
-| Atajo | Acción |
-|---|---|
-| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Abre y fija la pestaña correspondiente |
-| `Ctrl+Alt+P` | Pausar / reanudar las pestañas |
-| `Ctrl+Alt+Q` | Salir de EdgeDeck |
-| `Ctrl+Alt+Shift+1` / `2` / `3` / `4` | Cambiar de monitores sin abrir el panel: Monitors 1 + 2 / TV only / All monitors / Main monitor only. Solo existen mientras haya una pestaña Displays |
-| Flechas | Mover el foco entre controles (izquierda/derecha también ajustan un slider) |
-| Rueda del ratón | Ajustar el control enfocado |
-| `Enter` / `Espacio` | Activar el control enfocado |
-| `Escape` | Desfijar y cerrar el panel |
-
-Los widgets exponen texto accesible para lectores de pantalla (`PanelWidget::AccessibleSummary` y `AccessibleControlText`).
-
-## Inicio con Windows
-
-La casilla **Start with Windows** (en Settings, se aplica con Save) crea o borra el valor `EdgeDeck` en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Como la app no tiene consola ni ventana, arranca de forma invisible al iniciar sesión. Está pensada para que no falle en silencio:
-
-- **"Activado" significa que de verdad arranca.** El Administrador de tareas (pestaña Inicio) no borra la entrada al desactivarla: escribe una marca en `...\Explorer\StartupApproved\Run` y la deja donde estaba. Mirar solo la entrada hacía que Settings dijera "activado" mientras Windows la ignoraba. Ahora esa casilla sale desmarcada, y marcarla y guardar la vuelve a activar de verdad (quita la marca).
-- **Solo se toca el registro si cambias la casilla.** Antes cada Save reescribía la entrada con la ruta del `.exe` que estuviera corriendo, así que guardar desde una copia de pruebas se la quedaba, y volvía a escribir una entrada que el usuario había apagado.
-- **Lo que falla se avisa.** El resultado se relee tras escribir, y si Windows no acepta el cambio sale una notificación en lugar de quedarse la casilla marcada y nada en Windows.
-- **Se repara sola si la ruta desaparece.** Al arrancar, si la entrada apunta a un fichero que ya no existe (se movió el `.exe`, se limpió una carpeta de compilación), se reescribe apuntando a la copia instalada (`%LOCALAPPDATA%\EdgeDeck\bin`), o si no existe a la que está corriendo. No crea una entrada que no pediste, no toca la marca del Administrador de tareas (que quiera arrancar o no es decisión del usuario) y no se apropia de una entrada que apunta a **otra copia que sí existe**: así una copia de desarrollo convive con la instalada.
-- Al activarla se prefiere la copia instalada por `scripts/install.ps1`, porque su ruta no cambia al recompilar.
-- **`scripts\install.ps1 -EnableAutostart` lo deja activado desde la línea de comandos**, sin abrir Settings. Cuidado con dónde se ejecuta: ver el aviso sobre apps empaquetadas en "Instalar".
-
-Lo que esto no hace: si EdgeDeck se cierra por un fallo, no se reinicia hasta el siguiente inicio de sesión (la entrada Run no es un servicio ni un vigilante).
-
-## Widgets
-
-- **Quick Actions**: una fila por cada acción de tu lista (ver "Acciones rápidas editables"): por defecto abrir Bloc de notas, abrir Calculadora y mostrar/ocultar el escritorio.
-- **Recent files**: los 8 archivos más nuevos de una carpeta (Descargas por defecto), con su nombre y hace cuánto se escribieron ("5 min ago", "yesterday", o la fecha pasada una semana); clic para abrir uno, y una última fila abre la carpeta. Un programa o un acceso directo lleva su icono; el resto, una insignia con su extensión (`PDF`, `ZIP`). Deja fuera carpetas, archivos ocultos o de sistema, descargas a medias (`.crdownload`, `.part`, `.tmp`) y los `~$` de Office. La carpeta se lista **al abrir el panel**, en un hilo corto, y no se vigila: con el panel cerrado no cuesta nada. Se elige en Settings (**Recent folder**, activo cuando la pestaña seleccionada es Recent files) escribiéndola o soltando una carpeta desde el Explorador sobre la ventana; vacío es Descargas (leída del registro, no del shell). En `config.txt`: `recentFolder=` en `[settings]`, y `widget=Recent` en la pestaña.
-- **Media (auto-detect)**: una fila por cada app con sesión de reproducción activa en Windows (Spotify, una pestaña de Chrome/Edge, VLC, etc). Cada fila muestra el badge de la app, el nombre, la pista, una barra de progreso y los botones Anterior / Reproducir-Pausa / Siguiente.
-- **Volume**: una fila por cada dispositivo de salida de audio, con slider de volumen y botón de silencio. Arrastrar un slider silenciado lo reactiva, que es lo que se espera del gesto.
-- **Brightness (monitors)**: una fila por monitor con su nombre real y un slider de brillo (clic o arrastre; se aplica al soltar). Usa DDC/CI (API de configuración de monitores de Windows), así que funciona con monitores externos que lo tengan activado; los que no lo soportan muestran "Brightness control not available". Los paneles integrados de portátiles no usan DDC/CI y por ahora no se controlan.
-- **Displays (switch monitors)**: cuatro botones para decidir qué monitores están encendidos: **Monitors 1 + 2** (los de escritorio), **TV only**, **All monitors** y **Main monitor only** (el principal solo: apaga también los demás monitores de escritorio y la TV). El botón que corresponde a lo que está encendido en ese momento aparece marcado como *Active*. Usa la API de configuración de pantallas de Windows (CCD, la misma de Configuración > Pantalla), así que puede volver a encender un monitor apagado y Windows restaura la disposición que ya tenías. Al cambiar, el monitor principal puede ser otro (con "TV only" lo es la TV) y las pestañas se vuelven a acoplar: las que no tienen monitor asignado, al borde del que haya quedado como principal; las que sí, al suyo si sigue encendido. Un panel abierto y no fijado se cierra.
-
-  La TV se detecta sola como el panel más grande, lo cual acierta con una TV 4K junto a monitores de escritorio. Si no acierta, se fija a mano en `config.txt`: `tvMonitor=SAM7A08` dentro de `[settings]`. El valor es el código de fabricante y producto del EDID del monitor, que aparece en el Administrador de dispositivos > Monitores > Detalles > Id. de hardware (`MONITOR\SAM7A08`). Si la TV está apagada o desconectada, los botones que dependen de ella salen deshabilitados con "TV not connected".
-
-  **Main monitor only** es el monitor principal **de Windows** (el del origen, donde empieza la barra de tareas; en tu escritorio, el LG), salvo que ese sea la TV —lo es mientras solo la TV está encendida—: entonces es el panel más grande que no es la TV. Así el botón significa lo mismo desde cualquier disposición, y se puede pulsar estando en "TV only" para volver al LG solo. Si no acierta, se fija a mano como la TV: `mainMonitor=GSM7768` en `[settings]`. Solo se ofrece si apaga algo que "Monitors 1 + 2" dejaría encendido, es decir, si hay otro monitor de escritorio además del principal; con uno solo (o uno más la TV) sería el mismo diseño que otro botón y se encenderían dos marcas *Active* para una disposición, así que sale deshabilitado ("No other monitors"; "Main monitor not found" si el configurado no está enchufado).
-
-  Los cuatro botones también tienen atajo global, `Ctrl+Alt+Shift+1` a `4` (en el orden de los botones; el nuevo se añadió al final para no mover los tres de antes), que cambian la disposición sin abrir el panel. Se registran solo mientras exista una pestaña Displays (quien no use el widget no reserva esas teclas) y se actualizan al guardar en Settings. Un atajo siempre vuelve a leer los monitores antes de actuar, porque el panel puede llevar horas sin abrirse y el estado que recuerda estar caduco (Win+P, un monitor enchufado después); y la orden queda ligada a esa lectura concreta, de modo que una respuesta descartada no puede ejecutarla más tarde. Si otro programa ya tiene esa combinación, solo se anota en el log.
-- **Lyrics**: muestra la letra sincronizada de lo que sea que esté sonando (no solo Spotify - sigue al mismo "reproductor activo" que ya usa Windows para el resto del sistema). Las letras vienen de [LRCLIB](https://lrclib.net), una base de datos pública y gratuita hecha para esto, sin login ni API key.
-
-El valor por defecto trae una pestaña de Quick Actions, Media, Volume y Brightness; Lyrics y Displays se agregan desde Settings → Add si los quieres usar.
-
-Las letras que se obtienen se guardan en caché local (`%LOCALAPPDATA%\EdgeDeck\lyrics_cache\`), así que no se vuelve a pedir por red la próxima vez que suene la misma canción. Los "no hay letra" también se cachean (con 7 días de caducidad), para no golpear un servicio público gratuito cada vez que se abre el panel. Al ser una base comunitaria, alguna canción muy nueva o poco común puede no tener letra sincronizada disponible todavía.
-
-## Apariencia
-
-**Icono.** Un cuadrado azul con un panel blanco y, a su derecha pegada al borde y con el mismo hueco que en la app, la pestaña que lo abre: la aplicación en una imagen. Se ve sobre una barra de tareas oscura y sobre una clara (el primero, un cuadrado oscuro con una rendija azul, casi no se veía en el área de notificación oscura). Lleva 9 tamaños (16, 20, 24, 32, 40, 48, 64, 128, 256: los que Windows pide del 100 % al 250 % de escala) y a 16–24 px dos filas gruesas en lugar de tres finas, que es lo que cabe. Se dibuja con [`tools/scripts/New-AppIcon.ps1`](tools/scripts/New-AppIcon.ps1) (`-Preview` guarda una hoja con los tamaños sobre fondo oscuro y claro); el `.ico` es una entrada de la compilación, no algo que se genere al compilar.
-
-El icono **nunca llegó a verse en el área de notificación**, y la causa es instructiva: el `.rc` lo llamaba `IDI_EDGEDECK`, que no estaba definido en ningún sitio. El compilador de recursos toma un identificador desconocido como un *nombre* (cadena), así que el icono quedaba guardado como `"IDI_EDGEDECK"` mientras el código pedía el número 101; no lo encontraba y caía al icono genérico de Windows. Compilaba sin un aviso. Ahora el id vive en `res/Resource.h`, incluido por el `.rc` y por el código, y `IconTests` lee el icono del `.exe` compilado y falla si no está bajo ese número, si hay algún grupo con nombre de texto o si falta alguno de los tamaños. Se carga con `LoadIconMetric` (el tamaño que corresponde al DPI; antes `LoadIcon` daba siempre 32 px y el área de notificación los reducía a 16) y también es el icono de la ventana de Settings (barra de título y Alt+Tab).
-
-Cada pestaña lleva su icono de la fuente de iconos del sistema (**Segoe Fluent Icons** en Windows 11, **Segoe MDL2 Assets** antes y también ahora): un rayo para Quick Actions, una nota para Media, un altavoz para Volume, un sol para Brightness, líneas con una nota para Lyrics y un monitor para Displays. Antes eran caracteres de texto sueltos (≡ ♪ ☼ ♫ □) y Media y Volume acababan con la misma nota. Cada widget declara el icono como punto de código (`TabIcon`) y conserva su glifo de texto como respaldo (`TabGlyph`): si la máquina no tiene ninguna de las dos fuentes, la pestaña lo dibuja en lugar de cuadrados vacíos, y el respaldo de Volume ya no coincide con el de Media. El renderizador usa la fuente de iconos para cualquier glifo del bloque de uso privado (U+E000..U+F8FF).
-
-El panel sigue el tema de Windows usando **los mismos colores que usa el propio sistema**: los grises de la rampa oscura/elevada (`#202020`, `#1A1A1A`, `#333333`), la neutra de respaldo de Mica en claro (`#F3F3F3`), y el **acento que haya elegido el usuario**, leído de `Themes\Personalize\AccentColor`.
-
-En Ajustes hay un desplegable **Theme** con *Follow Windows* (por defecto), *Always dark* y *Always light*, para cuando el ajuste del sistema y el panel que prefieres no coinciden — sistema claro con panel oscuro, o al revés. El alto contraste tiene prioridad sobre las dos opciones.
-
-El acento se ajusta hacia blanco o negro hasta cumplir 3:1 de contraste contra el fondo del panel. Sin eso, un acento azul oscuro elegido por el usuario sería invisible como relleno de un slider sobre un panel oscuro; es la misma idea que aplicar Windows al modo oscuro, calculada en vez de tomada de un segundo valor del registro que no siempre existe.
-
-Cuando el **alto contraste** está activo se abandonan estos valores y se toman directamente los colores de ventana, texto y botón del usuario, que es justo para lo que existe ese modo.
-
-Cambiar el tema no reinicia la app: la paleta se recalcula al recibir `WM_SETTINGCHANGE` / `WM_THEMECHANGED` / `WM_SYSCOLORCHANGE`, y los pinceles que llevan el color hornearado se sueltan al detectarla. Antes esta lectura se hacía **en cada pintado** —una lectura del registro más un `SystemParametersInfo`, unas quince veces por frame de animación— y nunca se comprobaba el resultado, así que un fallo silencioso se traducía en caer siempre a la paleta clara.
-
-## Notas técnicas
-
-**Nada de polling en reposo.** No hay render loop ni sondeo del ratón: el hover usa `TrackMouseEvent` / `WM_MOUSELEAVE`. Solo hay temporizadores en cuatro casos concretos, y ninguno corre con los paneles cerrados:
-
-- la animación de apertura/cierre (15 ms mientras dura),
-- la breve espera antes de cerrar (320 ms),
-- un muestreo de 500 ms **solo mientras un panel está visible** y solo para widgets que lo piden. Existe únicamente para la posición de reproducción dentro de una pista, que es lo único que Windows no notifica por evento; Lyrics y Media lo usan, el resto no lo activa,
-- los 6 s que un aviso de error permanece en la cabecera (una sola vez, y solo mientras hay un aviso).
-
-**Avisos de error sin ventanas modales.** Cuando algo falla (una acción rápida, un control de Media, un cambio de monitores) el widget lo informa con `PanelWidget::ReportProblem`, que envía un mensaje a la ventana de su pestaña y es `Tab` quien decide cómo mostrarlo. Con el panel a la vista, el aviso sustituye al título de la cabecera durante 6 s, en ámbar (o en el color de texto del usuario en alto contraste), con envoltura a dos líneas y recorte, sin cambiar el tamaño del panel ni tapar el contenido; sin panel a la vista (un atajo, un panel que ya se cerró) sale como notificación de Windows desde el icono de la bandeja. Antes eran `MessageBox` modales: congelaban lo que el usuario estuviera haciendo, y el del atajo de salida ocupado salía antes del bucle de mensajes, de modo que la aplicación quedaba invisible detrás de un diálogo que nadie veía. Ese aviso de arranque espera ahora a que exista el icono de la bandeja. Los tres diálogos de `main.cpp` (sin candado de instancia, sin COM, sin ventanas) se mantienen: son fallos fatales tras los que el proceso termina y no queda dónde mostrar nada.
-
-**Cambios por evento, no por sondeo.** Media se suscribe a los eventos de
-`GlobalSystemMediaTransportControlsSessionManager` (`CurrentSessionChanged`,
-`SessionsChanged`) y de cada sesión (`PlaybackInfoChanged`,
-`MediaPropertiesChanged`), de modo que empezar a reproducir, pausar o saltar
-actualiza el panel abierto al instante. Lo mismo hace Lyrics para re-buscar la
-letra cuando cambia de pista. No hay hooks globales de ratón ni de teclado, salvo
-el atajo de salida y los de apertura registrados con `RegisterHotKey`.
-
-**Propiedad de los resultados asíncronos.** Todo trabajo en segundo plano
-(WinRT, DDC/CI, HTTPS) devuelve su resultado con un sobre único
-(`AsyncResult.h`) que lleva un `requestId` y una "generación de lista". El
-receptor siempre lo libera, lo haya pedido o no, y lo descarta si no coincide con
-lo que tiene en vuelo. Eso elimina de raíz las tres formas en que esto se rompe:
-fuga cuando la pestaña se destruye con un trabajo en curso, fuga cuando el
-mensaje llega a un HWND reciclado, y datos rancios cuando un refresco sustituye a
-otro.
-
-**Un slider de brillo** muestra el valor en vivo mientras lo arrastras, pero la
-escritura DDC/CI al monitor se hace una sola vez, al soltar (varios monitores
-guardan el brillo en memoria no volátil, así que no conviene escribir de forma
-continua). Si el monitor rechaza la escritura, la fila vuelve al último valor que
-el hardware confirmó en lugar de seguir mostrando un brillo que no es real. En
-Core Audio no hace falta aplazar nada: el volumen es una llamada en proceso, así
-que el slider escribe en cada movimiento y el panel se relee mientras está
-visible para seguir las teclas de volumen de otra app.
-
-**Red.** Las peticiones a LRCLIB usan una sesión WinHTTP compartida con keep-alive
-y timeouts explícitos (5 s resolver/conectar/enviar, 8 s recibir): los valores por
-omisión de WinHTTP son de ~60 s, suficiente para que un mal día de red deje un hilo del
-pool bloqueado un minuto, y cada apertura de panel puede lanzar otro. La respuesta
-tiene un tope de 4 MB.
-
-**Transformaciones de Direct2D.** `SetTransform` *reemplaza* la matriz, no la
-compone, y el chrome del panel vive en una traslación que se instala antes de
-delegar en el widget. Por eso `Renderer` compone toda transformación local
-*sobre* la vigente (`ScopedTransform::Compose`) en vez de fijarla: hacerlo al revés
-manda los iconos fuera del panel, y terminar con `SetTransform(Identity)` en vez de
-restaurar deja el resto del contenido desplazado exactamente el alto del chrome.
-Parece una sutileza, pero produce un fallo de layout que parece un error
-aritmético en el widget.
-
-**Cambiar de monitores.** Encender un monitor es `SetDisplayConfig`, que Windows retiene mientras los paneles se resincronizan (varios segundos con una TV en la cadena), así que corre en el pool de hilos y avisa con un único mensaje, igual que el resto de trabajos en segundo plano. Apagar monitores reescribe la disposición vigente sin los que sobran, de modo que los que se quedan no se mueven; encender uno le pasa a Windows solo las rutas, sin modos, y Windows rellena resolución y posición con lo que tiene guardado para esa combinación exacta de monitores. Los monitores se identifican por el código EDID (`SAM7A08`) y no por el LUID del adaptador o el id del destino, que cambian al reiniciar o recargar el driver. El planificador (`DisplayTopology`) no tiene ventanas y se prueba con topologías hechas a mano; la validación contra hardware se hace con `SDC_VALIDATE`, que comprueba la configuración sin aplicarla.
-
-**Esquinas redondeadas.** La forma de cada ventana es su propio canal alfa: Direct2D
-dibuja en un DIB de 32 bits premultiplicado mediante un `ID2D1DCRenderTarget` **de
-software**, y `UpdateLayeredWindow` lo entrega al compositor (`LayeredTarget`). Así
-las esquinas quedan suavizadas a cualquier escala; el recorte anterior con
-`SetWindowRgn` es una máscara de 1 bit y salía escalonado desde 125%. El pintado
-pone el fondo transparente y rellena el rectángulo redondeado encima: limpiar con el
-color opaco del panel daría alfa 255 en todos los píxeles y las esquinas nunca serían
-transparentes. La transparencia de todo el panel (246/255) va en el `BLENDFUNCTION`.
-
-Un detalle que costó descubrirlo: la conclusión de un intento anterior ("toda
-superficie D2D sin dispositivo DXGI pierde el alfa") era cierta para
-`ID2D1HwndRenderTarget`, que compone a través de GDI, pero no para un render target de
-DC enlazado a un DIB. Por eso no hace falta Direct3D, ni leer de vuelta de memoria de
-vídeo, ni cargar el driver de la GPU para una ventana de 300x200. Medido con dos
-pestañas, frente al camino de región: memoria de trabajo 19,6 MB en lugar de 34,5, memoria
-privada 5 MB en lugar de 42, 13 hilos en lugar de 24 y 200 handles en lugar de 334, con la
-CPU en el hover igual o menor. Si el render target de DC no se puede crear, cada
-ventana cae al camino anterior (región + `SetLayeredWindowAttributes`), que se decide
-una vez en `AttachToWindow` porque dicta también cómo se configura la ventana: una
-ventana en capas a la que nadie llama ni a `UpdateLayeredWindow` ni a
-`SetLayeredWindowAttributes` no se muestra. El texto es en escala de grises, no
-ClearType, porque una superficie con alfa no sabe qué hay detrás.
-
-**Registro.** Los fallos que antes eran invisibles (una superficie D2D que no se
-puede crear, un `config.txt` que no se puede escribir, una pestaña que no se puede
-construir) se anotan en `%LOCALAPPDATA%\EdgeDeck\edgedeck.log`, con rotura a
-`.old` al pasar de 512 KB.
-
-**Cierres inesperados.** Una utilidad residente que cae sin decir nada es lo peor: simplemente
-desaparece, el log no dice por qué y no vuelve hasta el siguiente inicio de sesión. `CrashHandler`
-se instala lo primero de `WinMain` (lo que falle antes sería invisible) y, ante una excepción sin
-capturar o un `std::terminate`, deja tres cosas:
-
-- **Una línea en el log**: `Crash: access violation (0xC0000005) at EdgeDeck.exe+0x1A2B3C, thread 4812,
-  up 931 s, build 0x6702F1A4`. El desplazamiento es respecto al módulo; el `build` es la marca de
-  tiempo del enlazador, que identifica qué compilación fue.
-- **Un minidump** en `%LOCALAPPDATA%\EdgeDeck\crashes\` (unos 80 KB: hilos, pilas y módulos; se
-  conservan los 5 más recientes). Se abre en Visual Studio o WinDbg junto al `.pdb` de la misma
-  compilación, y `scripts\install.ps1` copia ese `.pdb` junto al `.exe` instalado precisamente
-  porque la siguiente compilación sobrescribiría el de `build\Release`. `dbghelp.dll` solo se
-  carga en el momento del fallo, nunca en una ejecución sana.
-- **Un reinicio**, una sola vez: una copia que arranca por un fallo y vuelve a caer en menos de un
-  minuto **no** se reinicia otra vez (evita el bucle típico de algo que falla al arrancar, como una
-  configuración dañada). La copia nueva espera (hasta 10 s) a que la anterior termine, porque
-  todavía tiene el candado de instancia única, y avisa una vez desde la bandeja. Se desactiva con
-  `restartAfterCrash=0` en `[settings]`.
-
-Lo que ocurre *durante* el fallo no reserva memoria: el montón puede estar dañado (el último fallo
-arreglado fue justo una corrupción de montón), así que todo va en búferes de la pila o estáticos y
-solo se llama a funciones de Win32 (por eso no usa `Diagnostics`, que reserva memoria y toma un
-cerrojo). La línea del log se escribe **antes** que el volcado y que el reinicio: es lo único que
-debe sobrevivir aunque lo demás falle. Una trampa que costó encontrar: lanzar una excepción
-desde dentro del manejador de `std::terminate` no funciona, el CRT lo trata como fatal y aborta con
-un *fail-fast* (`0xC0000409`) antes de que llegue ningún filtro, así que el manejador fabrica el
-registro de excepción y llama directamente a la lógica del filtro. También se reserva pila para el
-manejador, para poder informar de un desbordamiento de pila.
-
-Lo que no puede ver: un `__fastfail` real (de la CRT o de WinRT) se salta todos los manejadores por
-diseño, y que algo mate el proceso desde fuera (Administrador de tareas, `taskkill`) no es un fallo.
-
-**Pruebas.** `tests/` cubre lo que no tiene ventanas: el parser LRC (fracciones,
-marcas repetidas, tags de metadatos, `offset`, orden), el fichero de config
-(ida y vuelta, valores fuera de rango, números mal formados, claves desconocidas), la
-lógica de la pestaña Displays (qué monitor es la TV y cuál el principal —el de Windows salvo que sea la TV—, qué botón está activo o disponible, que ninguna disposición marque dos botones a la vez, y
-la planificación del cambio: el origen del escritorio, los índices de modos y la asignación de fuentes),
-el envío de avisos de error entre widget y pestaña (texto intacto, sin fugas con un destinatario nulo o ya destruido),
-la lógica del autoarranque (entrada desactivada en el Administrador de tareas, reparación de la ruta, qué entradas se respetan; contra una clave de registro de pruebas, nunca las entradas reales),
-la parte pura del manejo de fallos (el formato exacto de la línea del log, cuándo se reinicia y cuándo no, los argumentos de la copia nueva, la poda de volcados),
-la colocación de pestaña y panel en cada borde (con un monitor a la izquierda del origen y otro por encima, y un panel más alto que el monitor), qué parte de un panel que se desliza cae dentro de su monitor y cómo se resuelve el id EDID de un monitor a su manejador,
-la geometría de "hay una app a pantalla completa delante" (maximizado normal, juego sin bordes, otro monitor, con las coordenadas negativas de un escritorio de varias pantallas) y la configuración que la desactiva,
-y la superficie con alfa por píxel (esquinas transparentes, borde suavizado, colores premultiplicados,
-escala DPI), que se comprueba mirando los bytes del DIB y no necesita ventana.
-Se ejecutan con `ctest` en CI (`.github/workflows/build.yml`), contra una carpeta temporal en lugar de `%LOCALAPPDATA%` (antes guardaban y restauraban el `config.txt` y el log reales de una instalación, lo cual es correcto hasta que una ejecución se interrumpe a medias). Además de la lógica, `IconTests` comprueba el icono que lleva el `.exe` compilado. Cubren también las reglas de la lista de acciones rápidas (qué es una lista válida, cómo se expande un destino, qué se le dice al usuario cuando Windows dice que no), el archivo de configuración como UTF-8 con y sin marca de orden de bytes (con acentos en nombres y rutas), el retardo de apertura y su recorte, y las decisiones del aviso de inicio —que es lo que se calla casi siempre— contra una clave de registro de pruebas. El resto son
-widgets y ventanas, que no se pueden ejercitar sin sesión de escritorio: para eso están las
-**herramientas de prueba manuales** de [`tools/`](tools/README.md) (maquetación de Settings a
-varias escalas, la protección de pantalla completa, los avisos de error, el cambio de monitores
-y los atajos, comparación de rendimiento entre compilaciones). Se compilan en CI pero no se ejecutan
-allí, y varias mueven el cursor real o conmutan monitores, así que su README es lo primero que hay
-que leer.
+[MIT](LICENSE).

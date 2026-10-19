@@ -1,112 +1,107 @@
-# Herramientas de prueba
+# Desktop test tools
 
-Lo que los tests unitarios (`tests/`) no pueden cubrir: ventanas, ratón, pantallas, DPI.
-Son herramientas de desarrollador, no parte del producto. Cada una existe porque encontró un
-fallo real: botones tapados por un texto, controles solapados a ciertas escalas, un panel que
-no se cerraba tras cambiar de monitor, un aviso que se perdía con un destinatario nulo.
+What the unit tests (`tests/`) cannot cover: windows, the pointer, screens, DPI. These are developer
+tools, not part of the product. Each exists because it found a real bug: buttons covered by a label,
+controls overlapping at some scales, a panel that would not close after a monitor switch, a notice
+lost with a null recipient.
 
-> **Leer antes de ejecutar nada.** Los scripts **mueven el cursor real, pulsan teclas reales,
-> abren ventanas sobre tu monitor principal** y algunos **apagan y encienden monitores**.
-> Las configuraciones que usan son aisladas (nunca tocan tu `config.txt` ni tu log), pero el
-> escritorio es el tuyo. Los marcados con 🖥️ conmutan monitores y se niegan a correr sin
-> `-AllowMonitorSwitching`.
+> **Read this before running anything.** The scripts **move the real cursor, press real keys and
+> open windows on your primary monitor**, and some **switch monitors off and on**. The configurations
+> they use are isolated (they never touch your `config.txt` or your log), but the desktop is yours:
+> run them when you can leave the machine alone for a few minutes. The ones marked 🖥️ switch
+> monitors and refuse to run without `-AllowMonitorSwitching`.
 
-## Compilar
+## Building
 
-Las herramientas no se compilan por defecto. En una carpeta aparte, para no mezclarlas con la
-compilación normal:
+The tools are not built by default. In a folder of their own, to keep them apart from the normal
+build:
 
 ```powershell
 cmake -S . -B build-tools -G "Visual Studio 17 2022" -A x64 -DEDGEDECK_BUILD_TOOLS=ON -DEDGEDECK_BUILD_TESTS=OFF
 cmake --build build-tools --config Release
 ```
 
-Quedan en `build-tools\tools\Release\`. Los scripts las buscan ahí, luego en
-`build\tools\Release\`, o donde diga la variable de entorno `EDGEDECK_TOOLS_DIR` (o el
-parámetro `-ToolsDir`). El CI las **compila**, pero no las ejecuta: necesitan una sesión de
-escritorio. Compilarlas es lo que impide que se pudran cuando cambia el código al que llaman.
+They end up in `build-tools\tools\Release\`. Scripts look for them there, then in
+`build\tools\Release\`, or wherever `-ToolsDir` (every script has it) or the `EDGEDECK_TOOLS_DIR`
+environment variable says. CI **builds** them but does not run them - they need a desktop session;
+building them is what stops them rotting when the code they call changes.
 
-Se ejecutan desde PowerShell:
+Run them from PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\scripts\Test-SettingsLayout.ps1
 ```
 
-## Los programas
+## The programs
 
-| Programa | Qué es |
+| Program | What it is |
 |---|---|
-| `dispcfg` | Lista qué monitores están encendidos (con su id EDID y el dispositivo GDI `gdi=\\.\DISPLAY2` por el que se dibujan, que es lo que une un id con un rectángulo de pantalla), marca cuál es el principal de Windows y cuál el "main" que usaría el botón de monitor principal solo (`<== primary`, `<== main`), valida o aplica una disposición (`main`, `tv`, `all`, `only`), guarda y restaura una instantánea. Usa el mismo `DisplayTopology` que la pestaña Displays, así que lo que dice vale para la app. |
-| `settingsharness` | Abre **solo** la ventana de Settings (sin pestañas, sin atajos, sin candado de instancia) e imprime un informe de maquetación: controles fuera de la ventana, controles solapados, textos más anchos que su control. Con `dpi=N` simula el `WM_DPICHANGED` de un monitor a esa escala sin tocar tu configuración de pantalla (el tamaño lógico lo lee de la propia ventana, no lo lleva escrito). Con `drop=N` abre la lista del N-ésimo desplegable (2 = monitores), para ver sus etiquetas. Con `window=actions dropfiles=X,Y,ruta\|ruta` arrastra esos archivos sobre el punto (X,Y) del editor de acciones —un arrastre OLE de verdad, con el mismo objeto de datos que da el Explorador— e imprime la lista, la línea de estado y lo que guardaría *Save*; con `ole` inicia OLE antes de crear los controles. |
-| `apptest` | La `App` **real** dentro de otro proceso, sin el candado de instancia única, así que convive con tu EdgeDeck. Lee ficheros `trig*.txt` de una carpeta y los entrega a la primera pestaña como lo haría `PanelWidget::ReportProblem`; `quit.txt` la cierra. Instala el manejador de fallos como `WinMain` y se puede hacer caer a propósito: `crash.txt` provoca un acceso inválido real y `terminate.txt` una excepción sin capturar. Y los comandos del menú que no tienen ventana donde pulsar: `pause.txt` (pausar/reanudar), `restart.txt` (reiniciar con los mismos argumentos) y `editor.txt` (abrir el editor de acciones). |
-| `backdrop` | Una ventana lisa siempre encima, para que una captura de lo que haya delante no contenga nada de tu escritorio. |
-| `fullscreenwin` | Una ventana sin bordes que se pone en primer plano, para hacerse pasar por un juego a pantalla completa. No es *topmost* a propósito: las pestañas sí lo son y deben quedar por encima. |
+| `dispcfg` | Lists which monitors are on (with their EDID id and the GDI device `gdi=\\.\DISPLAY2` they are drawn through, which is what ties an id to a screen rectangle), marks Windows' primary and the "main" one the main-monitor-only button would use (`<== primary`, `<== main`), validates or applies a layout (`main`, `tv`, `all`, `only`), and saves and restores a snapshot. Uses the same `DisplayTopology` as the Displays tab, so what it says holds for the app. |
+| `settingsharness` | Opens **only** the Settings window (no tabs, no shortcuts, no single-instance lock) and prints a layout report: controls outside the window, overlapping controls, text wider than its control. `dpi=N` sends the `WM_DPICHANGED` a monitor at that scale would, without touching your display settings. `drop=N` opens the Nth combo box's list. `lang=es` shows the window in that language. `window=actions` hosts the quick-actions editor instead. `dropfiles=X,Y,path\|path` drags those files onto the point (X,Y) of the window - a real OLE drag with the data object Explorer gives - and prints what came of it (the editor's list, status line and what Save would keep; on Settings, the Recent folder box); `ole` starts OLE before the controls are made. |
+| `apptest` | The **real** `App` in another process, without the single-instance lock, so it runs next to your EdgeDeck. It reads `trig*.txt` files from a folder and hands them to the first tab as `PanelWidget::ReportProblem` would; `quit.txt` closes it. It installs the crash handler as `WinMain` does and can be crashed on purpose: `crash.txt` causes a real access violation and `terminate.txt` an unhandled exception. And the menu commands that have no window to click: `pause.txt`, `restart.txt` and `editor.txt` (open the actions editor). |
+| `backdrop` | A plain always-on-top window, so that a capture of whatever is in front of it holds nothing of your desktop. |
+| `fullscreenwin` | A borderless window that comes to the foreground, to pose as a full-screen game. Deliberately not topmost: the tabs are, and must stay above it. |
 
-## Los scripts
+## The scripts
 
-Todos devuelven un código de salida distinto de cero si algo falla. `-ToolsDir` en todos.
+Every script exits non-zero when a check fails.
 
-| Script | Qué comprueba | Qué hace a tu equipo |
+| Script | What it checks | What it does to your machine |
 |---|---|---|
-| `Test-SettingsLayout.ps1` | La maquetación de Settings —o, con `-Dialog actions`, la del editor de acciones— a 100–250 % (`-Dpis 96,144`, `-ScreenshotDir`). Un texto largo que debe envolverse no cuenta como "demasiado ancho"; sí cuenta si, envuelto, no cabe en su caja. | Abre una ventana unos segundos. Seguro. |
-| `Test-FullscreenGuard.ps1` | Que el hover no abre el panel sobre una app a pantalla completa y sí en los demás casos. | Una ventana oscura cubre el monitor principal ~10 s; mueve el cursor. |
-| `Test-QuickActions.ps1` | El panel de acciones rápidas editable: alto según las filas (exactamente una fila más por fila añadida), que pulsar una fila arranca lo que nombra y solo eso, que una fila que no puede abrirse deja un aviso en la cabecera del panel (con un control: antes no hay ningún píxel de ese color) que un nombre con acento es una fila de verdad, y que cada fila muestra el icono de lo que abre: píxeles con color en su hueco para un programa y para una carpeta, y ninguno (una insignia gris con su letra) para un programa que no existe. | Mueve el cursor y pulsa en el panel de la copia de prueba; arranca (y luego cierra) ventanas lisas pequeñas. |
-| `Test-ActionDrop.ps1` | Arrastrar archivos del Explorador al editor de acciones: que cae en cada tipo de control (la lista, los tres campos de texto —también con OLE iniciado antes de crearlos—, un texto, un botón, el borde vacío), que un archivo toma su nombre sin extensión y una carpeta el suyo entero, que lo arrastrado es lo que se guarda, que el arrastre termina como "enlace" (no se copia ni se mueve nada), que un nombre largo se recorta a 40 y que lo que no cabe (12 filas) se cuenta en la línea de estado. | Mueve el cursor y abre el editor unos segundos por caso. Crea y borra archivos en `%TEMP%`. |
-| `Test-RecentFiles.ps1` | La pestaña Recent files: alto según los archivos (ocultos, descargas a medias y carpetas fuera), que un archivo nuevo aparece al volver a abrir el panel (exactamente una fila más), que un programa lleva icono y un documento insignia (cuánto del cuadro es un solo color), que pulsar un archivo lo abre (un acceso directo a la ventana lisa, visto por su línea de comandos), que un tipo sin programa deja un aviso y **no** abre la ventana "Abrir con", y los paneles cortos de una carpeta que no existe y de una vacía. | Mueve el cursor y pulsa en el panel de la copia de prueba; crea y borra archivos en `%TEMP%`; arranca (y cierra) una ventana lisa pequeña. |
-| `Test-OpenDelayPause.ps1` | El retardo de apertura (un puntero que se va antes no abre nada; uno que se queda abre ni antes ni mucho después, con un control sin retardo), la pausa (oculta la pestaña y el puntero no abre nada; reanudar la devuelve) y "Restart" (la copia vieja sale, la nueva toma el relevo con los mismos argumentos, sin anunciarse como un fallo y sin quedar dos). | Mueve el cursor. Arranca y para sus propias copias de `apptest`. |
-| `New-AppIcon.ps1` | **No es un test: genera `res\EdgeDeck.ico`** (9 tamaños) desde una descripción vectorial, y con `-Preview` una hoja para mirarlo sobre fondo oscuro y claro. Si cambias el dibujo, vuelve a ejecutarlo y compila. | Escribe el `.ico` del repositorio. Seguro. |
-| `Test-PanelPaint.ps1` | Que el panel **está dibujado** —no solo "visible" para Windows— nada más posarse el cursor en la pestaña, durante el deslizamiento y al abrirlo por segunda vez, sin que el cursor tenga que entrar en él. Mira píxeles: una ventana lisa donde se abrirá el panel, y más de un color en la imagen es el panel. | Mueve el cursor; pone una ventana lisa ~15 s en cada borde del monitor principal. |
-| `Test-TabPlacement.ps1` | Que cada pestaña se acopla al borde y al monitor configurados (derecho e izquierdo, el principal y otro, y uno desconectado que cae al principal), que su panel se abre junto a ella y dentro de su monitor, y —con dos monitores contiguos— que el panel al deslizarse **no se ve en el vecino**: pone una ventana lisa en esa franja, la captura ~460 veces mientras el panel entra y sale y cuenta los píxeles que no son suyos. Lleva un control (una ventana naranja que el escaneo debe ver) para que "0 píxeles ajenos" signifique algo. | Mueve el cursor; pone ventanas lisas ~10 s en el monitor vecino. No conmuta monitores. Con un solo monitor omite lo de dos. |
-| `Test-Notices.ps1` | El aviso de error en la cabecera del panel y por la bandeja (`-ScreenshotDir` para verlos). | Mueve el cursor; puede aparecer una notificación. |
-| `Capture-TabIcons.ps1` | Una imagen con el icono de cada pestaña, ampliada (`-Path`, `-Zoom`). | Pone una tira lisa en el borde derecho unos segundos. |
-| `Measure-Perf.ps1` | Memoria, hilos, handles y CPU de dos compilaciones, alternadas (`-ExeA`, `-ExeB`, `-Runs`). | Mueve el cursor ~20 s por pasada. **Exige cerrar el EdgeDeck real** (`-StopRunningInstance`). |
-| `Test-DisplaySwitching.ps1` 🖥️ | Que `dispcfg` cambia de disposición y vuelve. Por defecto solo enciende y apaga la TV. | **Conmuta monitores.** Guarda una instantánea y termina dejando la disposición inicial. |
-| `Test-CrashHandling.ps1` | Provoca fallos reales en una copia de prueba y comprueba qué deja: línea en el log, minidump válido y **un solo** reinicio (y ninguno si el reiniciado cae enseguida o si `restartAfterCrash=0`). | Abre y mata procesos `apptest.exe` suyos. Seguro. |
-| `Test-DisplayHotkeys.ps1` 🖥️ | Los atajos `Ctrl+Alt+Shift+1`..`4` con el panel sin abrir (el 4, el monitor principal solo, apaga también el C27 y vuelve). | **Conmuta monitores y pulsa teclas.** Exige cerrar el EdgeDeck real, que es quien las tiene. |
+| `Test-SettingsLayout.ps1` | The Settings layout - or, with `-Dialog actions`, the actions editor's - from 100% to 250% (`-Dpis 96,144`), in a language (`-Language en\|es`), with `-ScreenshotDir` for pictures. Long text meant to wrap is not "too wide"; it is a problem if, wrapped, it does not fit its box. | Opens a window for a few seconds. |
+| `Test-FullscreenGuard.ps1` | Hover does not open a panel over a full-screen app, and does in every other case. | A dark window covers the primary monitor for ~10 s; moves the cursor. |
+| `Test-QuickActions.ps1` | The Quick Actions panel: height by rows (exactly one row taller per row added), pressing a row starts what it names and only that, a row that cannot open leaves a notice in the header (with a control: no pixel of that colour before), an accented name is a real row, and each row shows the icon of what it opens - coloured pixels in the slot for a program and a folder, none (a grey lettered badge) for a missing program. | Moves the cursor and clicks in the test copy's panel; starts (and closes) small plain windows. |
+| `Test-ActionDrop.ps1` | Dragging files from Explorer onto the actions editor: it lands on every kind of control (the list, the three edit boxes - also with OLE started before they were made -, a label, a button, the empty edge), a file is named without its extension and a folder keeps its whole name, the dropped path is what is saved, the drag ends as a link (nothing copied or moved), a long name is cut to 40, and what does not fit (12 rows) is counted in the status line. | Moves the cursor and opens the editor for a few seconds per case. Creates and deletes files in `%TEMP%`. |
+| `Test-RecentFiles.ps1` | The Recent files tab: height by files (hidden files, partial downloads and folders left out), a new file appears when the panel is opened again (exactly one row taller), a program has a picture and a document a badge (how much of the square is one colour), pressing a file opens it (a shortcut to the plain window, seen by its command line), a type with no program leaves a notice and does **not** open Windows' Open-with window, and the short panels for a missing and an empty folder. | Moves the cursor and clicks in the test copy's panel; creates and deletes files in `%TEMP%`; starts (and closes) a small plain window. |
+| `Test-OpenDelayPause.ps1` | The open delay (a pointer that leaves early opens nothing; one that stays opens neither early nor much later, with a no-delay control), pause (hides the tab and the pointer opens nothing; resume brings it back) and Restart (the old copy exits, the new one takes over with the same arguments, without calling it a crash and without two left running). | Moves the cursor. Starts and stops its own `apptest` copies. |
+| `New-AppIcon.ps1` | **Not a test: it generates `res\EdgeDeck.ico`** (9 sizes) from a vector description, and with `-Preview` a sheet to look at it on dark and light. Run it again after changing the drawing, then build. | Writes the repository's `.ico`. |
+| `Test-PanelPaint.ps1` | The panel is **painted** - not just "visible" to Windows - as soon as the pointer rests on the tab, during the slide, and when opened a second time, without the pointer having to enter it. Looks at pixels: a plain window where the panel will open, and more than one colour in the picture is the panel. | Moves the cursor; puts a plain window on each edge of the primary monitor for ~15 s. |
+| `Test-TabPlacement.ps1` | Each tab docks to its configured edge and monitor (right and left, the primary and another, and a disconnected one that falls back to the primary), its panel opens next to it and inside its monitor, and - with two adjacent monitors - the sliding panel is **not seen on the neighbour**: a plain window on that strip is captured ~460 times while the panel slides and the foreign pixels are counted, with a control (an orange window the scan must see) so that "0 foreign pixels" means something. | Moves the cursor; puts plain windows on the neighbouring monitor for ~10 s. Does not switch monitors; skips the two-monitor part with one monitor. |
+| `Test-Notices.ps1` | The problem notice in the panel header and from the tray (`-ScreenshotDir` to see them). | Moves the cursor; a notification may appear. |
+| `Capture-TabIcons.ps1` | A picture of every tab's icon, enlarged (`-Path`, `-Zoom`). | Puts a plain strip on the right edge for a few seconds. |
+| `Measure-Perf.ps1` | Memory, threads, handles and CPU of two builds, alternated (`-ExeA`, `-ExeB`, `-Runs`). | Moves the cursor ~20 s per run. **Needs the real EdgeDeck closed** (`-StopRunningInstance`). |
+| `Test-DisplaySwitching.ps1` 🖥️ | `dispcfg` switches layouts and back. By default it only turns the TV off and on. | **Switches monitors.** Saves a snapshot and leaves the starting layout. |
+| `Test-CrashHandling.ps1` | Crashes a test copy for real and checks what it leaves: a log line, a valid minidump and **one** restart (none if the restarted copy crashes at once, or with `restartAfterCrash=0`). | Starts and kills its own `apptest.exe` processes. |
+| `Test-DisplayHotkeys.ps1` 🖥️ | The `Ctrl+Alt+Shift+1`..`4` shortcuts with the panel closed. | **Switches monitors and presses keys.** Needs the real EdgeDeck closed, since it owns the shortcuts. |
 
-`UiHelpers.ps1` es la biblioteca común (buscar ventanas **por proceso**, ratón, teclado,
-capturas, y `Start-TestApp` para arrancar una copia de prueba con configuración propia).
+`UiHelpers.ps1` is the shared library: windows found **by process**, mouse, keyboard, captures, and
+`Start-TestApp` to start a test copy with its own configuration.
 
-Para volver a abrir tu EdgeDeck tras un script que lo cerró: `scripts\install.ps1`.
+To reopen your EdgeDeck after a script closed it: `scripts\install.ps1`.
 
-## Cómo no equivocarse
+## How not to get it wrong
 
-- **Pestañas de tu EdgeDeck en la misma pantalla.** Las de la copia de prueba y las tuyas
-  conviven en el borde derecho. Los scripts eligen las suyas **por proceso** (`Get-Wins -ProcessId`),
-  nunca "la primera visible": esa elección se equivocaba cuando el orden de ventanas cambiaba.
-- **El fondo liso va primero.** Con ventanas siempre encima manda la más reciente: un `backdrop`
-  creado después de la app tapa la pestaña y se traga el hover.
-- **Capturas.** `Take-Shot` copia lo que haya sobre ese rectángulo de pantalla. Apúntala solo a
-  una ventana que esté sobre un `backdrop`, o a una ventana recortada a sus límites visibles
-  (`Get-VisibleRect`, que excluye su borde invisible). Una captura con contenido ajeno se borra.
-- **"Visible" no es "dibujado".** `IsWindowVisible` es cierto para una ventana con alfa por píxel a la que
-  nadie ha dado imagen todavía. Los scripts que comprobaban ventanas (¿existe el panel? ¿dónde está?)
-  pasaron durante semanas mientras el panel salía **vacío** al abrirse con el cursor sobre la pestaña:
-  la primera imagen se presenta con la ventana fuera del escritorio, DWM no guarda la imagen de una
-  ventana así, y el panel no se veía hasta que el cursor entraba en él y provocaba otro repintado
-  (por eso casi nadie lo notaba: es lo que se hace justo después). Solo un script que mira píxeles
-  lo ve: `Test-PanelPaint`. En un borde con otro monitor al otro lado no ocurre, porque el panel
-  empieza dentro del escritorio, así que el fallo depende de cuál sea el borde.
-- **`[math]::Min(1, 0.63)` devuelve 1.** Con un entero y un decimal, PowerShell elige la sobrecarga de
-  enteros y redondea el decimal. `Test-TabPlacement` puso así una pestaña abajo del todo en vez de a
-  media altura, y su comprobación de píxeles pasaba sin ver nada: el panel nunca cruzaba la franja
-  vigilada. Se detectó porque se desactivó a propósito el recorte para ver que el test fallaba (y no
-  fallaba). Un test que no se ha visto fallar no ha demostrado nada; usa literales `1.0` y `0.0`.
-- **`powershell -File` y las listas.** Pasa una lista separada por comas como un solo texto, así que
-  un parámetro `[int[]]` leería `96,144` como 96144. Los scripts que reciben listas las reciben
-  como texto y las separan ellos.
-- **Un caso que parecía fallo y era del entorno.** El "maximizado" de `Test-FullscreenGuard`
-  fallaba en un equipo sin barra de tareas en el monitor principal: allí el área de trabajo *es* el
-  monitor y una ventana sin bordes de ese tamaño es, con razón, una pantalla completa. El caso usa
-  ahora el área de trabajo menos una barra de título, que es lo que tiene un maximizado de verdad.
+- **Your own EdgeDeck's tabs are on the same screen.** The test copy's and yours share the right
+  edge. Scripts pick theirs **by process** (`Get-Wins -ProcessId`), never "the first visible one": that
+  guess went wrong whenever the window order changed.
+- **The plain background goes first.** Among always-on-top windows the newest wins: a `backdrop`
+  created after the app covers the tab and swallows the hover.
+- **Captures.** `Take-Shot` copies whatever is on that screen rectangle. Point it only at a window
+  standing on a `backdrop`, or at a window cropped to its visible bounds (`Get-VisibleRect`, which
+  leaves out the invisible border). A capture with someone else's content in it is deleted.
+- **"Visible" is not "painted".** `IsWindowVisible` is true for a per-pixel-alpha window nobody has
+  given a picture yet. The window-based scripts passed for weeks while the panel opened **blank**: its
+  first picture was presented with the window off the desktop, where DWM does not keep it. Only a
+  pixel check sees that: `Test-PanelPaint`.
+- **`[math]::Min(1, 0.63)` returns 1.** Given an integer and a decimal, PowerShell picks the integer
+  overload and rounds. `Test-TabPlacement` once put a tab at the very bottom that way, and its pixel
+  check passed seeing nothing. It was found by disabling the fix on purpose to watch the test fail -
+  and it did not fail. A test that has not been seen failing has proved nothing; use `1.0` and `0.0`.
+- **`powershell -File` and lists.** A comma-separated list arrives as one piece of text, so an
+  `[int[]]` parameter would read `96,144` as 96144. Scripts that take lists take text and split it.
+- **PowerShell variables are case-insensitive.** `$tab` and a `$Tab` parameter are the same variable.
+- **An environment problem that looked like a bug.** The "maximised" case of `Test-FullscreenGuard`
+  failed on a machine with no taskbar on the primary monitor: there the work area *is* the monitor,
+  and a borderless window that size rightly counts as full screen. The case now uses the work area
+  minus a title bar, which is what a real maximised window has.
 
-## Añadir un escenario
+## Adding a scenario
 
-1. Un script `Test-<Algo>.ps1` con ayuda en el encabezado (`.SYNOPSIS`, `.DESCRIPTION`, y una
-   advertencia visible si hace algo más que abrir una ventana).
-2. `. "$PSScriptRoot\UiHelpers.ps1"`, y `Start-TestApp` / `Stop-TestApp` (en `try`/`finally`) para
-   la copia de prueba; `Send-TestApp` para inyectar un aviso.
-3. Si necesita algo del código que ninguna herramienta expone, mejor ampliar `apptest` o
-   `settingsharness` que construir otra: comparten las fuentes del producto.
-4. Un script que conmute monitores o cierre el EdgeDeck real debe **negarse** sin un parámetro
-   explícito, y dejar el escritorio como lo encontró aunque falle (`finally`).
+1. A `Test-<Something>.ps1` script with help at the top (`.SYNOPSIS`, `.DESCRIPTION`, and a visible
+   warning if it does more than open a window).
+2. `. "$PSScriptRoot\UiHelpers.ps1"`, and `Start-TestApp` / `Stop-TestApp` (in `try`/`finally`) for the
+   test copy; `Send-TestApp` to inject a notice.
+3. If it needs something from the code no tool exposes, extend `apptest` or `settingsharness` rather
+   than building another: they share the product's sources.
+4. A script that switches monitors or closes the real EdgeDeck must **refuse** without an explicit
+   parameter, and leave the desktop as it found it even when it fails (`finally`).
