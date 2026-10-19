@@ -56,6 +56,8 @@ public:
     // Starts a new copy with the same arguments and exits; the new one waits for this process to
     // be gone. The menu's "Restart EdgeDeck".
     void Restart();
+    // The menu's "Check for updates": opens the project's latest release in the browser.
+    void OpenReleasesPage();
 
     // A message for the user that does not need an answer, shown by the
     // notification-area icon. The non-modal way to say "that failed": a

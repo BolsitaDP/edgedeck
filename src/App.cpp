@@ -33,6 +33,7 @@ constexpr UINT kMenuIdPause = 111;
 constexpr UINT kMenuIdAutostart = 112;
 constexpr UINT kMenuIdOpenLog = 113;
 constexpr UINT kMenuIdRestart = 114;
+constexpr UINT kMenuIdUpdates = 115;
 
 // Ctrl+Alt+Q: the same gesture as the per-tab openers, so it cannot collide
 // with them, and a chord nothing else claims.
@@ -450,6 +451,15 @@ void App::OpenLog() {
     if (result <= 32) ShowBalloon(TR(OpenLogFailed));
 }
 
+void App::OpenReleasesPage() {
+    // No checking in the background - that would be network traffic nobody asked for, every day.
+    // The page says what the newest version is; the tooltip says which one is running.
+    const wchar_t* url = EDGEDECK_HOMEPAGE_WSTRING L"/releases/latest";
+    const INT_PTR result =
+        reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) ShowBalloon(TR(UpdatesOpenFailed));
+}
+
 void App::Restart() {
     const std::wstring exe = Autostart::ThisExePath();
     if (exe.empty()) {
@@ -488,6 +498,7 @@ void App::RunMenuCommand(UINT command) {
         case kMenuIdAutostart: ToggleAutostart(); break;
         case kMenuIdOpenLog: OpenLog(); break;
         case kMenuIdRestart: Restart(); break;
+        case kMenuIdUpdates: OpenReleasesPage(); break;
         case kMenuIdExit: RequestExit(); break;
         default: break;
     }
@@ -509,6 +520,7 @@ void App::ShowMenu(POINT screenPt, HWND owner) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kMenuIdOpenLog, TR(MenuOpenLog));
     AppendMenuW(menu, MF_STRING, kMenuIdRestart, TR(MenuRestart));
+    AppendMenuW(menu, MF_STRING, kMenuIdUpdates, TR(MenuUpdates));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kMenuIdExit, TR(MenuExit));
 

@@ -117,6 +117,9 @@ enum class Language : int {
     X(MenuResume, L"Resume tabs", L"Reanudar pestañas")                                                      \
     X(MenuOpenLog, L"Open log", L"Abrir registro")                                                           \
     X(MenuRestart, L"Restart EdgeDeck", L"Reiniciar EdgeDeck")                                               \
+    X(MenuUpdates, L"Check for updates...", L"Buscar actualizaciones...")                                    \
+    X(UpdatesOpenFailed, L"EdgeDeck could not open its releases page in the browser.",                       \
+      L"EdgeDeck no pudo abrir su página de versiones en el navegador.")                                     \
     X(MenuExit, L"Exit", L"Salir")                                                                           \
     X(AutostartRepaired,                                                                                     \
       L"EdgeDeck was set to start with Windows, but pointed at a program that no longer exists, so it "      \

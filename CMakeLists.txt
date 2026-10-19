@@ -36,6 +36,9 @@ endif()
 set(EDGEDECK_VERSION_MAJOR ${CMAKE_MATCH_1})
 set(EDGEDECK_VERSION_MINOR ${CMAKE_MATCH_2})
 set(EDGEDECK_VERSION_PATCH ${CMAKE_MATCH_3})
+# Where the project lives: "Check for updates" opens its latest release, and the installer gives
+# it to Windows' list of installed apps. A fork points it at itself.
+set(EDGEDECK_HOMEPAGE "https://github.com/BolsitaDP/edgedeck" CACHE STRING "EdgeDeck project page")
 set(EDGEDECK_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 configure_file(res/Version.h.in "${EDGEDECK_GENERATED_DIR}/Version.h" @ONLY)
 
