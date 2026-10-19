@@ -19,6 +19,8 @@ Useful to know when judging a report:
 - It reads `config.txt`, shortcut (`.lnk`) files dropped on it or listed by the Recent files tab, and
   icon resources from programs; all of these are parsed with bounds checks.
 - It opens what the user configured (Quick Actions) or clicked (Recent files) with `ShellExecuteEx`.
-- Its only network traffic is HTTPS to `lrclib.net`, and only when a Lyrics tab exists.
+- Its only network traffic is HTTPS to `lrclib.net`, and only when a Lyrics tab exists. It sends
+  the playing track's title and artist, and identifies itself as
+  `EdgeDeck <version> (<project page>)`, as LRCLIB asks of its clients.
 
 Only the latest release receives fixes.

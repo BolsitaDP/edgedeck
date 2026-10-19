@@ -1,4 +1,5 @@
 #include "LrcLyrics.h"
+#include "Version.h"
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -305,7 +306,10 @@ struct HttpResponse {
 // across fetches instead of a full TCP + TLS handshake per panel open.
 HINTERNET SharedSession() {
     static HINTERNET session = [] {
-        HINTERNET s = WinHttpOpen(L"EdgeDeck/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        // LRCLIB asks every client to say who it is - name, version and where to find it - so its
+        // maintainers can tell traffic apart and know whom to contact.
+        HINTERNET s = WinHttpOpen(L"EdgeDeck " EDGEDECK_VERSION_WSTRING L" (" EDGEDECK_HOMEPAGE_WSTRING L")",
+                                  WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                   WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!s) return static_cast<HINTERNET>(nullptr);
 

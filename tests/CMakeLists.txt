@@ -53,7 +53,8 @@ target_compile_definitions(EdgeDeckTests PRIVATE
     WINVER=0x0A00
 )
 
-target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/res)
+# The generated Version.h too: LrcLyrics.cpp says which version is asking LRCLIB.
+target_include_directories(EdgeDeckTests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/res "${EDGEDECK_GENERATED_DIR}")
 
 # IconTests reads the icon back out of the built executable, so that one has to exist first, and
 # the test has to know where it is.
