@@ -16,8 +16,8 @@ no .NET - and it is built to be forgotten about:
   typing in, and nothing EdgeDeck does pops a dialog in front of you.
 - **It costs next to nothing.** About 20 MB of memory and no CPU at all while idle: no polling,
   no timers, no global mouse hooks. Everything happens in response to an event.
-- **It stays out of your way.** Panels do not open over a full-screen game or video, and
-  *Pause tabs* hides everything until you want it back.
+- **It stays out of your way.** Over a full-screen game or video the tabs step aside, as the
+  taskbar does, and *Pause tabs* hides everything until you want it back.
 - **It sends nothing anywhere.** No telemetry, no accounts. The only network request is the
   Lyrics tab asking [LRCLIB](https://lrclib.net) for the song that is playing, and only if you
   add that tab.
@@ -102,7 +102,7 @@ plain text file you can also edit by hand while EdgeDeck is closed.
 | Shortcuts | **Shortcuts...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` turns one off) |
 | Theme | **Theme**: follow Windows, always dark, always light | `theme=Follow` |
 | Open delay | **Open delay**: how long the pointer must rest before a panel opens | `openDelayMs=0` |
-| Full-screen apps | **Don't open over full-screen apps** | `fullscreenGuard=1` |
+| Full-screen apps | **Hide over full-screen apps** | `fullscreenGuard=1` |
 | Start with Windows | **Start with Windows** | (the Windows startup list) |
 | Recent files folder | **Recent folder**, or drop a folder on the window | `recentFolder=` (empty: Downloads) |
 | Each tab | type, monitor, edge, vertical position, tab and panel size | a `[tab]` section each |

@@ -77,6 +77,14 @@ public:
     void SetPaused(bool paused);
     bool IsPaused() const { return m_paused; }
 
+    // A full-screen app (a video, a game) is in front of this tab's monitor: the tab gets out of
+    // the way, as the taskbar does, and comes back when the app leaves full screen. An open panel
+    // that is not pinned closes; a keyboard shortcut still opens one. Separate from the pause,
+    // which the user asked for and which this never undoes.
+    void SetHiddenForFullscreen(bool hidden);
+    // The monitor the tab is docked to, as of its last layout.
+    HMONITOR Monitor() const { return m_monitor; }
+
 private:
     enum class State { Hidden, Opening, Open, Closing };
 
@@ -163,6 +171,7 @@ private:
     int m_moveStartTabTop = 0;
     bool m_inRelayout = false;
     bool m_paused = false;
+    bool m_fullscreenHidden = false; // a full-screen app is in front of this monitor
     int m_hoveredControl = -1;
     int m_focusedControl = -1;
 

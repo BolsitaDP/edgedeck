@@ -17,8 +17,8 @@ sin .NET— pensada para que te olvides de que está:
   escribes, y nada de lo que hace EdgeDeck te pone un cuadro de diálogo delante.
 - **No cuesta casi nada.** Unos 20 MB de memoria y nada de CPU en reposo: sin sondeos, sin
   temporizadores, sin hooks globales de ratón. Todo ocurre como respuesta a un evento.
-- **No estorba.** Los paneles no se abren sobre un juego o un vídeo a pantalla completa, y
-  *Pausar pestañas* lo oculta todo hasta que lo quieras de vuelta.
+- **No estorba.** Sobre un juego o un vídeo a pantalla completa las pestañas se apartan, como la
+  barra de tareas, y *Pausar pestañas* lo oculta todo hasta que lo quieras de vuelta.
 - **No envía nada a ninguna parte.** Sin telemetría ni cuentas. La única petición de red es la de
   la pestaña Letras, que pregunta a [LRCLIB](https://lrclib.net) por la canción que suena, y solo
   si añades esa pestaña.
@@ -106,7 +106,7 @@ EdgeDeck cerrado.
 | Atajos | **Atajos...** | `shortcutExit=Ctrl+Alt+Q`, `shortcutPause=`, `shortcutTabs=Ctrl+Alt`, `shortcutDisplays=Ctrl+Alt+Shift` (`none` desactiva uno) |
 | Tema | **Tema**: igual que Windows, siempre oscuro, siempre claro | `theme=Follow` |
 | Retardo de apertura | **Retardo**: cuánto debe quedarse el puntero antes de abrir | `openDelayMs=0` |
-| Apps a pantalla completa | **No abrir sobre pantalla completa** | `fullscreenGuard=1` |
+| Apps a pantalla completa | **Ocultar en pantalla completa** | `fullscreenGuard=1` |
 | Iniciar con Windows | **Iniciar con Windows** | (la lista de inicio de Windows) |
 | Carpeta de recientes | **Recientes**, o soltar una carpeta sobre la ventana | `recentFolder=` (vacío: Descargas) |
 | Cada pestaña | tipo, monitor, borde, posición vertical, tamaño de pestaña y panel | una sección `[tab]` cada una |

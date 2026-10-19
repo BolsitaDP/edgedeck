@@ -260,7 +260,7 @@ enum class Language : int {
     X(SettingsTheme, L"Theme:", L"Tema:")                                                                    \
     X(SettingsLanguage, L"Language:", L"Idioma:")                                                            \
     X(SettingsDelay, L"Open delay:", L"Retardo:")                                                            \
-    X(SettingsFullscreen, L"Don't open over full-screen apps", L"No abrir sobre pantalla completa")   \
+    X(SettingsFullscreen, L"Hide over full-screen apps", L"Ocultar en pantalla completa")              \
     X(SettingsKeyboard, L"Keyboard", L"Teclado")                                                             \
     X(SettingsKeyboardHelp,                                                                                  \
       L"%ls: open and pin a panel.   %ls: exit EdgeDeck.\r\n"                                                \
