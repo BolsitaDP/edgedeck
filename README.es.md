@@ -55,8 +55,10 @@ EdgeDeck aún no está firmado digitalmente, así que SmartScreen puede avisar d
 desconocido. Cada release publica el SHA-256 de su zip para comprobar que la descarga es la
 publicada.
 
-Para desinstalarlo, ejecuta `uninstall.ps1` del mismo zip. La configuración se conserva, salvo que
-pases `-RemoveSettings`.
+EdgeDeck aparece en **Configuración de Windows > Aplicaciones > Aplicaciones instaladas**, desde
+donde se desinstala como cualquier otra (o con `uninstall.ps1` del zip). La configuración se
+conserva, salvo que pases `-RemoveSettings` al script. *Buscar actualizaciones* en el menú de
+EdgeDeck abre la última release; EdgeDeck nunca lo comprueba por su cuenta.
 
 ## Uso
 

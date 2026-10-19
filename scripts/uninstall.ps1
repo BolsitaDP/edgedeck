@@ -10,7 +10,8 @@
       2. removes the "Start with Windows" entry, and the mark Task Manager keeps beside it;
       3. removes the desktop shortcut, if it points at the installed copy (one the user pointed
          somewhere else is theirs);
-      4. deletes the installed program, %LOCALAPPDATA%\EdgeDeck\bin.
+      4. deletes the installed program, %LOCALAPPDATA%\EdgeDeck\bin, and its entry in Windows'
+         list of installed apps (which is what runs this script, from that folder).
 
     Settings (config.txt), the log and the lyrics cache stay, so installing again picks up where
     it left off; -RemoveSettings deletes those too.
@@ -92,7 +93,10 @@ if (Test-Path -LiteralPath $shortcutPath) {
     }
 }
 
-# --- 4. files -------------------------------------------------------------------------------
+# --- 4. files, and the installed-apps entry ---------------------------------------------------
+Remove-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\EdgeDeck' -Recurse -Force -ErrorAction SilentlyContinue
+# When Windows' Uninstall runs this, it runs it from the folder being deleted. PowerShell has the
+# whole script in memory by then and keeps no lock on the file, so it can go with the rest.
 if (Test-Path -LiteralPath $installDir) {
     Remove-Item -LiteralPath $installDir -Recurse -Force
     Write-Host "Removed: $installDir"

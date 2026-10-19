@@ -14,7 +14,9 @@
          lock), and an old copy left running would make the new one exit silently.
       3. Copies build\<Configuration>\EdgeDeck.exe into the install folder.
       4. Repoints the desktop shortcut, and the "Start with Windows" entry if it is enabled.
-      5. Starts EdgeDeck again.
+      5. Lists EdgeDeck in Windows' installed apps (per user, no administrator), with
+         uninstall.ps1 copied beside it as what "Uninstall" runs.
+      6. Starts EdgeDeck again.
 
     Settings are not touched: they live in %LOCALAPPDATA%\EdgeDeck\config.txt, next to the
     bin folder.
@@ -183,6 +185,10 @@ if (Test-Path -LiteralPath $builtPdb) {
     Copy-Item -LiteralPath $builtPdb -Destination (Join-Path $installDir 'EdgeDeck.pdb') -Force -ErrorAction SilentlyContinue
 }
 
+# What Windows' "Uninstall" button runs: the uninstaller, kept beside the program. Without
+# -NoIntegration only, like everything that follows.
+$uninstaller = Join-Path $PSScriptRoot 'uninstall.ps1'
+
 # --- 4. shortcut and autostart ------------------------------------------------------------
 if ($NoIntegration) {
     Write-Host 'Left the shortcut, the startup entry and any running copy alone (-NoIntegration).'
@@ -219,7 +225,36 @@ if ($EnableAutostart) {
     }
 }
 
-# --- 5. start -----------------------------------------------------------------------------
+# --- 5. Windows' list of installed apps -------------------------------------------------------
+# A per-user entry (HKCU), which is what an install without administrator rights gets, so EdgeDeck
+# shows in Settings > Apps with its version and can be removed from there like anything else.
+if (Test-Path -LiteralPath $uninstaller) {
+    $installedUninstaller = Join-Path $installDir 'uninstall.ps1'
+    Copy-Item -LiteralPath $uninstaller -Destination $installedUninstaller -Force
+    $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\EdgeDeck'
+    New-Item -Path $uninstallKey -Force | Out-Null
+    $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$installedUninstaller`""
+    $values = [ordered]@{
+        DisplayName     = 'EdgeDeck'
+        DisplayVersion  = [string](Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion
+        Publisher       = 'EdgeDeck'
+        DisplayIcon     = "$installedExe,0"
+        InstallLocation = $installDir
+        UninstallString = $command
+        QuietUninstallString = $command
+        URLInfoAbout    = 'https://github.com/BolsitaDP/edgedeck'
+        HelpLink        = 'https://github.com/BolsitaDP/edgedeck/issues'
+    }
+    foreach ($name in $values.Keys) { Set-ItemProperty -Path $uninstallKey -Name $name -Value $values[$name] }
+    # Size in KB, as Settings shows it; no modify or repair, there is nothing to choose.
+    $sizeKb = [int][math]::Ceiling((Get-ChildItem -LiteralPath $installDir -File | Measure-Object Length -Sum).Sum / 1KB)
+    New-ItemProperty -Path $uninstallKey -Name EstimatedSize -PropertyType DWord -Value $sizeKb -Force | Out-Null
+    New-ItemProperty -Path $uninstallKey -Name NoModify -PropertyType DWord -Value 1 -Force | Out-Null
+    New-ItemProperty -Path $uninstallKey -Name NoRepair -PropertyType DWord -Value 1 -Force | Out-Null
+    Write-Host 'Installed apps: listed'
+}
+
+# --- 6. start -----------------------------------------------------------------------------
 if (-not $NoLaunch) {
     Start-Process -FilePath $installedExe -WorkingDirectory $installDir
     Write-Host 'Started.'

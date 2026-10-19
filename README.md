@@ -52,8 +52,10 @@ You need Windows 10 (version 1809 or later) or Windows 11, 64-bit.
 EdgeDeck is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher. Each
 release lists the SHA-256 of its zip so you can check the download is the published one.
 
-To uninstall, run `uninstall.ps1` from the same zip. Your settings are kept unless you pass
-`-RemoveSettings`.
+EdgeDeck appears in **Settings > Apps > Installed apps**, where it can be uninstalled like anything
+else (or run `uninstall.ps1` from the zip). Your settings are kept unless you pass
+`-RemoveSettings` to the script. *Check for updates* in EdgeDeck's menu opens the latest release;
+EdgeDeck never checks on its own.
 
 ## Using it
 
