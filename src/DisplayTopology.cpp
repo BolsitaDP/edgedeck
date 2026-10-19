@@ -31,8 +31,19 @@ bool QueryConfig(UINT32 flags, Config& out) {
         if (GetDisplayConfigBufferSizes(flags, &pathCount, &modeCount) != ERROR_SUCCESS) {
             return false;
         }
+        // No paths at all (a remote session with no display) is an answer, not a failure. No modes
+        // with paths is one too - every monitor inactive, which is exactly when the paths are needed
+        // to turn one on - so the arrays are never empty, and never null, when they are handed over.
+        if (pathCount == 0) {
+            out.paths.clear();
+            out.modes.clear();
+            return true;
+        }
         out.paths.assign(pathCount, DISPLAYCONFIG_PATH_INFO{});
-        out.modes.assign(modeCount, DISPLAYCONFIG_MODE_INFO{});
+        out.modes.assign(std::max<UINT32>(modeCount, 1), DISPLAYCONFIG_MODE_INFO{});
+        // The last argument, the topology id, must be null for every flag but
+        // QDC_DATABASE_CURRENT, which is never passed here; /analyze cannot see that.
+#pragma warning(suppress : 6387)
         LONG rc = QueryDisplayConfig(flags, &pathCount, out.paths.data(), &modeCount,
                                      out.modes.data(), nullptr);
         if (rc == ERROR_SUCCESS) {

@@ -55,6 +55,16 @@ ctest --test-dir build -C Release --output-on-failure
   windows and some switch monitors** - read [tools/README.md](tools/README.md) first, and run them
   when you can leave the machine alone for a few minutes.
 - **See the test fail.** Before trusting a new test, break the code it guards and watch it fail.
+- **Static analysis** (MSVC `/analyze`) runs in CI with every finding an error, and is at zero. To
+  run it locally:
+
+  ```powershell
+  cmake -S . -B build-analyze -G "Visual Studio 17 2022" -A x64 "-DCMAKE_CXX_FLAGS=/analyze /analyze:external- /EHsc /WX"
+  cmake --build build-analyze --config Release --target EdgeDeck
+  ```
+
+  A finding that is wrong is suppressed on its own line (`#pragma warning(suppress : NNNN)`) with
+  a comment saying why.
 
 ## Code style
 

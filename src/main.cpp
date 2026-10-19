@@ -4,7 +4,7 @@
 #include "App.h"
 #include "CrashHandler.h"
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // First, so that anything below that goes wrong leaves a line in the log and a dump
     // instead of an app that is simply gone.
     CrashHandler::Install();

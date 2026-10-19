@@ -21,9 +21,9 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -- /m
 
-      # The unit tests cover the LRC parser and the config file - the two pieces
-      # of EdgeDeck with no windowing in them, and therefore the only two that
-      # can be exercised without a desktop session.
+      # The unit tests: everything that decides what the windows do without needing a desktop to
+      # look at (config, placement, layouts, shortcuts, translations, icons, crash handling...).
+      # What needs one is in tools/scripts, run by hand.
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
@@ -47,6 +47,20 @@ jobs:
         with:
           name: EdgeDeck-symbols
           path: dist/*.pdb
+
+  # MSVC's static analysis over the app, with every finding an error. It was brought to zero, so
+  # anything it reports is new - a possible null, an unchecked call, a buffer it cannot prove big
+  # enough. A finding that is wrong is suppressed on its line, with the reason beside it.
+  analyze:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build-analyze -G "Visual Studio 17 2022" -A x64 "-DCMAKE_CXX_FLAGS=/analyze /analyze:external- /EHsc /WX"
+
+      - name: Analyze
+        run: cmake --build build-analyze --config Release --target EdgeDeck -- /m
 
   # Windows on ARM. Built and packaged, tests included in the build so they still compile; they
   # cannot run here, on an x64 runner. The code has nothing architecture-specific, and this is

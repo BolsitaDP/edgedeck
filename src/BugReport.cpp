@@ -94,7 +94,7 @@ std::wstring ReadLogTail(const std::wstring& path) {
     std::string bytes(static_cast<size_t>(cut ? kTail : size.QuadPart), '\0');
     DWORD read = 0;
     if (!bytes.empty() && SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) {
-        ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr);
+        if (!ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr)) read = 0;
     }
     CloseHandle(file);
     bytes.resize(read);
