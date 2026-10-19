@@ -19,8 +19,8 @@ constexpr int kIdClose = 305;
 
 const wchar_t kClassName[] = L"EdgeDeckShortcutsWindow";
 
-constexpr int kClientWidth = 420;
-constexpr int kClientHeight = 276;
+constexpr int kClientWidth = 460;
+constexpr int kClientHeight = 286;
 
 // The modifier choices for a family of digits, in the order the list shows them. Each includes
 // Ctrl, Alt or Win (Shortcuts::HasRequiredModifier); 0 is "off".
@@ -106,9 +106,89 @@ bool ShortcutsWindow::Create(HINSTANCE hInstance, Shortcuts::Set initial, SaveCa
     return true;
 }
 
-HFONT ShortcutsWindow::MakeFont() const {
-    return CreateFontW(-Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+HFONT ShortcutsWindow::MakeFont() const { return DialogTheme::MakeFont(m_dpi, false); }
+
+// The hotkey box has no visual style to darken, so in the dark look it is painted here: its field
+// colour, the shortcut in EdgeDeck's own words ("Ctrl+Alt+Mayús+Q"), and an accent line along the
+// bottom while it has the keyboard. That line stands in for the caret, which is removed: it would
+// sit where the control's own wording of the keys ends, not ours. In the light look the control
+// paints itself.
+LRESULT CALLBACK ShortcutsWindow::HotkeyProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR,
+                                             DWORD_PTR ref) {
+    const auto* self = reinterpret_cast<const ShortcutsWindow*>(ref);
+    const bool dark = self && self->m_theme.Themed();
+    switch (msg) {
+        case WM_PAINT: {
+            if (!dark) break;
+            PAINTSTRUCT ps;
+            HDC dc = BeginPaint(hwnd, &ps);
+            RECT box{};
+            GetClientRect(hwnd, &box);
+            HBRUSH field = CreateSolidBrush(self->m_theme.FieldColor());
+            FillRect(dc, &box, field);
+            DeleteObject(field);
+
+            const WORD value = static_cast<WORD>(SendMessageW(hwnd, HKM_GETHOTKEY, 0, 0));
+            const Shortcut shortcut = FromHotkeyControl(hwnd);
+            UINT typed = 0; // modifiers held while the key is still to come
+            if (HIBYTE(value) & HOTKEYF_CONTROL) typed |= MOD_CONTROL;
+            if (HIBYTE(value) & HOTKEYF_ALT) typed |= MOD_ALT;
+            if (HIBYTE(value) & HOTKEYF_SHIFT) typed |= MOD_SHIFT;
+            const std::wstring text =
+                !shortcut.Off() ? Shortcuts::Display(shortcut)
+                : typed         ? Shortcuts::DisplayModifiers(typed)
+                                : Shortcuts::Display(Shortcut{});
+            HGDIOBJ oldFont = SelectObject(dc, reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0)));
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, self->m_theme.TextColor());
+            const UINT dpi = GetDpiForWindow(hwnd);
+            RECT textBox = box;
+            textBox.left += MulDiv(5, static_cast<int>(dpi), 96);
+            DrawTextW(dc, text.c_str(), -1, &textBox, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
+            SelectObject(dc, oldFont);
+
+            if (GetFocus() == hwnd) {
+                RECT line = box;
+                line.top = line.bottom - std::max(2, MulDiv(2, static_cast<int>(dpi), 96));
+                HBRUSH accent = CreateSolidBrush(self->m_theme.AccentColor());
+                FillRect(dc, &line, accent);
+                DeleteObject(accent);
+            }
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_ERASEBKGND:
+            if (dark) return 1;
+            break;
+        case WM_NCPAINT: {
+            if (!dark) break;
+            // The one-pixel border WS_BORDER gives it, in the outline colour instead of white.
+            HDC dc = GetWindowDC(hwnd);
+            RECT frame{};
+            GetWindowRect(hwnd, &frame);
+            OffsetRect(&frame, -frame.left, -frame.top);
+            HBRUSH outline = CreateSolidBrush(self->m_theme.OutlineColor());
+            FrameRect(dc, &frame, outline);
+            DeleteObject(outline);
+            ReleaseDC(hwnd, dc);
+            return 0;
+        }
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS: {
+            const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
+            if (dark) {
+                if (msg == WM_SETFOCUS) DestroyCaret();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return result;
+        }
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(hwnd, HotkeyProc, 1);
+            break;
+        default:
+            break;
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 void ShortcutsWindow::ApplyDpi(UINT dpi) {
@@ -141,23 +221,25 @@ void ShortcutsWindow::CreateControls(HINSTANCE hInstance) {
     };
 
     // Two columns: what the shortcut does, and its keys.
-    make(L"STATIC", TR(ShortcutExitLabel), 0, 12, 16, 170, 18, 0);
-    m_exitHotkey = make(HOTKEY_CLASSW, nullptr, WS_BORDER | WS_TABSTOP, 190, 12, 218, 24, kIdExit);
-    make(L"STATIC", TR(ShortcutPauseLabel), 0, 12, 50, 170, 18, 0);
-    m_pauseHotkey = make(HOTKEY_CLASSW, nullptr, WS_BORDER | WS_TABSTOP, 190, 46, 218, 24, kIdPause);
+    make(L"STATIC", TR(ShortcutExitLabel), 0, 16, 20, 176, 20, 0);
+    m_exitHotkey = make(HOTKEY_CLASSW, nullptr, WS_BORDER | WS_TABSTOP, 200, 16, 244, 28, kIdExit);
+    make(L"STATIC", TR(ShortcutPauseLabel), 0, 16, 56, 176, 20, 0);
+    m_pauseHotkey = make(HOTKEY_CLASSW, nullptr, WS_BORDER | WS_TABSTOP, 200, 52, 244, 28, kIdPause);
 
     // Without at least Ctrl or Alt the control would accept a bare letter; it is given those
-    // instead, which is also what Problem() would demand.
+    // instead, which is also what Problem() would demand. In the dark look each box is painted by
+    // HotkeyProc.
     for (HWND control : {m_exitHotkey, m_pauseHotkey}) {
         SendMessageW(control, HKM_SETRULES, HKCOMB_NONE | HKCOMB_S, MAKELPARAM(HOTKEYF_CONTROL | HOTKEYF_ALT, 0));
+        SetWindowSubclass(control, HotkeyProc, 1, reinterpret_cast<DWORD_PTR>(this));
     }
 
-    make(L"STATIC", TR(ShortcutTabsLabel), 0, 12, 86, 170, 18, 0);
-    m_tabsCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST | WS_TABSTOP, 190, 82, 218,
+    make(L"STATIC", TR(ShortcutTabsLabel), 0, 16, 92, 176, 20, 0);
+    m_tabsCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST | WS_TABSTOP, 200, 88, 244,
                        200, kIdTabs);
-    make(L"STATIC", TR(ShortcutDisplaysLabel), 0, 12, 120, 170, 18, 0);
-    m_displaysCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST | WS_TABSTOP, 190, 116,
-                           218, 200, kIdDisplays);
+    make(L"STATIC", TR(ShortcutDisplaysLabel), 0, 16, 128, 176, 20, 0);
+    m_displaysCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST | WS_TABSTOP, 200, 124,
+                           244, 200, kIdDisplays);
     for (int i = 0; i < kFamilyChoiceCount; ++i) {
         const std::wstring tabs = kFamilyChoices[i] ? Shortcuts::DisplayFamily(kFamilyChoices[i], Shortcuts::kTabCount)
                                                     : std::wstring(TR(ShortcutOff));
@@ -168,12 +250,14 @@ void ShortcutsWindow::CreateControls(HINSTANCE hInstance) {
         SendMessageW(m_displaysCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(displays.c_str()));
     }
 
-    make(L"STATIC", TR(ShortcutsHelp), 0, 12, 154, 396, 54, 0);
-    m_status = make(L"STATIC", L"", 0, 12, 212, 396, 36, 0);
-    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 254, 244, 76, 26, kIdSave);
-    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 334, 244, 74, 26, kIdClose);
-}
+    make(L"STATIC", TR(ShortcutsHelp), 0, 16, 168, 428, 56, DialogTheme::kSecondaryIdFirst);
 
+    // Footer: what could not be done, if anything, and Save / Close, under a line.
+    make(L"STATIC", L"", 0, 16, 234, 428, 1, DialogTheme::kDividerIdFirst);
+    m_status = make(L"STATIC", L"", 0, 16, 244, 236, 38, 0);
+    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 268, 246, 84, 30, kIdSave);
+    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 360, 246, 84, 30, kIdClose);
+}
 void ShortcutsWindow::LoadIntoControls() {
     ToHotkeyControl(m_exitHotkey, m_initial.exit);
     ToHotkeyControl(m_pauseHotkey, m_initial.pause);
@@ -259,6 +343,12 @@ LRESULT ShortcutsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLORBTN:
+            if (msg == WM_CTLCOLORSTATIC) {
+                if (const LRESULT special =
+                        m_theme.SpecialStatic(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam))) {
+                    return special;
+                }
+            }
             if (m_theme.Themed()) {
                 return m_theme.ControlColor(msg, reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam), false);
             }
@@ -277,6 +367,8 @@ LRESULT ShortcutsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         case WM_SYSCOLORCHANGE:
             PanelTheme::Refresh();
             m_theme.Apply(hwnd);
+            InvalidateRect(m_exitHotkey, nullptr, TRUE);
+            InvalidateRect(m_pauseHotkey, nullptr, TRUE);
             break;
         case WM_COMMAND: {
             const WORD id = LOWORD(wParam);

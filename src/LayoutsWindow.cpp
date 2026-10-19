@@ -22,8 +22,8 @@ constexpr int kIdMonitorFirst = 420; // one checkbox per monitor from here
 
 const wchar_t kClassName[] = L"EdgeDeckLayoutsWindow";
 
-constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 372;
+constexpr int kClientWidth = 520;
+constexpr int kClientHeight = 480;
 // Room for this many monitor boxes; more than that on one desk is not a case worth a scrollbar.
 constexpr int kMaxMonitorRows = 6;
 
@@ -101,64 +101,70 @@ bool LayoutsWindow::Create(HINSTANCE hInstance, std::vector<DisplayLayouts::Layo
     return true;
 }
 
-HFONT LayoutsWindow::MakeFont() const {
-    return CreateFontW(-Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-}
+HFONT LayoutsWindow::MakeFont(bool heading) const { return DialogTheme::MakeFont(m_dpi, heading); }
 
 void LayoutsWindow::ApplyDpi(UINT dpi) {
     if (dpi == 0 || dpi == m_dpi) return;
     m_dpi = dpi;
     HFONT previous = m_font;
-    m_font = MakeFont();
+    HFONT previousHeading = m_headingFont;
+    m_font = MakeFont(false);
+    m_headingFont = MakeFont(true);
     for (const Placement& p : m_placements) {
         const int left = Scale(p.x);
         const int top = Scale(p.y);
         SetWindowPos(p.hwnd, nullptr, left, top, Scale(p.x + p.w) - left, Scale(p.y + p.h) - top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-        SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
+        SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(p.heading ? m_headingFont : m_font), TRUE);
     }
     if (previous) DeleteObject(previous);
+    if (previousHeading) DeleteObject(previousHeading);
 }
 
 void LayoutsWindow::CreateControls(HINSTANCE hInstance) {
-    m_font = MakeFont();
-    auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w, int h, int id) {
+    m_font = MakeFont(false);
+    m_headingFont = MakeFont(true);
+    auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w, int h, int id,
+                    bool heading = false) {
         const int left = Scale(x);
         const int top = Scale(y);
         HWND child = CreateWindowExW(0, cls, text, style | WS_CHILD | WS_VISIBLE, left, top, Scale(x + w) - left,
                                       Scale(y + h) - top, m_hwnd,
                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInstance, nullptr);
         if (!child) return child;
-        if (m_font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
-        m_placements.push_back({child, x, y, w, h});
+        HFONT font = heading ? m_headingFont : m_font;
+        if (font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        m_placements.push_back({child, x, y, w, h, heading});
         return child;
     };
 
-    // Left: the layouts, in shortcut order, and what arranges them.
-    make(L"STATIC", TR(LayoutsList), 0, 12, 10, 200, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_TABSTOP, 12, 30, 200, 216, kIdList);
-    m_addButton = make(L"BUTTON", TR(LayoutsAddCurrent), BS_PUSHBUTTON | WS_TABSTOP, 12, 254, 120, 24, kIdAdd);
-    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON | WS_TABSTOP, 136, 254, 76, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON | WS_TABSTOP, 12, 284, 60, 24, kIdUp);
-    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON | WS_TABSTOP, 76, 284, 60, 24, kIdDown);
+    // Left: the layouts, in shortcut order, and what arranges them - as wide as the list.
+    make(L"STATIC", TR(LayoutsList), 0, 16, 14, 208, 22, 0, true);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_TABSTOP, 16,
+                  44, 208, 240, kIdList);
+    m_addButton = make(L"BUTTON", TR(LayoutsAddCurrent), BS_PUSHBUTTON | WS_TABSTOP, 16, 292, 208, 28, kIdAdd);
+    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON | WS_TABSTOP, 16, 324, 66, 28, kIdRemove);
+    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON | WS_TABSTOP, 87, 324, 66, 28, kIdUp);
+    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON | WS_TABSTOP, 158, 324, 66, 28, kIdDown);
 
     // Right: the selected layout.
-    make(L"STATIC", TR(ActionsName), 0, 238, 12, 234, 18, 0);
-    m_nameEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 30, 234, 22, kIdName);
+    make(L"STATIC", TR(ActionsName), 0, 240, 44, 264, 20, 0);
+    m_nameEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 240, 66, 264, 26, kIdName);
     SendMessageW(m_nameEdit, EM_SETLIMITTEXT, DisplayLayouts::kMaxNameLength, 0);
-    make(L"STATIC", TR(LayoutsMonitors), 0, 238, 62, 234, 18, 0);
+    make(L"STATIC", TR(LayoutsMonitors), 0, 240, 104, 264, 20, 0);
     for (size_t i = 0; i < m_monitors.size(); ++i) {
-        m_monitorChecks.push_back(make(L"BUTTON", m_monitors[i].label.c_str(), BS_AUTOCHECKBOX | WS_TABSTOP, 238,
-                                       82 + static_cast<int>(i) * 24, 234, 22, kIdMonitorFirst + static_cast<int>(i)));
+        m_monitorChecks.push_back(make(L"BUTTON", m_monitors[i].label.c_str(), BS_AUTOCHECKBOX | WS_TABSTOP, 240,
+                                       126 + static_cast<int>(i) * 26, 264, 24,
+                                       kIdMonitorFirst + static_cast<int>(i)));
     }
-    make(L"STATIC", TR(LayoutsHelp), 0, 238, 232, 234, 90, 0);
+    make(L"STATIC", TR(LayoutsHelp), 0, 240, 292, 264, 120, DialogTheme::kSecondaryIdFirst);
 
-    m_status = make(L"STATIC", L"", 0, 12, 326, 298, 40, 0);
-    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 318, 334, 76, 26, kIdSave);
-    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 398, 334, 74, 26, kIdClose);
+    // Footer: what went wrong, if anything, and Save / Close, under a line.
+    make(L"STATIC", L"", 0, 16, 424, 488, 1, DialogTheme::kDividerIdFirst);
+    m_status = make(L"STATIC", L"", 0, 16, 436, 296, 36, 0);
+    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 328, 438, 84, 30, kIdSave);
+    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 420, 438, 84, 30, kIdClose);
 }
-
 void LayoutsWindow::SetStatus(const wchar_t* text) { SetWindowTextW(m_status, text); }
 
 void LayoutsWindow::RefreshList(int selectIndex) {
@@ -306,6 +312,12 @@ LRESULT LayoutsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLORBTN:
+            if (msg == WM_CTLCOLORSTATIC) {
+                if (const LRESULT special =
+                        m_theme.SpecialStatic(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam))) {
+                    return special;
+                }
+            }
             if (m_theme.Themed()) {
                 const HWND control = reinterpret_cast<HWND>(lParam);
                 return m_theme.ControlColor(msg, reinterpret_cast<HDC>(wParam), control,
@@ -367,6 +379,10 @@ LRESULT LayoutsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (m_font) {
                 DeleteObject(m_font);
                 m_font = nullptr;
+            }
+            if (m_headingFont) {
+                DeleteObject(m_headingFont);
+                m_headingFont = nullptr;
             }
             m_theme.Release();
             m_placements.clear();

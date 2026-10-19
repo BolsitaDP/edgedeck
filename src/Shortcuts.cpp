@@ -136,6 +136,11 @@ std::wstring Display(const Shortcut& shortcut) {
     return ModifierText(shortcut.modifiers, true) + L"+" + KeyName(shortcut.key);
 }
 
+std::wstring DisplayModifiers(UINT modifiers) {
+    if ((modifiers & kModifierMask) == 0) return L"";
+    return ModifierText(modifiers, true) + L"+";
+}
+
 std::wstring DisplayFamily(UINT modifiers, int count) {
     if ((modifiers & kModifierMask) == 0) return TR(ShortcutNone);
     return ModifierText(modifiers, true) + L"+1.." + std::to_wstring(count);

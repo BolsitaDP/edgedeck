@@ -62,6 +62,7 @@ void DialogTheme::Apply(HWND window) {
         m_controlColor = ToColorRef(theme.controlBg);
         m_textColor = ToColorRef(theme.textPrimary);
         m_mutedColor = ToColorRef(theme.textSecondary);
+        m_accentColor = ToColorRef(theme.accent);
         m_windowBrush = CreateSolidBrush(m_windowColor);
         m_controlBrush = CreateSolidBrush(m_controlColor);
         // The palette's divider is a translucent colour laid over the panel; a brush has no alpha,
@@ -119,6 +120,45 @@ LRESULT DialogTheme::Divider(HDC dc) const {
     // An empty static fills its whole rectangle with the brush it is given: a line of that colour.
     SetBkColor(dc, m_dividerColor);
     return reinterpret_cast<LRESULT>(m_dividerBrush ? m_dividerBrush : GetSysColorBrush(COLOR_BTNSHADOW));
+}
+
+LRESULT DialogTheme::SpecialStatic(HDC dc, HWND control) const {
+    const int id = GetDlgCtrlID(control);
+    if (id >= kDividerIdFirst && id <= kDividerIdLast) return Divider(dc);
+    if (id >= kSecondaryIdFirst && id <= kSecondaryIdLast) return SecondaryLabel(dc);
+    return 0;
+}
+
+namespace {
+// A face that is not installed would not fail: GDI would quietly substitute another, so it is
+// looked for first.
+bool HasVariableFace() {
+    static const bool found = [] {
+        LOGFONTW wanted{};
+        wcscpy_s(wanted.lfFaceName, L"Segoe UI Variable Text");
+        wanted.lfCharSet = DEFAULT_CHARSET;
+        bool any = false;
+        HDC dc = GetDC(nullptr);
+        EnumFontFamiliesExW(
+            dc, &wanted,
+            [](const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM result) -> int {
+                *reinterpret_cast<bool*>(result) = true;
+                return 0;
+            },
+            reinterpret_cast<LPARAM>(&any), 0);
+        ReleaseDC(nullptr, dc);
+        return any;
+    }();
+    return found;
+}
+} // namespace
+
+HFONT DialogTheme::MakeFont(UINT dpi, bool heading) {
+    const wchar_t* face = HasVariableFace() ? (heading ? L"Segoe UI Variable Text Semibold" : L"Segoe UI Variable Text")
+                                            : (heading ? L"Segoe UI Semibold" : L"Segoe UI");
+    return CreateFontW(-MulDiv(heading ? 16 : 14, static_cast<int>(dpi), 96), 0, 0, 0,
+                       heading ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, face);
 }
 
 LRESULT DialogTheme::ControlColor(UINT message, HDC dc, HWND control, bool alsoField) const {

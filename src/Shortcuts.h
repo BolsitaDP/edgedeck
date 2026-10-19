@@ -48,6 +48,8 @@ std::wstring FormatModifiers(UINT modifiers);         // "Ctrl+Alt", or "none"
 // Spanish). A family is shown with its digits: "Ctrl+Alt+1..9".
 std::wstring Display(const Shortcut& shortcut);
 std::wstring DisplayFamily(UINT modifiers, int count);
+// The modifiers alone, as a shortcut being typed shows them: "Ctrl+Alt+". Empty for none.
+std::wstring DisplayModifiers(UINT modifiers);
 
 // A shortcut needs Ctrl, Alt or Win: one that is Shift+letter, or a bare key, would take that key
 // away from everything the user types, everywhere.

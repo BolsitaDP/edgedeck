@@ -27,8 +27,8 @@ constexpr int kIdClose = 210;
 const wchar_t kClassName[] = L"EdgeDeckActionsWindow";
 
 // The client area in logical (96-DPI) units: what the controls are laid out in.
-constexpr int kClientWidth = 484;
-constexpr int kClientHeight = 352;
+constexpr int kClientWidth = 520;
+constexpr int kClientHeight = 460;
 
 } // namespace
 
@@ -85,33 +85,33 @@ bool ActionsWindow::Create(HINSTANCE hInstance, std::vector<QuickAction> initial
     return true;
 }
 
-HFONT ActionsWindow::MakeFont() const {
-    return CreateFontW(-Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-}
+HFONT ActionsWindow::MakeFont(bool heading) const { return DialogTheme::MakeFont(m_dpi, heading); }
 
 void ActionsWindow::ApplyDpi(UINT dpi) {
     if (dpi == 0 || dpi == m_dpi) return;
     m_dpi = dpi;
 
     HFONT previous = m_font;
-    m_font = MakeFont();
+    HFONT previousHeading = m_headingFont;
+    m_font = MakeFont(false);
+    m_headingFont = MakeFont(true);
     for (const Placement& p : m_placements) {
         const int left = Scale(p.x);
         const int top = Scale(p.y);
         SetWindowPos(p.hwnd, nullptr, left, top, Scale(p.x + p.w) - left, Scale(p.y + p.h) - top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-        SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
+        SendMessageW(p.hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(p.heading ? m_headingFont : m_font), TRUE);
     }
     if (previous) DeleteObject(previous);
+    if (previousHeading) DeleteObject(previousHeading);
 }
 
 void ActionsWindow::CreateControls(HINSTANCE hInstance) {
-    m_font = MakeFont();
+    m_font = MakeFont(false);
+    m_headingFont = MakeFont(true);
 
     auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w, int h,
-                    int id) {
+                    int id, bool heading = false) {
         const int left = Scale(x);
         const int top = Scale(y);
         HWND child = CreateWindowExW(0, cls, text, style | WS_CHILD | WS_VISIBLE, left, top,
@@ -119,41 +119,43 @@ void ActionsWindow::CreateControls(HINSTANCE hInstance) {
                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInstance,
                                       nullptr);
         if (!child) return child;
-        if (m_font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), TRUE);
-        m_placements.push_back({child, x, y, w, h});
+        HFONT font = heading ? m_headingFont : m_font;
+        if (font) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        m_placements.push_back({child, x, y, w, h, heading});
         return child;
     };
 
-    make(L"STATIC", TR(ActionsList), 0, 12, 10, 100, 18, 0);
-    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_TABSTOP, 12, 30, 200,
-                  236, kIdList);
-    m_addButton = make(L"BUTTON", TR(ButtonAdd), BS_PUSHBUTTON, 12, 274, 56, 24, kIdAdd);
-    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON, 72, 274, 60, 24, kIdRemove);
-    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON, 136, 274, 48, 24, kIdUp);
-    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON, 188, 274, 48, 24, kIdDown);
+    // Left: the rows, and what arranges them - two buttons to a row, as wide as the list.
+    make(L"STATIC", TR(ActionsList), 0, 16, 14, 208, 22, 0, true);
+    m_list = make(L"LISTBOX", nullptr, WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_TABSTOP, 16,
+                  44, 208, 280, kIdList);
+    m_addButton = make(L"BUTTON", TR(ButtonAdd), BS_PUSHBUTTON, 16, 332, 102, 28, kIdAdd);
+    m_removeButton = make(L"BUTTON", TR(ButtonRemove), BS_PUSHBUTTON, 122, 332, 102, 28, kIdRemove);
+    m_upButton = make(L"BUTTON", TR(ButtonUp), BS_PUSHBUTTON, 16, 364, 102, 28, kIdUp);
+    m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON, 122, 364, 102, 28, kIdDown);
 
-    // The right-hand column starts clear of the Down button, which ends at x = 230.
-    make(L"STATIC", TR(ActionsName), 0, 238, 12, 100, 18, 0);
-    m_nameEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 30, 234, 22, kIdName);
+    // Right: the selected row.
+    make(L"STATIC", TR(ActionsName), 0, 240, 44, 264, 20, 0);
+    m_nameEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 240, 66, 264, 26, kIdName);
     SendMessageW(m_nameEdit, EM_SETLIMITTEXT, QuickActions::kMaxNameLength, 0);
 
-    make(L"STATIC", TR(ActionsOpens), 0, 238, 62, 100, 18, 0);
-    m_targetEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 80, 142, 22,
-                        kIdTarget);
+    make(L"STATIC", TR(ActionsOpens), 0, 240, 104, 264, 20, 0);
+    m_targetEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 240, 126, 166, 26, kIdTarget);
     SendMessageW(m_targetEdit, EM_SETLIMITTEXT, QuickActions::kMaxTargetLength, 0);
-    m_browseButton = make(L"BUTTON", TR(ActionsBrowse), BS_PUSHBUTTON, 386, 79, 86, 24, kIdBrowse);
+    m_browseButton = make(L"BUTTON", TR(ActionsBrowse), BS_PUSHBUTTON, 412, 125, 92, 28, kIdBrowse);
 
-    make(L"STATIC", TR(ActionsArguments), 0, 238, 112, 234, 18, 0);
-    m_argsEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 238, 130, 234, 22, kIdArgs);
+    make(L"STATIC", TR(ActionsArguments), 0, 240, 164, 264, 20, 0);
+    m_argsEdit = make(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 240, 186, 264, 26, kIdArgs);
     SendMessageW(m_argsEdit, EM_SETLIMITTEXT, QuickActions::kMaxArgumentsLength, 0);
 
-    make(L"STATIC", TR(ActionsHelp), 0, 238, 164, 234, 126, 0);
+    make(L"STATIC", TR(ActionsHelp), 0, 240, 228, 264, 160, DialogTheme::kSecondaryIdFirst);
 
-    m_status = make(L"STATIC", L"", 0, 12, 308, 298, 36, 0);
-    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 318, 312, 76, 26, kIdSave);
-    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 398, 312, 74, 26, kIdClose);
+    // Footer: what went wrong, if anything, and Save / Close, under a line.
+    make(L"STATIC", L"", 0, 16, 404, 488, 1, DialogTheme::kDividerIdFirst);
+    m_status = make(L"STATIC", L"", 0, 16, 414, 296, 38, 0);
+    make(L"BUTTON", TR(ButtonSave), BS_DEFPUSHBUTTON | WS_TABSTOP, 328, 418, 84, 30, kIdSave);
+    make(L"BUTTON", TR(ButtonClose), BS_PUSHBUTTON | WS_TABSTOP, 420, 418, 84, 30, kIdClose);
 }
-
 void ActionsWindow::SetStatus(const wchar_t* text) { SetWindowTextW(m_status, text); }
 
 void ActionsWindow::RefreshList(int selectIndex) {
@@ -388,6 +390,12 @@ LRESULT ActionsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLORBTN:
+            if (msg == WM_CTLCOLORSTATIC) {
+                if (const LRESULT special =
+                        m_theme.SpecialStatic(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam))) {
+                    return special;
+                }
+            }
             if (m_theme.Themed()) {
                 const HWND control = reinterpret_cast<HWND>(lParam);
                 const int id = GetDlgCtrlID(control);
@@ -452,6 +460,10 @@ LRESULT ActionsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (m_font) {
                 DeleteObject(m_font);
                 m_font = nullptr;
+            }
+            if (m_headingFont) {
+                DeleteObject(m_headingFont);
+                m_headingFont = nullptr;
             }
             m_theme.Release();
             m_placements.clear();

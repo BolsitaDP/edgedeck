@@ -54,12 +54,12 @@ try {
     # The editor starts with four rows (the three defaults and one with an accent). One file added.
     $places = @(
         @{ Name = 'the list';             X = 100; Y = 100 },
-        @{ Name = 'the Name box';         X = 350; Y = 41 },
-        @{ Name = 'the Opens box';        X = 300; Y = 91 },
-        @{ Name = 'the Arguments box';    X = 350; Y = 141 },
-        @{ Name = 'the explanation text'; X = 350; Y = 230 },
-        @{ Name = 'the Add button';       X = 40;  Y = 286 },
-        @{ Name = 'the empty bottom edge'; X = 20; Y = 346 }
+        @{ Name = 'the Name box';         X = 350; Y = 79 },
+        @{ Name = 'the Opens box';        X = 300; Y = 139 },
+        @{ Name = 'the Arguments box';    X = 350; Y = 199 },
+        @{ Name = 'the explanation text'; X = 350; Y = 300 },
+        @{ Name = 'the Add button';       X = 60;  Y = 346 },
+        @{ Name = 'the empty bottom edge'; X = 20; Y = 455 }
     )
     foreach ($place in $places) {
         $r = Invoke-Drop $place.X $place.Y @($file)

@@ -24,6 +24,9 @@ public:
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    // Paints a hotkey box in the dark look, which no visual style reaches (see the .cpp).
+    static LRESULT CALLBACK HotkeyProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id,
+                                       DWORD_PTR self);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     void CreateControls(HINSTANCE hInstance);

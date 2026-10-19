@@ -43,11 +43,9 @@ constexpr int kIdFolderEdit = 119;
 constexpr int kIdLanguageCombo = 120;
 constexpr int kIdShortcutsButton = 121;
 // Labels drawn in the secondary tone (the version, the shortcuts reminder), and the thin lines
-// between sections: empty statics their WM_CTLCOLORSTATIC paints in the divider colour.
-constexpr int kIdSecondaryFirst = 130;
-constexpr int kIdSecondaryLast = 139;
-constexpr int kIdDividerFirst = 140;
-constexpr int kIdDividerLast = 149;
+// between sections: DialogTheme's shared ids.
+constexpr int kIdSecondaryFirst = DialogTheme::kSecondaryIdFirst;
+constexpr int kIdDividerFirst = DialogTheme::kDividerIdFirst;
 
 struct TypeEntry {
     WidgetType type;
@@ -88,29 +86,6 @@ constexpr int kRightX = 240;    // the right column
 constexpr int kRightEnd = 544;  // kClientWidth - kMargin
 constexpr int kLabelWidth = 80; // ends clear of the slider, which starts a little left of the fields
 constexpr int kFieldX = 328;    // where a labelled field starts
-
-// Windows 11's own interface typeface when it is there, Segoe UI before it. A face that is not
-// installed would not fail: GDI would quietly substitute something else, so it is looked for first.
-const wchar_t* FaceName(bool heading) {
-    static const bool variable = [] {
-        LOGFONTW wanted{};
-        wcscpy_s(wanted.lfFaceName, L"Segoe UI Variable Text");
-        wanted.lfCharSet = DEFAULT_CHARSET;
-        bool found = false;
-        HDC dc = GetDC(nullptr);
-        EnumFontFamiliesExW(
-            dc, &wanted,
-            [](const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM found) -> int {
-                *reinterpret_cast<bool*>(found) = true;
-                return 0;
-            },
-            reinterpret_cast<LPARAM>(&found), 0);
-        ReleaseDC(nullptr, dc);
-        return found;
-    }();
-    if (variable) return heading ? L"Segoe UI Variable Text Semibold" : L"Segoe UI Variable Text";
-    return heading ? L"Segoe UI Semibold" : L"Segoe UI";
-}
 
 // The monitor list is wider than its combo box: a name, an id and "(not connected)" do not fit in
 // the box itself, and the open list is where the choosing is done.
@@ -216,11 +191,7 @@ int SettingsWindow::MonitorChoiceIndex(const std::wstring& id) const {
     return -1;
 }
 
-HFONT SettingsWindow::MakeFont(bool heading) const {
-    return CreateFontW(-Scale(heading ? 16 : 14), 0, 0, 0, heading ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE,
-                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                       DEFAULT_PITCH | FF_SWISS, FaceName(heading));
-}
+HFONT SettingsWindow::MakeFont(bool heading) const { return DialogTheme::MakeFont(m_dpi, heading); }
 
 void SettingsWindow::ApplyDpi(UINT dpi) {
     if (dpi == 0 || dpi == m_dpi) return;
@@ -735,12 +706,9 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             if (msg == WM_CTLCOLORSTATIC) {
                 // The section lines and the secondary labels have colours of their own in either
                 // look, the system one included.
-                const int id = GetDlgCtrlID(reinterpret_cast<HWND>(lParam));
-                if (id >= kIdDividerFirst && id <= kIdDividerLast) {
-                    return m_theme.Divider(reinterpret_cast<HDC>(wParam));
-                }
-                if (id >= kIdSecondaryFirst && id <= kIdSecondaryLast) {
-                    return m_theme.SecondaryLabel(reinterpret_cast<HDC>(wParam));
+                if (const LRESULT special = m_theme.SpecialStatic(reinterpret_cast<HDC>(wParam),
+                                                                  reinterpret_cast<HWND>(lParam))) {
+                    return special;
                 }
             }
             // With the system look nothing is overridden, and the default

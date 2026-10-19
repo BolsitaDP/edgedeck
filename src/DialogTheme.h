@@ -25,6 +25,19 @@ public:
     // True while the dark look is in use. The two handlers below only act then.
     bool Themed() const { return m_themed && m_windowBrush && m_controlBrush; }
 
+    // The dark look's colours, for a control that paints itself (the hotkey box, which no visual
+    // style reaches). Only meaningful while Themed().
+    COLORREF FieldColor() const { return m_controlColor; }
+    COLORREF TextColor() const { return m_textColor; }
+    COLORREF AccentColor() const { return m_accentColor; }
+    // A field's outline: between the field and the text, about where the dark combo boxes draw theirs.
+    COLORREF OutlineColor() const {
+        auto mix = [](BYTE field, BYTE text) { return static_cast<BYTE>((field * 7 + text * 3) / 10); };
+        return RGB(mix(GetRValue(m_controlColor), GetRValue(m_textColor)),
+                   mix(GetGValue(m_controlColor), GetGValue(m_textColor)),
+                   mix(GetBValue(m_controlColor), GetBValue(m_textColor)));
+    }
+
     // WM_ERASEBKGND: fills the client area. Returns true if it painted.
     bool EraseBackground(HWND window, HDC dc) const;
 
@@ -40,6 +53,20 @@ public:
     LRESULT SecondaryLabel(HDC dc) const;
     LRESULT Divider(HDC dc) const;
 
+    // Control ids every dialog uses for those two kinds of static: an empty one in the divider
+    // range is a line, one in the secondary range a label in the secondary tone.
+    static constexpr int kDividerIdFirst = 9900;
+    static constexpr int kDividerIdLast = 9909;
+    static constexpr int kSecondaryIdFirst = 9910;
+    static constexpr int kSecondaryIdLast = 9919;
+    // WM_CTLCOLORSTATIC for a static in either range; 0 for any other, which the caller colours as
+    // before.
+    LRESULT SpecialStatic(HDC dc, HWND control) const;
+
+    // The dialogs' font at a DPI: Windows 11's interface face (Segoe UI Variable) where it is
+    // installed, Segoe UI before it; 14 logical pixels, or 16 and semibold for a section heading.
+    static HFONT MakeFont(UINT dpi, bool heading);
+
     // At WM_DESTROY.
     void Release();
 
@@ -53,4 +80,5 @@ private:
     COLORREF m_mutedColor = 0;
     COLORREF m_windowColor = 0;
     COLORREF m_controlColor = 0;
+    COLORREF m_accentColor = 0;
 };

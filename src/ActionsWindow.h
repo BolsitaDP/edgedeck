@@ -41,7 +41,7 @@ private:
     void SetStatus(const wchar_t* text);
 
     int Scale(int logical) const { return MulDiv(logical, static_cast<int>(m_dpi), 96); }
-    HFONT MakeFont() const;
+    HFONT MakeFont(bool heading) const;
     void ApplyDpi(UINT dpi);
 
     HWND m_hwnd = nullptr;
@@ -56,10 +56,12 @@ private:
     HWND m_downButton = nullptr;
     HWND m_status = nullptr;
     HFONT m_font = nullptr;
+    HFONT m_headingFont = nullptr;
 
     struct Placement {
         HWND hwnd;
         int x, y, w, h; // logical units
+        bool heading;   // set in the heading font
     };
     std::vector<Placement> m_placements;
     UINT m_dpi = 96;
