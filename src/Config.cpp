@@ -23,6 +23,23 @@ namespace {
 // user's regional settings, and must not change meaning if anything ever calls
 // std::locale::global. The text is therefore parsed and formatted through classic-locale streams
 // and the number parsing below.
+// Whether the bytes hold at least one well-formed UTF-8 sequence of two or more bytes - a lead byte
+// followed by as many continuation bytes as it announces. In text from a single-byte code page an
+// accented letter is one byte between plain ASCII, which never forms one.
+bool HasUtf8Sequence(const char* text, int length) {
+    for (int i = 0; i < length; ++i) {
+        const auto lead = static_cast<unsigned char>(text[i]);
+        const int extra = (lead >= 0xC2 && lead <= 0xDF) ? 1 : (lead >= 0xE0 && lead <= 0xEF) ? 2
+                        : (lead >= 0xF0 && lead <= 0xF4)   ? 3
+                                                           : 0;
+        if (extra == 0 || i + extra >= length) continue; // not a lead byte, or cut off by the end
+        bool whole = true;
+        for (int k = 1; k <= extra && whole; ++k) whole = (static_cast<unsigned char>(text[i + k]) & 0xC0) == 0x80;
+        if (whole) return true;
+    }
+    return false;
+}
+
 bool ReadUtf8File(const std::wstring& path, std::wstring& out) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -50,12 +67,15 @@ bool ReadUtf8File(const std::wstring& path, std::wstring& out) {
     const int textLength = static_cast<int>(bytes.size() - start);
     // Bytes that are not UTF-8 are a file an editor saved in the system's code page ("ANSI", what
     // older Notepads wrote): read that way, an accented name keeps its accent instead of becoming
-    // a replacement character - which the next Save would then write for good.
+    // a replacement character - which the next Save would then write for good. Only when nothing
+    // in it is UTF-8, though: a UTF-8 file with one damaged byte read as ANSI would turn every
+    // other accent into two characters ("MÃºsica"), so it stays UTF-8 with one character lost.
     UINT codePage = CP_UTF8;
     int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, textLength, nullptr, 0);
     if (length <= 0 && textLength > 0) {
-        codePage = CP_ACP;
-        length = MultiByteToWideChar(CP_ACP, 0, text, textLength, nullptr, 0);
+        // Either way a strict reading failed, so the length is asked again without being strict.
+        if (!HasUtf8Sequence(text, textLength)) codePage = CP_ACP;
+        length = MultiByteToWideChar(codePage, 0, text, textLength, nullptr, 0);
     }
     out.assign(static_cast<size_t>(length > 0 ? length : 0), L'\0');
     if (length > 0) MultiByteToWideChar(codePage, 0, text, textLength, out.data(), length);

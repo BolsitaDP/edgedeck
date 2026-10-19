@@ -631,9 +631,16 @@ void TestAFileInTheSystemCodePageKeepsItsAccents() {
     Config::LoadOrDefault();
     wchar_t expected[16] = {};
     MultiByteToWideChar(CP_ACP, 0, ansiName.data(), static_cast<int>(ansiName.size()), expected, 15);
-    const auto list = Config::QuickActionList();
+    auto list = Config::QuickActionList();
     CHECK(list.size() == 1 && list[0].name == expected);
     CHECK(Config::LastLoadProblem() == Config::LoadProblem::None);
+
+    // A UTF-8 file with one damaged byte is still UTF-8: the other accents are kept as they are,
+    // not read as two ANSI characters each ("MÃºsica").
+    ScopedConfig::WriteRaw("[action]\nname=M\xC3\xBA" "sica\ntarget=a.exe\n[action]\nname=bad\xFF\ntarget=b.exe\n");
+    Config::LoadOrDefault();
+    list = Config::QuickActionList();
+    CHECK(list.size() == 2 && list[0].name == L"Música");
 }
 
 } // namespace
