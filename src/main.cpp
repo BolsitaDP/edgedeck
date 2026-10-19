@@ -19,7 +19,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In
     const CrashHandler::StartupInfo startup = CrashHandler::ParseCommandLine(GetCommandLineW());
     CrashHandler::WaitForPrevious(startup);
 
-    // A second copy would duplicate the always-on-top windows and hotkeys.
+    // A second copy would duplicate the always-on-top windows and hotkeys. It tells the running one
+    // instead, which shows its Settings window: quitting in silence looked like EdgeDeck not
+    // starting at all.
     HANDLE instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\EdgeDeck.SingleInstance");
     if (!instanceMutex) {
         MessageBoxW(nullptr, L"EdgeDeck could not create its single-instance lock.",
@@ -28,6 +30,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In
     }
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         CloseHandle(instanceMutex);
+        App::AskRunningCopyToShowItself();
         return 0;
     }
 

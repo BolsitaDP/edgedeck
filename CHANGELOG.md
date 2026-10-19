@@ -31,6 +31,7 @@ The first public version. EdgeDeck so far:
   can be turned off; a shortcut another program owns is reported instead of silently missing.
 - Light, dark and high-contrast themes that follow Windows and its accent colour.
 - A crash leaves a log line and a minidump and restarts EdgeDeck once.
+- Starting EdgeDeck again while it runs opens its Settings, instead of seeming to do nothing.
 - *Report a problem...* opens a bug report already filled in, with the end of the log on the
   clipboard.
 - A settings file that cannot be read, or that a newer version wrote, is copied to

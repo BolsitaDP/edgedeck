@@ -54,6 +54,13 @@ UINT TaskbarCreatedMessage() {
     return msg;
 }
 
+// What a second copy sends the running one (see AskRunningCopyToShowItself). Registered, so it
+// cannot collide with anyone else's message number.
+UINT ShowYourselfMessage() {
+    static const UINT msg = RegisterWindowMessageW(L"EdgeDeck.ShowYourself");
+    return msg;
+}
+
 // The user-configurable subset of a tab's layout, mapped onto Tab's full
 // geometry. Everything TabConfig carries that is not user-facing (corner
 // radius, animation and close timing) keeps its default.
@@ -144,6 +151,7 @@ bool App::Create(HINSTANCE hInstance) {
     // A first start says what EdgeDeck is and where it is - a few small tabs on the screen edge are
     // easy to miss - as a notification, not a window: nothing EdgeDeck does takes the focus.
     if (m_firstRun) AddStartupNotice(TR(Welcome), false);
+
     CarryOverDisplayLayouts();
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     // After the tabs: the display shortcuts exist only while there is a Displays tab.
@@ -463,6 +471,7 @@ std::wstring App::TrayTip() const {
 
 void App::ToggleAutostart() {
     const bool wasEnabled = Autostart::IsEnabled();
+
     if (Autostart::SetEnabled(!wasEnabled)) {
         ShowBalloon(wasEnabled ? TR(AutostartNowOff) : TR(AutostartNowOn), false);
     } else {
@@ -749,7 +758,27 @@ void App::RequestExit() {
 // per process), unlike Tab, so a plain static back-pointer is fine here.
 // ---------------------------------------------------------------------------
 
+bool App::AskRunningCopyToShowItself() {
+    HWND running = FindWindowW(kUtilityClassName, nullptr);
+    if (!running) return false;
+    // This copy was just started by the user, so it may hand its right to the foreground on: without
+    // that, Windows would keep the Settings window behind whatever is in front.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(running, &pid);
+    if (pid) AllowSetForegroundWindow(pid);
+    return PostMessageW(running, ShowYourselfMessage(), 0, 0) != FALSE;
+}
+
 LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == ShowYourselfMessage()) {
+        // EdgeDeck was started again while running: Settings is where someone who went looking
+        // for it can see that it is, and change anything.
+        if (s_instance) {
+            Diagnostics::Info("Started again while running: showing Settings");
+            s_instance->OpenSettings();
+        }
+        return 0;
+    }
     // Before the switch, because the id is only known at runtime.
     if (msg == TaskbarCreatedMessage()) {
         // Explorer rebuilt the notification area and dropped our icon along with

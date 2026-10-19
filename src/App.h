@@ -41,6 +41,12 @@ public:
     bool Create(HINSTANCE hInstance);
     static int RunMessageLoop();
 
+    // For a second copy that found EdgeDeck already running: asks the running one to show its
+    // Settings window - started again, from a shortcut or the Start menu, is someone looking for
+    // it, and the tabs are small enough to miss - and lets it come to the front for that. False
+    // when no running copy's window could be found.
+    static bool AskRunningCopyToShowItself();
+
     void ShowTabContextMenu(Tab* tab, POINT screenPt);
     // A tab was moved with its panel's handle: its new place is saved, and an open Settings window
     // shows it.
