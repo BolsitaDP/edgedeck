@@ -309,6 +309,10 @@ void Tab::SetPaused(bool paused) {
     if (!m_tabHwnd || !m_panelHwnd) return;
 
     if (paused) {
+        // The pause shortcut can come in the middle of a drag; a hidden window must not keep the
+        // mouse. A move is kept where it got to, as when the capture is lost any other way.
+        EndMove();
+        EndDrag();
         KillTimer(m_tabHwnd, kTimerOpen);
         KillTimer(m_tabHwnd, kTimerLeave);
         // A pinned panel is closed too: pausing is "get out of the way", and a panel left on
