@@ -43,6 +43,8 @@ The first public version. EdgeDeck so far:
 - A release zip with an installer that needs no administrator rights, an uninstaller, and the C++
   runtime built in; x64 and ARM64.
 - Listed in Windows' installed apps (per user), with its version and an Uninstall button.
+- Opened straight from inside the zip, EdgeDeck and Install.cmd say to unzip it first, and Start
+  with Windows refuses to point at a temporary folder that Windows will clean away.
 - *Check for updates* in the menu opens the latest release; nothing is checked in the background.
 - Each release carries its winget manifests, for installing with `winget` once they are accepted.
 - MIT license.

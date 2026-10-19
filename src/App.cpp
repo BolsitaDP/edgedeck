@@ -150,8 +150,15 @@ bool App::Create(HINSTANCE hInstance) {
     NoteConfigProblem();
     // A first start says what EdgeDeck is and where it is - a few small tabs on the screen edge are
     // easy to miss - as a notification, not a window: nothing EdgeDeck does takes the focus.
-    if (m_firstRun) AddStartupNotice(TR(Welcome), false);
-
+    // Started straight from the zip, EdgeDeck runs from a folder Windows cleans later. That is the
+    // thing to say then - in place of the welcome, which would not fit beside it in one notification.
+    const bool fromTemp = Autostart::IsInTemporaryFolder(Autostart::ThisExePath());
+    if (fromTemp) {
+        Diagnostics::Info("Started from a temporary folder (probably inside a zip)");
+        AddStartupNotice(TR(RunningFromTemp));
+    } else if (m_firstRun) {
+        AddStartupNotice(TR(Welcome), false);
+    }
     CarryOverDisplayLayouts();
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     // After the tabs: the display shortcuts exist only while there is a Displays tab.
@@ -471,7 +478,11 @@ std::wstring App::TrayTip() const {
 
 void App::ToggleAutostart() {
     const bool wasEnabled = Autostart::IsEnabled();
-
+    // An entry for a copy in a temporary folder would break as soon as Windows cleans it.
+    if (!wasEnabled && Autostart::IsInTemporaryFolder(Autostart::PreferredPath())) {
+        ShowBalloon(TR(AutostartFromTemp));
+        return;
+    }
     if (Autostart::SetEnabled(!wasEnabled)) {
         ShowBalloon(wasEnabled ? TR(AutostartNowOff) : TR(AutostartNowOn), false);
     } else {

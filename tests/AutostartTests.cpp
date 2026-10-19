@@ -303,9 +303,36 @@ void TestStartupNoteIsQuietUnlessThereIsSomethingToSay() {
     CHECK(NoteForStartup(State::Enabled, Repair::Valid, false, true).text.empty());
 }
 
+void TestATemporaryFolderIsRecognised() {
+    TEST("Autostart: a copy run straight from a zip (a temporary folder) is told apart from an installed one");
+    using Autostart::IsInFolder;
+    const std::wstring temp = L"C:\\Users\\Ana\\AppData\\Local\\Temp\\";
+    CHECK(IsInFolder(L"C:\\Users\\Ana\\AppData\\Local\\Temp\\Temp1_EdgeDeck-1.0.0-win-x64.zip\\EdgeDeck.exe", temp));
+    CHECK(IsInFolder(L"c:\\users\\ana\\appdata\\local\\temp\\x\\EdgeDeck.exe", temp)); // any case
+    CHECK(IsInFolder(L"C:\\Users\\Ana\\AppData\\Local\\Temp\\x\\EdgeDeck.exe", L"C:\\Users\\Ana\\AppData\\Local\\Temp"));
+    CHECK(!IsInFolder(L"C:\\Users\\Ana\\AppData\\Local\\Temp2\\EdgeDeck.exe", temp)); // a whole folder name
+    CHECK(!IsInFolder(L"C:\\Users\\Ana\\AppData\\Local\\EdgeDeck\\bin\\EdgeDeck.exe", temp));
+    CHECK(!IsInFolder(L"", temp));
+    CHECK(!IsInFolder(L"C:\\x.exe", L""));
+
+    // Against this machine's own temporary folder, in long and short forms.
+    wchar_t buffer[MAX_PATH + 1];
+    const DWORD length = GetTempPathW(MAX_PATH + 1, buffer);
+    CHECK(length > 0);
+    const std::wstring here(buffer, length);
+    CHECK(Autostart::IsInTemporaryFolder(here + L"Temp1_EdgeDeck.zip\\EdgeDeck.exe"));
+    wchar_t shortForm[MAX_PATH + 1];
+    if (GetShortPathNameW(here.c_str(), shortForm, MAX_PATH + 1) > 0) {
+        CHECK(Autostart::IsInTemporaryFolder(std::wstring(shortForm) + L"EdgeDeck.exe"));
+    }
+    // Not InstalledPath(): the tests point LOCALAPPDATA at a scratch folder, which is in Temp.
+    CHECK(!Autostart::IsInTemporaryFolder(L"C:\\Windows\\System32\\notepad.exe"));
+}
+
 } // namespace
 
 void RunAutostartTests() {
+    TestATemporaryFolderIsRecognised();
     TestInspectTellsTheFourStatesApart();
     TestStartupNoteIsQuietUnlessThereIsSomethingToSay();
     TestCommandToPath();

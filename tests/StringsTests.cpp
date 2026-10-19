@@ -129,7 +129,8 @@ void TestNotificationsFitTheirBox() {
     TEST("Strings: what a notification says on its own fits the 255 characters Windows shows");
     for (int lang = 0; lang < Strings::kLanguageCount; ++lang) {
         for (Strings::Id id : {Strings::Id::Welcome, Strings::Id::CrashRestarted, Strings::Id::AutostartMissing,
-                               Strings::Id::AutostartBroken, Strings::Id::SaveFailedSettings}) {
+                               Strings::Id::AutostartBroken, Strings::Id::SaveFailedSettings,
+                               Strings::Id::RunningFromTemp, Strings::Id::AutostartFromTemp}) {
             CHECK(wcslen(Strings::Get(id, static_cast<Language>(lang))) <= 255);
         }
         // A settings problem is said with the copy's name, and after a crash, in the same balloon.

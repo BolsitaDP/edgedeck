@@ -87,6 +87,15 @@ enum class Language : int {
     X(ConfigNewer, L"A newer EdgeDeck saved these settings; what this version does not know will be lost.",  \
       L"Un EdgeDeck más nuevo guardó esta configuración; lo que esta versión no conoce se perderá.")         \
     X(ConfigBackupKept, L"A copy was kept as %ls.", L"Se guardó una copia como %ls.")                        \
+    X(RunningFromTemp,                                                                                       \
+      L"EdgeDeck is running from a temporary folder - probably straight from the zip - and will be gone "    \
+      L"after a restart. Unzip it and run Install.cmd.",                                                     \
+      L"EdgeDeck se está ejecutando desde una carpeta temporal (seguramente desde el zip) y desaparecerá al " \
+      L"reiniciar. Descomprímelo y ejecuta Install.cmd.")                                                    \
+    X(AutostartFromTemp,                                                                                     \
+      L"EdgeDeck cannot start with Windows from a temporary folder. Unzip it and run Install.cmd first.",    \
+      L"EdgeDeck no puede iniciarse con Windows desde una carpeta temporal. Descomprímelo y ejecuta "        \
+      L"Install.cmd primero.")                                                                               \
     X(CrashRestarted, L"EdgeDeck closed unexpectedly and was restarted. Details are in its log.",            \
       L"EdgeDeck se cerró de forma inesperada y se reinició. Los detalles están en su registro.")            \
     X(ExitHotkeyTaken,                                                                                       \

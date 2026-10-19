@@ -96,6 +96,14 @@ Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'LICENSE') 
 @'
 @echo off
 setlocal
+rem Double-clicked inside the zip, Explorer extracts this file alone, to a temporary folder.
+if not exist "%~dp0EdgeDeck.exe" (
+    echo EdgeDeck.exe is not next to this file: it looks like it was opened from inside the zip.
+    echo Unzip the whole zip first ^(right-click it, Extract All^), then run Install.cmd from there.
+    echo.
+    pause
+    exit /b 1
+)
 echo EdgeDeck installs for your user account only (no administrator needed).
 echo.
 choice /C YN /M "Start EdgeDeck with Windows"

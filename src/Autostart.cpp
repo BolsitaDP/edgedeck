@@ -185,4 +185,23 @@ std::wstring PreferredPath(const std::wstring& installedExe, const std::wstring&
     return FileExists(installedExe) ? installedExe : runningExe;
 }
 
+bool IsInFolder(const std::wstring& exePath, const std::wstring& tempDir) {
+    if (exePath.empty() || tempDir.empty()) return false;
+    std::wstring folder = tempDir;
+    if (folder.back() != L'\\') folder += L'\\';
+    return exePath.size() > folder.size() && _wcsnicmp(exePath.c_str(), folder.c_str(), folder.size()) == 0;
+}
+
+bool IsInTemporaryFolder(const std::wstring& path) {
+    auto longForm = [](const std::wstring& p) {
+        wchar_t buffer[MAX_PATH * 2];
+        const DWORD length = GetLongPathNameW(p.c_str(), buffer, MAX_PATH * 2);
+        return (length > 0 && length < MAX_PATH * 2) ? std::wstring(buffer, length) : p;
+    };
+    wchar_t temp[MAX_PATH + 1];
+    const DWORD length = GetTempPathW(MAX_PATH + 1, temp);
+    if (length == 0 || length > MAX_PATH) return false;
+    return IsInFolder(longForm(path), longForm(std::wstring(temp, length)));
+}
+
 } // namespace Autostart

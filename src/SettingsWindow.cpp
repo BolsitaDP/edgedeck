@@ -588,7 +588,11 @@ void SettingsWindow::OnSave() {
     if (wantAutostart != m_autostartInitial) {
         // The result used to be thrown away, so a registry write that failed left the
         // box ticked in the user's mind and nothing in Windows.
-        if (!Autostart::SetEnabled(wantAutostart) && m_onProblem) {
+        if (wantAutostart && Autostart::IsInTemporaryFolder(Autostart::PreferredPath())) {
+            // An entry for a copy Windows will clean away breaks at the next sign-in or two.
+            if (m_onProblem) m_onProblem(TR(AutostartFromTemp));
+            SendMessageW(m_autostartCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+        } else if (!Autostart::SetEnabled(wantAutostart) && m_onProblem) {
             m_onProblem(wantAutostart ? TR(AutostartOnFailed) : TR(AutostartOffFailed));
         }
     }

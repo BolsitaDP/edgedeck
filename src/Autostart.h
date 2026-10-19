@@ -84,4 +84,13 @@ std::wstring ThisExePath();
 std::wstring PreferredPath(const std::wstring& installedExe, const std::wstring& runningExe);
 inline std::wstring PreferredPath() { return PreferredPath(InstalledPath(), ThisExePath()); }
 
+// Whether exePath lies inside the folder tempDir - compared without case, on whole folder names, so
+// "C:\Temp2\x.exe" is not inside "C:\Temp". That is where Explorer puts a program started straight
+// from a zip, and it cleans that folder later: a startup entry pointing there breaks, and the
+// program itself is gone after a restart.
+bool IsInFolder(const std::wstring& exePath, const std::wstring& tempDir);
+// The same for a path, against this user's temporary folder (both in their long form, since either
+// may come in 8.3 short names).
+bool IsInTemporaryFolder(const std::wstring& path);
+
 } // namespace Autostart
