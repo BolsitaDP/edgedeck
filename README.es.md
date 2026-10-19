@@ -44,20 +44,22 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 
 Necesitas Windows 10 (versión 1809 o posterior) o Windows 11, de 64 bits.
 
-1. Descarga `EdgeDeck-<versión>-win-x64.zip` de la
-   [última release](https://github.com/BolsitaDP/edgedeck/releases/latest)
-   (`win-arm64` para un equipo Windows on ARM).
-2. Descomprímelo donde quieras y haz doble clic en **`Install.cmd`**. Hace una sola pregunta —si
-   EdgeDeck debe iniciarse con Windows— e instala solo para tu usuario, sin permisos de
-   administrador.
+Descarga **`EdgeDeck-<versión>-setup-x64.exe`** de la
+[última release](https://github.com/BolsitaDP/edgedeck/releases/latest) (`setup-arm64` para un
+equipo Windows on ARM) y ejecútalo. Instala solo para tu usuario, sin permisos de administrador, en
+español o inglés, y pregunta si EdgeDeck debe iniciarse con Windows. Ejecutar uno más nuevo después
+actualiza EdgeDeck en su sitio: lo cierra y lo vuelve a abrir.
+
+¿Prefieres sin instalador? El `EdgeDeck-<versión>-win-x64.zip` tiene el mismo programa:
+descomprímelo donde quieras y haz doble clic en **`Install.cmd`**.
 
 EdgeDeck aún no está firmado digitalmente, así que SmartScreen puede avisar de un editor
-desconocido. Cada release publica el SHA-256 de su zip para comprobar que la descarga es la
-publicada.
+desconocido (*Más información* > *Ejecutar de todas formas*). Cada release publica el SHA-256 de sus
+archivos para comprobar que la descarga es la publicada.
 
 EdgeDeck aparece en **Configuración de Windows > Aplicaciones > Aplicaciones instaladas**, desde
-donde se desinstala como cualquier otra (o con `uninstall.ps1` del zip). La configuración se
-conserva, salvo que pases `-RemoveSettings` al script. *Buscar actualizaciones* en el menú de
+donde se desinstala como cualquier otra. La configuración, en `%LOCALAPPDATA%\EdgeDeck`, se
+conserva (`uninstall.ps1 -RemoveSettings` del zip también la borra). *Buscar actualizaciones* en el menú de
 EdgeDeck abre la última release; EdgeDeck nunca lo comprueba por su cuenta.
 
 ## Uso

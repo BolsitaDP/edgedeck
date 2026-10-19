@@ -3,12 +3,14 @@
     Writes the winget manifests for a published release, ready to submit to microsoft/winget-pkgs.
 
 .DESCRIPTION
-    winget installs EdgeDeck from the release's own zips: it downloads EdgeDeck-<version>-win-<arch>
-    .zip from GitHub, checks it against the SHA256 in the manifest, and keeps EdgeDeck.exe in its
-    portable-apps folder for the current user (no administrator rights), with "edgedeck" as a
-    command. Settings live where they always do, in %LOCALAPPDATA%\EdgeDeck.
+    winget installs EdgeDeck with the release's own setup program: it downloads
+    EdgeDeck-<version>-setup-<arch>.exe from GitHub, checks it against the SHA256 in the manifest
+    and runs it silently - for the current user, without administrator rights. An upgrade is that
+    setup again, which closes a running EdgeDeck cleanly and starts the new one; Windows' list of
+    installed apps knows it by the setup's AppId, which is the manifest's ProductCode. Settings
+    live where they always do, in %LOCALAPPDATA%\EdgeDeck.
 
-    The checksums are read from the .sha256 files package.ps1 wrote next to the zips, so run this
+    The checksums are read from the .sha256 files installer.ps1 wrote next to the setups, so run this
     on the same dist\ that was published - in CI that is the release job itself, which attaches
     the result to the release.
 
@@ -19,7 +21,7 @@
     major.minor.patch, as in the tag without its "v".
 
 .PARAMETER Homepage
-    The project page on GitHub; the zips are expected under <Homepage>/releases/download/v<Version>/.
+    The project page on GitHub; the setups are expected under <Homepage>/releases/download/v<Version>/.
 
 .PARAMETER PackageIdentifier
     Publisher.Name, as winget-pkgs knows the package. A fork submits under its own.
@@ -50,17 +52,17 @@ $owner = ([Uri]$Homepage).AbsolutePath.Trim('/').Split('/')[0]
 # One installer per architecture that was packaged; x64 must be there.
 $installers = @()
 foreach ($arch in 'x64', 'arm64') {
-    $zip = "EdgeDeck-$Version-win-$arch.zip"
-    $sumFile = Join-Path $PackageDir "$zip.sha256"
+    $setup = "EdgeDeck-$Version-setup-$arch.exe"
+    $sumFile = Join-Path $PackageDir "$setup.sha256"
     if (-not (Test-Path -LiteralPath $sumFile)) {
-        if ($arch -eq 'x64') { throw "No $sumFile. Run package.ps1 -Version $Version first." }
+        if ($arch -eq 'x64') { throw "No $sumFile. Run installer.ps1 -Version $Version first." }
         continue
     }
     $hash = ((Get-Content -LiteralPath $sumFile -Raw).Trim() -split '\s+')[0].ToUpperInvariant()
     if ($hash -notmatch '^[0-9A-F]{64}$') { throw "$sumFile does not hold a SHA256." }
     $installers += @"
 - Architecture: $arch
-  InstallerUrl: $Homepage/releases/download/v$Version/$zip
+  InstallerUrl: $Homepage/releases/download/v$Version/$setup
   InstallerSha256: $hash
 "@
 }
@@ -89,11 +91,15 @@ Write-Manifest "$PackageIdentifier.installer.yaml" @"
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $Version
 MinimumOSVersion: 10.0.17763.0
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-- RelativeFilePath: EdgeDeck.exe
-  PortableCommandAlias: edgedeck
+InstallerType: inno
+Scope: user
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+UpgradeBehavior: install
+# The setup's AppId (installer\EdgeDeck.iss) as Inno Setup names its uninstall entry.
+ProductCode: '{F1EA497D-8306-49A6-A42A-9E36995720E8}_is1'
 ReleaseDate: $ReleaseDate
 Installers:
 $($installers -join "`n")

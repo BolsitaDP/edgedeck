@@ -46,6 +46,11 @@ ctest --test-dir build -C Release --output-on-failure
 `EDGEDECK_BUILD_TOOLS=ON` also builds the desktop test tools. To run your build as an installed copy
 (so rebuilding does not fight a running `EdgeDeck.exe`): `scripts\install.ps1 -Build`.
 
+`scripts\package.ps1` makes the release zip and `scripts\installer.ps1` the setup program, from
+`installer\EdgeDeck.iss`. The setup needs Inno Setup 6: install it from its site, or let
+`scripts\get-innosetup.ps1` fetch the version CI uses (pinned, checked by SHA256 and signature,
+installed for your user only).
+
 ## Testing
 
 - **Unit tests** (`tests/`, run by `ctest` and in CI) cover everything without a window. Add tests
@@ -115,7 +120,7 @@ For maintainers. A release is a tag; everything else is the `release` workflow.
 2. In CHANGELOG.md, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and commit. The
    workflow refuses a tag whose version has no section there.
 3. Tag and push: `git tag vX.Y.Z` and `git push origin vX.Y.Z`. The workflow publishes the
-   release with the x64 and ARM64 zips, their symbols and SHA256s, and
+   release with the x64 and ARM64 setup programs and zips, their symbols and SHA256s, and
    `EdgeDeck-X.Y.Z-winget-manifests.zip`.
 4. winget: unzip the manifests into a fork of
    [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) (they are already in its

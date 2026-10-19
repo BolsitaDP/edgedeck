@@ -62,9 +62,10 @@ $section
 
 ## Install
 
-Windows 10 (1809 or later) or Windows 11. Download ``EdgeDeck-$Version-win-x64.zip`` (or
-``win-arm64`` for Windows on ARM), unzip it anywhere and double-click **Install.cmd**. It installs
-for your user only, without administrator rights, and appears in Settings > Apps > Installed apps.
+Windows 10 (1809 or later) or Windows 11. Download **``EdgeDeck-$Version-setup-x64.exe``** (or
+``setup-arm64`` for Windows on ARM) and run it: it installs for your user only, without
+administrator rights, and updates an EdgeDeck that is already installed. The ``win-x64`` and
+``win-arm64`` zips hold the same program, for installing without a setup program (Install.cmd).
 
 EdgeDeck is not code-signed yet, so SmartScreen may warn about an unknown publisher. Compare the
 download with the checksums below.

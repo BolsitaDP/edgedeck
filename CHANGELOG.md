@@ -42,8 +42,9 @@ The first public version. EdgeDeck so far:
   keeps its accents.
 
 ### Distribution
-- A release zip with an installer that needs no administrator rights, an uninstaller, and the C++
-  runtime built in; x64 and ARM64.
+- A setup program (Inno Setup) in English and Spanish that needs no administrator rights, updates
+  in place and closes a running EdgeDeck cleanly; and a zip with Install.cmd for those who prefer
+  it. Both carry the C++ runtime built in; x64 and ARM64.
 - Listed in Windows' installed apps (per user), with its version and an Uninstall button.
 - Opened straight from inside the zip, EdgeDeck and Install.cmd say to unzip it first, and Start
   with Windows refuses to point at a temporary folder that Windows will clean away.

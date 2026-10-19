@@ -43,18 +43,22 @@ several of the same kind, on the left or right edge of any monitor.
 
 You need Windows 10 (version 1809 or later) or Windows 11, 64-bit.
 
-1. Download `EdgeDeck-<version>-win-x64.zip` from the
-   [latest release](https://github.com/BolsitaDP/edgedeck/releases/latest)
-   (`win-arm64` for a Windows on ARM machine).
-2. Unzip it anywhere and double-click **`Install.cmd`**. It asks one question - whether EdgeDeck
-   should start with Windows - and installs for your user only, without administrator rights.
+Download **`EdgeDeck-<version>-setup-x64.exe`** from the
+[latest release](https://github.com/BolsitaDP/edgedeck/releases/latest) (`setup-arm64` for a
+Windows on ARM machine) and run it. It installs for your user only, without administrator rights,
+in English or Spanish, and asks whether EdgeDeck should start with Windows. Running a newer one
+later updates EdgeDeck in place, closing and restarting it.
 
-EdgeDeck is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher. Each
-release lists the SHA-256 of its zip so you can check the download is the published one.
+Prefer no installer? The `EdgeDeck-<version>-win-x64.zip` has the same program: unzip it
+anywhere and double-click **`Install.cmd`**.
 
-EdgeDeck appears in **Settings > Apps > Installed apps**, where it can be uninstalled like anything
-else (or run `uninstall.ps1` from the zip). Your settings are kept unless you pass
-`-RemoveSettings` to the script. *Check for updates* in EdgeDeck's menu opens the latest release;
+EdgeDeck is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher
+(*More info* > *Run anyway*). Each release lists the SHA-256 of its files so you can check the
+download is the published one.
+
+EdgeDeck appears in **Settings > Apps > Installed apps**, where it is uninstalled like anything
+else. Your settings, in `%LOCALAPPDATA%\EdgeDeck`, are kept (`uninstall.ps1 -RemoveSettings`
+from the zip removes them too). *Check for updates* in EdgeDeck's menu opens the latest release;
 EdgeDeck never checks on its own.
 
 ## Using it
