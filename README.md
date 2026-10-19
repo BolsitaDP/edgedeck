@@ -63,6 +63,8 @@ EdgeDeck never checks on its own.
   the panel, and closes a moment after you leave.
 - **Pin a panel** with the pin in its top-right corner to keep it open; click the pin again to let
   it go.
+- **Move a tab up or down** by holding the arrows in its panel's top-left corner and dragging; the
+  tab stays where you let go.
 - **Right-click a tab, or the EdgeDeck icon in the notification area,** for the menu: Settings,
   Edit quick actions, Pause tabs, Start with Windows, Open log, Restart, Check for updates, Report a
   problem and Exit. Left-clicking

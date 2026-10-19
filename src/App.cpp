@@ -365,6 +365,17 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
     UpdateDisplayHotkeys();
 }
 
+void App::OnTabMoved(const Tab* tab, float oldRatio, float newRatio) {
+    const auto found = std::find_if(m_tabs.begin(), m_tabs.end(), [tab](const auto& t) { return t.get() == tab; });
+    const size_t index = static_cast<size_t>(found - m_tabs.begin());
+    if (found == m_tabs.end() || index >= m_settings.size()) return;
+    m_settings[index].verticalRatio = newRatio;
+    if (!Config::Save(m_settings)) ShowBalloon(TR(SaveFailedSettings));
+    if (m_settingsWindow && IsWindow(m_settingsWindow->Hwnd())) {
+        m_settingsWindow->TabMoved(index, m_settings[index].widgetType, oldRatio, newRatio);
+    }
+}
+
 void App::OpenActionsEditor() {
     if (m_actionsWindow && IsWindow(m_actionsWindow->Hwnd())) {
         SetForegroundWindow(m_actionsWindow->Hwnd());

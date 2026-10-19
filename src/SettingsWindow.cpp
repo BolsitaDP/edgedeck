@@ -450,6 +450,22 @@ void SettingsWindow::LoadSelectedIntoControls() {
     SendMessageW(m_edgeCombo, CB_SETCURSEL, t.edge == ScreenEdge::Left ? 1 : 0, 0);
 }
 
+void SettingsWindow::TabMoved(size_t index, WidgetType type, float oldRatio, float newRatio) {
+    if (index >= m_tabs.size() || m_tabs[index].widgetType != type) return;
+    const auto percent = [](float ratio) { return static_cast<int>(std::lround(ratio * 100.0f)); };
+    const bool selected = static_cast<int>(index) == m_selectedIndex;
+    const int shown = selected ? static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0))
+                               : percent(m_tabs[index].verticalRatio);
+    if (shown != percent(oldRatio)) return;
+    m_tabs[index].verticalRatio = newRatio;
+    if (!selected) return;
+    const int pos = percent(newRatio);
+    SendMessageW(m_positionTrackbar, TBM_SETPOS, TRUE, pos);
+    wchar_t pctBuf[16];
+    swprintf_s(pctBuf, L"%d%%", pos);
+    SetWindowTextW(m_positionLabel, pctBuf);
+}
+
 void SettingsWindow::StoreControlsIntoSelected() {
     if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_tabs.size())) return;
     TabSettings& t = m_tabs[m_selectedIndex];
@@ -469,8 +485,12 @@ void SettingsWindow::StoreControlsIntoSelected() {
     }
     t.edge = SendMessageW(m_edgeCombo, CB_GETCURSEL, 0, 0) == 1 ? ScreenEdge::Left : ScreenEdge::Right;
 
+    // The slider has whole percents; a tab placed with its move handle sits between two. Its exact
+    // place is kept unless the slider was moved, or every Save here would nudge it a few pixels.
     const int pos = static_cast<int>(SendMessageW(m_positionTrackbar, TBM_GETPOS, 0, 0));
-    t.verticalRatio = std::clamp(pos, 0, 100) / 100.0f;
+    if (pos != static_cast<int>(std::lround(t.verticalRatio * 100.0f))) {
+        t.verticalRatio = std::clamp(pos, 0, 100) / 100.0f;
+    }
 
     // Each field is parsed strictly and then written back into its own edit, so
     // what the dialog shows always matches what it will save. The old code

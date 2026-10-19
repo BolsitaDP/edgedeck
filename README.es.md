@@ -66,6 +66,8 @@ EdgeDeck abre la última release; EdgeDeck nunca lo comprueba por su cuenta.
   sobre la pestaña o el panel, y se cierra un momento después de salir.
 - **Fija un panel** con la chincheta de su esquina superior derecha para que quede abierto; vuelve a
   pulsarla para soltarlo.
+- **Mueve una pestaña arriba o abajo** manteniendo pulsadas las flechas de la esquina superior
+  izquierda de su panel y arrastrando; la pestaña se queda donde la sueltes.
 - **Clic derecho en una pestaña, o en el icono de EdgeDeck del área de notificación,** para el
   menú: Configuración, Editar acciones rápidas, Pausar pestañas, Iniciar con Windows, Abrir
   registro, Reiniciar, Buscar actualizaciones, Informar de un problema y Salir. Clic izquierdo en el

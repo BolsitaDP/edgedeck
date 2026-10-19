@@ -228,6 +228,12 @@ bool Tab::CreateWindows(HINSTANCE hInstance) {
 
 void Tab::Relayout() {
     if (m_inRelayout || !m_tabHwnd || !m_panelHwnd) return;
+    // A move in progress is abandoned, unsaved: the monitor it was measured against may have
+    // changed, and the layout below puts the tab back at its saved place.
+    if (m_moving) {
+        m_moving = false;
+        ReleaseCapture();
+    }
     m_inRelayout = true;
 
     KillTimer(m_tabHwnd, kTimerAnim);
@@ -429,7 +435,7 @@ void Tab::OnLeave() {
 void Tab::CheckPendingClose() {
     POINT pt;
     GetCursorPos(&pt);
-    if (IsPointInside(pt) || m_pinned || m_dragging) return;
+    if (IsPointInside(pt) || m_pinned || m_dragging || m_moving) return;
     if (m_state == State::Open || m_state == State::Opening) BeginClose();
 }
 
@@ -539,6 +545,55 @@ void Tab::EndDrag() {
 
     // The cursor may have left the panel while dragging; the leave events were
     // swallowed by the capture, so start the normal close countdown.
+    POINT pt;
+    GetCursorPos(&pt);
+    if (!IsPointInside(pt)) OnLeave();
+}
+
+void Tab::BeginMove(int cursorScreenY) {
+    m_moving = true;
+    m_moveStartCursorY = cursorScreenY;
+    m_moveStartTabTop = m_tabRectPx.top;
+    SetCapture(m_panelHwnd);
+    InvalidateRect(m_panelHwnd, nullptr, FALSE);
+}
+
+void Tab::MoveWith(int cursorScreenY) {
+    const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
+    const int top = Placement::ClampTabTop(m_moveStartTabTop + (cursorScreenY - m_moveStartCursorY), tabHeight,
+                                           m_monitorRectPx);
+    if (top == m_tabRectPx.top) return; // pressed against the top or bottom: nothing to do
+    OffsetRect(&m_tabRectPx, 0, top - m_tabRectPx.top);
+    // The panel stays centred on the tab, as it is placed, and stops at the monitor's edges.
+    m_panelYPx = Placement::PanelY(m_tabRectPx, m_panelHeightPx, m_monitorRectPx);
+
+    // Both in one go, so the two never part for a frame. Only positions change: no size, no
+    // z-order, no paint.
+    const UINT flags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
+    HDWP batch = BeginDeferWindowPos(2);
+    if (batch) batch = DeferWindowPos(batch, m_tabHwnd, nullptr, m_tabRectPx.left, m_tabRectPx.top, 0, 0, flags);
+    if (batch) batch = DeferWindowPos(batch, m_panelHwnd, nullptr, CurrentPanelX(), m_panelYPx, 0, 0, flags);
+    if (!batch || !EndDeferWindowPos(batch)) {
+        SetWindowPos(m_tabHwnd, nullptr, m_tabRectPx.left, m_tabRectPx.top, 0, 0, flags);
+        SetWindowPos(m_panelHwnd, nullptr, CurrentPanelX(), m_panelYPx, 0, 0, flags);
+    }
+}
+
+void Tab::EndMove() {
+    if (!m_moving) return;
+    m_moving = false; // first, so WM_CAPTURECHANGED from ReleaseCapture is a no-op
+    ReleaseCapture();
+    if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
+
+    if (m_tabRectPx.top != m_moveStartTabTop) {
+        const float before = m_config.verticalRatio;
+        m_config.verticalRatio = Placement::RatioForTabTop(m_tabRectPx.top, m_tabRectPx.bottom - m_tabRectPx.top,
+                                                           m_monitorRectPx);
+        if (m_owner) m_owner->OnTabMoved(this, before, m_config.verticalRatio);
+    }
+
+    // As after a slider drag: the leave events went to the capture, so if the pointer is outside
+    // now, the usual close countdown starts.
     POINT pt;
     GetCursorPos(&pt);
     if (!IsPointInside(pt)) OnLeave();
@@ -672,7 +727,7 @@ void Tab::ShowNotice(const std::wstring& text) {
 void Tab::DrawPanelSurface() {
     if (!m_panelHwnd || !m_widget) return;
     m_panelRenderer.DrawPanel(m_config.panelWidth, m_panelHeightLogical, m_widget.get(), m_pinned,
-                              m_hoveredControl == kPinControlId,
+                              m_hoveredControl == kPinControlId, m_hoveredControl == kMoveControlId, m_moving,
                               m_notice.empty() ? nullptr : m_notice.c_str());
     if (m_state == State::Open) MovePanelTo(m_panelOpenXPx);
 }
@@ -688,6 +743,10 @@ int Tab::HitTestPanel(int clientXPx, int clientYPx) const {
     const D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(m_config.panelWidth);
     if (x >= pinRect.left && x <= pinRect.right && y >= pinRect.top && y <= pinRect.bottom) {
         return kPinControlId;
+    }
+    const D2D1_RECT_F moveRect = PanelLayout::MoveHandleRect();
+    if (x >= moveRect.left && x <= moveRect.right && y >= moveRect.top && y <= moveRect.bottom) {
+        return kMoveControlId;
     }
 
     if (y < PanelLayout::ChromeHeight || !m_widget) return -1;
@@ -853,6 +912,12 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 KillTimer(m_tabHwnd, kTimerLeave);
                 OnEnter();
             }
+            if (m_moving) {
+                // In screen coordinates, as of this message: lParam is relative to a window that
+                // this very move keeps moving.
+                MoveWith(GET_Y_LPARAM(GetMessagePos()));
+                return 0;
+            }
             if (m_dragging && m_widget) {
                 const float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
                 const float y =
@@ -884,6 +949,10 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         case WM_LBUTTONDOWN: {
+            if (HitTestPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)) == kMoveControlId) {
+                BeginMove(GET_Y_LPARAM(GetMessagePos()));
+                return 0;
+            }
             if (!m_widget) return 0;
             const float x = static_cast<float>(GET_X_LPARAM(lParam)) / m_dpiScale;
             const float y =
@@ -899,9 +968,28 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         case WM_CAPTURECHANGED:
+            // Capture taken away mid-move (another window grabbed it): the tab stays where it is
+            // on screen, so that is what is saved.
+            if (m_moving && reinterpret_cast<HWND>(lParam) != hwnd) EndMove();
             if (m_dragging && reinterpret_cast<HWND>(lParam) != hwnd) EndDrag();
             return 0;
+        case WM_SETCURSOR:
+            // Up-and-down arrows over the handle: it moves the tab along its edge, nowhere else.
+            if (LOWORD(lParam) == HTCLIENT) {
+                POINT pt;
+                GetCursorPos(&pt);
+                ScreenToClient(hwnd, &pt);
+                if (m_moving || HitTestPanel(pt.x, pt.y) == kMoveControlId) {
+                    SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                    return TRUE;
+                }
+            }
+            break;
         case WM_LBUTTONUP: {
+            if (m_moving) {
+                EndMove();
+                return 0;
+            }
             if (m_dragging) {
                 EndDrag();
                 return 0;

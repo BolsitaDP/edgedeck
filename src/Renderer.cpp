@@ -697,8 +697,8 @@ void Renderer::DrawEdge(float w, float h) {
     m_target->DrawRectangle(inset, m_edgeBrush.Get(), 1.0f);
 }
 
-void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered,
-                         const wchar_t* notice) {
+void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered, bool moveHovered,
+                         bool moving, const wchar_t* notice) {
     if (!EnsureTarget()) return;
 
     // The window is the authority on its own size. Tab's idea of the panel
@@ -723,7 +723,8 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
     DrawEdge(w, h);
 
     const D2D1_RECT_F pinRect = PanelLayout::PinButtonRect(w);
-    const D2D1_RECT_F titleRect = D2D1::RectF(PanelLayout::PaddingX, 0.0f, pinRect.left - 6.0f,
+    const D2D1_RECT_F moveRect = PanelLayout::MoveHandleRect();
+    const D2D1_RECT_F titleRect = D2D1::RectF(moveRect.right + 6.0f, 0.0f, pinRect.left - 6.0f,
                                               PanelLayout::ChromeHeight);
     const wchar_t* title = widget ? widget->PanelTitle() : L"EdgeDeck";
 
@@ -749,6 +750,7 @@ void Renderer::DrawPanel(float w, float h, PanelWidget* widget, bool pinned, boo
     }
 
     DrawPin(pinRect, pinned, pinHovered);
+    DrawMoveHandle(moveRect, moveHovered, moving);
 
     m_target->DrawLine(D2D1::Point2F(PanelLayout::PaddingX, PanelLayout::ChromeHeight),
                        D2D1::Point2F(w - PanelLayout::PaddingX, PanelLayout::ChromeHeight),
@@ -793,6 +795,36 @@ void Renderer::DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered) {
         ID2D1SolidColorBrush* brush =
             hovered ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get();
         m_target->DrawGeometry(geometry, brush, 1.4f, stroke);
+    }
+}
+
+void Renderer::DrawMoveHandle(D2D1_RECT_F rect, bool hovered, bool moving) {
+    if (hovered || moving) {
+        m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, 6.0f, 6.0f), m_hoverBrush.Get());
+    }
+    // The four-way "move" arrows, drawn as strokes like the pin: no font or bitmap to load. In the
+    // secondary tone at rest, so the handle does not compete with the title; the accent while held.
+    ID2D1SolidColorBrush* brush = moving    ? m_accentBrush.Get()
+                                  : hovered ? m_primaryTextBrush.Get()
+                                            : m_secondaryTextBrush.Get();
+    ID2D1StrokeStyle* stroke = RoundStrokeStyle();
+    const float cx = (rect.left + rect.right) / 2.0f;
+    const float cy = (rect.top + rect.bottom) / 2.0f;
+    constexpr float kArm = 7.5f;  // centre to arrow tip
+    constexpr float kHead = 2.8f; // arrowhead: how far back and how far out
+    constexpr float kWidth = 1.4f;
+    auto line = [&](float x1, float y1, float x2, float y2) {
+        m_target->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), brush, kWidth, stroke);
+    };
+    line(cx, cy - kArm, cx, cy + kArm);
+    line(cx - kArm, cy, cx + kArm, cy);
+    for (const float dir : {-1.0f, 1.0f}) {
+        const float tip = kArm * dir;
+        const float back = (kArm - kHead) * dir;
+        line(cx - kHead, cy + back, cx, cy + tip); // up / down
+        line(cx + kHead, cy + back, cx, cy + tip);
+        line(cx + back, cy - kHead, cx + tip, cy); // left / right
+        line(cx + back, cy + kHead, cx + tip, cy);
     }
 }
 

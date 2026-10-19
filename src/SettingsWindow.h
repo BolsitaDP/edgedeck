@@ -37,6 +37,11 @@ public:
     // The footer lists the shortcuts; called when they change while the window is open.
     void RefreshKeyboardHelp();
 
+    // Tab index was moved with its panel's handle while this window is open. The list here is a
+    // copy that may have been edited since, so the entry follows only if it still looks like that
+    // tab (same type, same old position) - otherwise this window's own value is what its Save means.
+    void TabMoved(size_t index, WidgetType type, float oldRatio, float newRatio);
+
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

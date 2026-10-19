@@ -4,6 +4,10 @@
 
 #include "Placement.h"
 
+#include <locale>
+#include <sstream>
+#include <string>
+
 namespace {
 
 // The user's layout: an ultrawide at the origin, a 1080p monitor to its left, a 4K TV above.
@@ -141,9 +145,47 @@ void TestVisiblePartNextToANeighbour() {
     CHECK(Same(Placement::VisiblePart(-100, 700, 300, 200, kLeftMonitor), RECT{0, 0, 100, 200}));
 }
 
+void TestMovingATabStaysOnTheMonitor() {
+    TEST("Placement: a tab moved with the handle stops at the monitor's top and bottom");
+    CHECK_EQ(Placement::ClampTabTop(500, 76, kUltrawide), 500);
+    CHECK_EQ(Placement::ClampTabTop(-40, 76, kUltrawide), 0);
+    CHECK_EQ(Placement::ClampTabTop(5000, 76, kUltrawide), 1440 - 76);
+    CHECK_EQ(Placement::ClampTabTop(-5000, 76, kTvAbove), -2160); // a monitor above the origin
+    CHECK_EQ(Placement::ClampTabTop(0, 76, kTvAbove), -76);
+    CHECK_EQ(Placement::ClampTabTop(10, 2000, kUltrawide), 0); // taller than the monitor: the top
+
+    CHECK(Placement::RatioForTabTop(0, 76, kUltrawide) == 0.0f);
+    CHECK(Placement::RatioForTabTop(1440 - 76, 76, kUltrawide) == 1.0f);
+    CHECK(Placement::RatioForTabTop(10, 2000, kUltrawide) == 0.0f);
+}
+
+void TestAMovedTabIsInTheSamePlaceAfterARestart() {
+    TEST("Placement: every pixel a tab can be dropped on is where it comes back, through config.txt");
+    // config.txt writes a float with six significant digits; Compute truncates. Every top on
+    // monitors of several heights and origins has to survive both.
+    int wrong = 0;
+    for (const RECT& monitor : {kUltrawide, kLeftMonitor, kTvAbove, RECT{0, 0, 1920, 1080}, RECT{0, 0, 7680, 4320}}) {
+        for (const int tabHeight : {40, 76, 160}) {
+            for (int top = monitor.top; top <= monitor.bottom - tabHeight; ++top) {
+                const float ratio = Placement::RatioForTabTop(top, tabHeight, monitor);
+                std::wostringstream written;
+                written.imbue(std::locale::classic());
+                written << ratio;
+                const float read = std::stof(written.str());
+                Placement::Input in = Make(monitor, ScreenEdge::Right, read);
+                in.tabHeight = tabHeight;
+                if (Placement::Compute(in).tab.top != top) ++wrong;
+            }
+        }
+    }
+    CHECK_EQ(wrong, 0);
+}
+
 } // namespace
 
 void RunPlacementTests() {
+    TestMovingATabStaysOnTheMonitor();
+    TestAMovedTabIsInTheSamePlaceAfterARestart();
     TestRightEdgeIsWhatItAlwaysWas();
     TestLeftEdgeIsTheMirror();
     TestGapSeparatesTabAndPanel();

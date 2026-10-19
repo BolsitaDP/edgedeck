@@ -34,6 +34,14 @@ inline D2D1_RECT_F PinButtonRect(float panelWidth) {
     float right = panelWidth - PaddingX;
     return D2D1::RectF(right - PinButtonSize, top, right, top + PinButtonSize);
 }
+
+// The handle in the top-left corner that moves the tab (and its panel) up or down the screen. It
+// sits a little into the left padding so the title moves over by no more than it must.
+constexpr float MoveHandleLeft = PaddingX - 8.0f;
+inline D2D1_RECT_F MoveHandleRect() {
+    float top = (ChromeHeight - PinButtonSize) / 2.0f;
+    return D2D1::RectF(MoveHandleLeft, top, MoveHandleLeft + PinButtonSize, top + PinButtonSize);
+}
 } // namespace PanelLayout
 
 // Palette resolved from the user's theme. Light/dark is a system setting that
@@ -140,14 +148,15 @@ public:
     // private-use range is drawn with the icon font, anything else as text.
     void DrawTab(bool hovered, float w, float h, const wchar_t* glyph);
 
-    // Draws the panel chrome (title + pin glyph + divider), then delegates
+    // Draws the panel chrome (move handle + title + pin glyph + divider), then delegates
     // the content area to the widget via IPanelPainter. A non-empty `notice`
     // takes the title's place, in a warning colour, until the caller stops
     // passing it: the header is the one spot that is always on screen with the
     // panel, so a problem report there needs no extra room and cannot hide the
     // content it is about.
-    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered,
-                   const wchar_t* notice = nullptr);
+    // moveHovered and moving light the move handle: under the pointer, and while it is held.
+    void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered, bool moveHovered,
+                   bool moving, const wchar_t* notice = nullptr);
 
     // 1px inner outline. Called after Clear in both DrawTab and DrawPanel.
     void DrawEdge(float w, float h);
@@ -184,6 +193,7 @@ private:
     void FillRoundedPanel(float w, float h, float radius, D2D1_COLOR_F color);
     void PresentLayered();
     void DrawPin(D2D1_RECT_F rect, bool pinned, bool hovered);
+    void DrawMoveHandle(D2D1_RECT_F rect, bool hovered, bool moving);
     ID2D1SolidColorBrush* DrawTransportButton(D2D1_RECT_F rect, bool hovered, bool enabled);
     void DrawSpeaker(D2D1_RECT_F rect, ID2D1SolidColorBrush* brush);
 

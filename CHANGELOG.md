@@ -20,6 +20,7 @@ The first public version. EdgeDeck so far:
 
 ### Behaviour
 - Panels open on hover, never take the focus, and can be pinned open.
+- A tab is moved up or down its edge by dragging the handle in its panel's corner, and stays there.
 - No panel over a full-screen app; an optional open delay; Pause tabs.
 - A first start shows three tabs that work on any machine (Quick Actions, Media, Volume) and a
   notification saying where they are and where Settings is.

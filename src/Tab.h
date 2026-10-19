@@ -111,6 +111,13 @@ private:
     void CheckPendingClose();
     void TogglePin();
     void EndDrag();
+    // Moving the tab with the panel's handle. The tab and the panel follow the pointer up and down
+    // (each move is two window moves, no repaint: a layered window keeps its picture), and the
+    // place is saved once, when the button is let go. There is no Escape to cancel: the panel never
+    // has the keyboard focus. Dragging back is the undo.
+    void BeginMove(int cursorScreenY);
+    void MoveWith(int cursorScreenY);
+    void EndMove();
     int CurrentPanelX() const;
 
     void UpdateTickTimer();
@@ -130,8 +137,8 @@ private:
     void ClampPanelY();
     void DrawPanelSurface();
 
-    // Chrome (title/pin) hit-test; delegates to the widget for anything
-    // below the chrome. Returns a control id: kPinControlId, or a
+    // Chrome (move handle/title/pin) hit-test; delegates to the widget for anything
+    // below the chrome. Returns a control id: kPinControlId, kMoveControlId, or a
     // widget-defined id (>=0), or -1 for no hit.
     int HitTestPanel(int clientXPx, int clientYPx) const;
 
@@ -151,6 +158,9 @@ private:
     bool m_tabHovered = false;
     bool m_pinned = false;
     bool m_dragging = false; // a widget slider owns the mouse (SetCapture) until button-up
+    bool m_moving = false;   // the move handle owns the mouse until button-up
+    int m_moveStartCursorY = 0;
+    int m_moveStartTabTop = 0;
     bool m_inRelayout = false;
     bool m_paused = false;
     int m_hoveredControl = -1;
@@ -201,4 +211,5 @@ private:
     static constexpr UINT kTickIntervalMs = 500;
 
     static constexpr int kPinControlId = -2; // distinct from "no hit" (-1) and widget ids (>=0)
+    static constexpr int kMoveControlId = -3;
 };

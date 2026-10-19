@@ -33,6 +33,22 @@ Result Compute(const Input& in) {
     return out;
 }
 
+int ClampTabTop(int top, int tabHeight, const RECT& monitor) {
+    const int lowest = std::max<int>(monitor.top, monitor.bottom - tabHeight);
+    return std::clamp<int>(top, monitor.top, lowest);
+}
+
+float RatioForTabTop(int top, int tabHeight, const RECT& monitor) {
+    const int range = (monitor.bottom - monitor.top) - tabHeight;
+    if (range <= 0) return 0.0f;
+    const int offset = ClampTabTop(top, tabHeight, monitor) - monitor.top;
+    if (offset <= 0) return 0.0f;
+    if (offset >= range) return 1.0f;
+    // Half a pixel past the top: Compute truncates, and a float a hair under the exact quotient
+    // would land one pixel higher.
+    return (static_cast<float>(offset) + 0.5f) / static_cast<float>(range);
+}
+
 RECT VisiblePart(int x, int y, int w, int h, const RECT& monitor) {
     RECT window{x, y, x + w, y + h};
     RECT shown{};

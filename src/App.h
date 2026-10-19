@@ -42,6 +42,9 @@ public:
     static int RunMessageLoop();
 
     void ShowTabContextMenu(Tab* tab, POINT screenPt);
+    // A tab was moved with its panel's handle: its new place is saved, and an open Settings window
+    // shows it.
+    void OnTabMoved(const Tab* tab, float oldRatio, float newRatio);
     void RequestExit();
     void OpenSettings();
     // The window where the Quick Actions list is edited. Opened from Settings, from the tray

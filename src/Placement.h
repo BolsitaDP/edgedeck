@@ -43,6 +43,14 @@ Result Compute(const Input& in);
 // than the monitor is pinned to the top rather than asking for a clamp with an empty range.
 int PanelY(const RECT& tab, int panelHeight, const RECT& monitor);
 
+// Moving a tab by dragging its panel's handle: `top` kept so the whole tab stays on the monitor.
+int ClampTabTop(int top, int tabHeight, const RECT& monitor);
+
+// The verticalRatio that Compute turns back into exactly this tab top, so a tab dropped somewhere
+// is in the same place after a restart - not a pixel above it from the truncation Compute does.
+// 0 and 1 for the very top and bottom, so the saved value reads as what it is.
+float RatioForTabTop(int top, int tabHeight, const RECT& monitor);
+
 // The part of a panel window (at x, y, size w by h) that lies on the monitor, in the window's own
 // coordinates. Empty when none of it does. Used to keep a sliding panel from showing on a
 // neighbouring monitor while it is still outside the edge it slides in from.
