@@ -42,8 +42,10 @@ BOOL CALLBACK ThemeChild(HWND child, LPARAM dark) {
 void DialogTheme::Release() {
     if (m_windowBrush) DeleteObject(m_windowBrush);
     if (m_controlBrush) DeleteObject(m_controlBrush);
+    if (m_dividerBrush) DeleteObject(m_dividerBrush);
     m_windowBrush = nullptr;
     m_controlBrush = nullptr;
+    m_dividerBrush = nullptr;
     m_themed = false;
 }
 
@@ -62,7 +64,24 @@ void DialogTheme::Apply(HWND window) {
         m_mutedColor = ToColorRef(theme.textSecondary);
         m_windowBrush = CreateSolidBrush(m_windowColor);
         m_controlBrush = CreateSolidBrush(m_controlColor);
+        // The palette's divider is a translucent colour laid over the panel; a brush has no alpha,
+        // so it is laid over the window's own colour here.
+        const D2D1_COLOR_F& d = theme.divider;
+        const D2D1_COLOR_F& bg = theme.panelBg;
+        m_dividerColor = ToColorRef(D2D1::ColorF(d.r * d.a + bg.r * (1.0f - d.a), d.g * d.a + bg.g * (1.0f - d.a),
+                                                 d.b * d.a + bg.b * (1.0f - d.a), 1.0f));
+    } else {
+        // The system look: a line a quarter of the way from the face to its shadow - visible, and
+        // quieter than the shadow itself. In high contrast both are the user's own colours.
+        const COLORREF face = GetSysColor(COLOR_BTNFACE);
+        const COLORREF shadow = GetSysColor(COLOR_BTNSHADOW);
+        auto mix = [](BYTE a, BYTE b) { return static_cast<BYTE>((a * 3 + b) / 4); };
+        m_dividerColor = theme.highContrast ? shadow
+                                            : RGB(mix(GetRValue(face), GetRValue(shadow)),
+                                                  mix(GetGValue(face), GetGValue(shadow)),
+                                                  mix(GetBValue(face), GetBValue(shadow)));
     }
+    m_dividerBrush = CreateSolidBrush(m_dividerColor);
 
     // The title bar is drawn by the window manager, not by us. Attribute 20 is
     // the documented one (Windows 10 2004 and later); 19 is what it was called in
@@ -83,6 +102,23 @@ bool DialogTheme::EraseBackground(HWND window, HDC dc) const {
     GetClientRect(window, &client);
     FillRect(dc, &client, m_windowBrush);
     return true;
+}
+
+LRESULT DialogTheme::SecondaryLabel(HDC dc) const {
+    if (Themed()) {
+        SetTextColor(dc, m_mutedColor);
+        SetBkColor(dc, m_windowColor);
+        return reinterpret_cast<LRESULT>(m_windowBrush);
+    }
+    SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
+    SetBkColor(dc, GetSysColor(COLOR_BTNFACE));
+    return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_BTNFACE));
+}
+
+LRESULT DialogTheme::Divider(HDC dc) const {
+    // An empty static fills its whole rectangle with the brush it is given: a line of that colour.
+    SetBkColor(dc, m_dividerColor);
+    return reinterpret_cast<LRESULT>(m_dividerBrush ? m_dividerBrush : GetSysColorBrush(COLOR_BTNSHADOW));
 }
 
 LRESULT DialogTheme::ControlColor(UINT message, HDC dc, HWND control, bool alsoField) const {

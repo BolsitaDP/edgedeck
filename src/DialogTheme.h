@@ -33,6 +33,13 @@ public:
     // label; the caller says so with alsoField (by control id).
     LRESULT ControlColor(UINT message, HDC dc, HWND control, bool alsoField) const;
 
+    // For a label that is secondary (a version line, a summary) and for the thin lines between
+    // sections, in either look: the panel's palette while themed, the system's colours otherwise -
+    // which in high contrast are the user's own. SecondaryLabel and Divider answer the label's
+    // and the line's WM_CTLCOLORSTATIC.
+    LRESULT SecondaryLabel(HDC dc) const;
+    LRESULT Divider(HDC dc) const;
+
     // At WM_DESTROY.
     void Release();
 
@@ -40,6 +47,8 @@ private:
     bool m_themed = false;
     HBRUSH m_windowBrush = nullptr;  // dialog background
     HBRUSH m_controlBrush = nullptr; // edit boxes and lists
+    HBRUSH m_dividerBrush = nullptr; // lines between sections, in either look
+    COLORREF m_dividerColor = 0;
     COLORREF m_textColor = 0;
     COLORREF m_mutedColor = 0;
     COLORREF m_windowColor = 0;

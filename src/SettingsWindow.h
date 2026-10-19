@@ -34,7 +34,7 @@ public:
                 ShortcutsCallback onEditShortcuts = {}, LayoutsCallback onEditLayouts = {});
     HWND Hwnd() const { return m_hwnd; }
 
-    // The footer lists the shortcuts; called when they change while the window is open.
+    // The reminder of the main shortcuts; called when they change while the window is open.
     void RefreshKeyboardHelp();
 
     // Tab index was moved with its panel's handle while this window is open. The list here is a
@@ -78,7 +78,7 @@ private:
     // were worse. Rounding is done on the edges, not the sizes, so two controls
     // that touch in logical units touch in pixels too instead of overlapping by one.
     int Scale(int logical) const { return MulDiv(logical, static_cast<int>(m_dpi), 96); }
-    HFONT MakeFont() const;
+    HFONT MakeFont(bool heading) const;
     // Re-lays out for a new DPI - the window was dragged to a monitor with another
     // scale - without recreating a single control.
     void ApplyDpi(UINT dpi);
@@ -108,10 +108,12 @@ private:
     HWND m_saveButton = nullptr;
     HWND m_closeButton = nullptr;
     HFONT m_font = nullptr;
+    HFONT m_headerFont = nullptr; // the section headings
 
     struct Placement {
         HWND hwnd;
         int x, y, w, h; // logical units
+        bool heading;   // set in the heading font
     };
     std::vector<Placement> m_placements;
     UINT m_dpi = 96;

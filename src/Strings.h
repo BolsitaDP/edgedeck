@@ -247,32 +247,24 @@ enum class Language : int {
     /* ---- Settings ---- */                                                                                 \
     X(SettingsTitle, L"EdgeDeck Settings", L"Configuración de EdgeDeck")                                     \
     X(SettingsTabs, L"Tabs", L"Pestañas")                                                                    \
-    X(SettingsWidgetType, L"Widget type:", L"Tipo de widget:")                                               \
+    X(SettingsWidgetType, L"Type", L"Tipo")                                                                  \
     X(SettingsActions, L"Actions...", L"Acciones...")                                                        \
-    X(SettingsPosition, L"Vertical position:", L"Posición vertical:")                                        \
-    X(SettingsTabWidth, L"Tab width", L"Ancho pest.")                                                      \
-    X(SettingsTabHeight, L"Tab height", L"Alto pest.")                                                     \
+    X(SettingsPosition, L"Position", L"Posición")                                                            \
+    X(SettingsTabWidth, L"Tab width", L"Ancho pestaña")                                                    \
+    X(SettingsTabHeight, L"Tab height", L"Alto pestaña")                                                   \
     X(SettingsPanelWidth, L"Panel width", L"Ancho panel")                                                    \
-    X(SettingsMonitor, L"Monitor:", L"Monitor:")                                                             \
-    X(SettingsEdge, L"Edge:", L"Borde:")                                                                     \
-    X(SettingsRecentFolder, L"Recent folder:", L"Recientes:")                                                \
+    X(SettingsMonitor, L"Monitor", L"Monitor")                                                               \
+    X(SettingsEdge, L"Edge", L"Borde")                                                                       \
+    X(SettingsRecentFolder, L"Folder", L"Carpeta")                                                           \
     X(SettingsRecentDefault, L"Downloads (default)", L"Descargas (predeterminada)")                          \
-    X(SettingsTheme, L"Theme:", L"Tema:")                                                                    \
-    X(SettingsLanguage, L"Language:", L"Idioma:")                                                            \
-    X(SettingsDelay, L"Open delay:", L"Retardo:")                                                            \
+    X(SettingsTheme, L"Theme", L"Tema")                                                                      \
+    X(SettingsLanguage, L"Language", L"Idioma")                                                              \
+    X(SettingsDelay, L"Open delay", L"Retardo")                                                              \
     X(SettingsFullscreen, L"Hide over full-screen apps", L"Ocultar en pantalla completa")              \
     X(SettingsKeyboard, L"Keyboard", L"Teclado")                                                             \
-    X(SettingsKeyboardHelp,                                                                                  \
-      L"%ls: open and pin a panel.   %ls: exit EdgeDeck.\r\n"                                                \
-      L"%ls: pause or resume the tabs.\r\n"                                                                  \
-      L"%ls: switch monitors (needs a Displays tab).\r\n"                                                    \
-      L"In an open panel, arrow keys or the wheel move and adjust,\r\n"                                      \
-      L"Enter or Space activate, and Escape unpins and closes it.",                                          \
-      L"%ls: abrir y fijar un panel.   %ls: salir.\r\n"                                                      \
-      L"%ls: pausar o reanudar las pestañas.\r\n"                                                            \
-      L"%ls: cambiar de monitores (pestaña Pantallas).\r\n"                                                  \
-      L"En un panel abierto, las flechas o la rueda mueven y ajustan,\r\n"                                   \
-      L"Intro o Espacio activan, y Escape lo desfija y lo cierra.")                                          \
+    X(SettingsKeyboardSummary, L"Open a tab: %ls   Pause: %ls", L"Pestañas: %ls   Pausa: %ls")               \
+    X(SettingsSelectedTab, L"Selected tab", L"Pestaña seleccionada")                                         \
+    X(SettingsGeneral, L"General", L"General")                                                               \
     X(SettingsShortcuts, L"Shortcuts...", L"Atajos...")                                                      \
     X(SettingsLayouts, L"Layouts...", L"Disposiciones...")                                                   \
     /* ---- the display layouts window ---- */                                                               \
