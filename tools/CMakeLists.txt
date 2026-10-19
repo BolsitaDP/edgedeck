@@ -45,3 +45,8 @@ edgedeck_tool(backdrop src/backdrop.cpp)
 target_link_libraries(backdrop PRIVATE user32 gdi32)
 edgedeck_tool(fullscreenwin src/fullscreenwin.cpp)
 target_link_libraries(fullscreenwin PRIVATE user32 gdi32)
+
+# Runs a program on a desktop nobody sees, so a window can be drawn and captured (settingsharness
+# shot=...) without appearing on, or taking the focus from, the one in use.
+edgedeck_tool(deskrun src/deskrun.cpp)
+target_link_libraries(deskrun PRIVATE user32)

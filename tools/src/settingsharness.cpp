@@ -14,6 +14,10 @@
 //   drop=N : open the Nth combo box's list (1 widget type, 2 monitor, 3 edge, 4 theme)
 //   dpi=N : after creation, send the window the WM_DPICHANGED a monitor at N DPI would, so the
 //           layout can be checked at other scales without changing the user's display settings.
+//   shot=PATH.bmp : draw the window into a bitmap (PrintWindow), write it to PATH and exit at
+//           once. Run it through deskrun and it happens on a desktop nobody sees: a picture of
+//           the window without it ever appearing on, or taking the focus from, the screen in use.
+//   select=N : select the Nth tab of the Settings list (0-based) before anything else.
 // Always prints a layout report: controls outside the client area, overlapping controls, and
 // text that is wider (or, for the footer, taller) than the control that holds it.
 #include "ActionsWindow.h"
@@ -58,6 +62,62 @@ static std::vector<Child> CollectChildren(HWND parent) {
         out.push_back(ch);
     }
     return out;
+}
+
+// The window as it draws itself, into a 32-bit top-down BMP. PW_RENDERFULLCONTENT asks DWM for
+// what is on screen, which a desktop nobody looks at may not have; WM_PRINT through PrintWindow
+// with no flags is the fallback, and every control here draws itself for it.
+static bool SaveShot(HWND hwnd, const wchar_t* path) {
+    RECT r{};
+    GetWindowRect(hwnd, &r);
+    const int w = r.right - r.left;
+    const int h = r.bottom - r.top;
+    if (w <= 0 || h <= 0) return false;
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC screen = GetDC(nullptr);
+    HDC dc = CreateCompatibleDC(screen);
+    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!bmp || !bits) {
+        DeleteDC(dc);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    auto blank = [&] {
+        const auto* p = static_cast<const DWORD*>(bits);
+        for (int i = 0; i < w * h; ++i) {
+            if ((p[i] & 0x00FFFFFF) != 0) return false;
+        }
+        return true;
+    };
+    BOOL drawn = PrintWindow(hwnd, dc, 2 /* PW_RENDERFULLCONTENT */);
+    if (!drawn || blank()) drawn = PrintWindow(hwnd, dc, 0);
+    SelectObject(dc, old);
+
+    bool written = false;
+    FILE* file = nullptr;
+    if (drawn && _wfopen_s(&file, path, L"wb") == 0 && file) {
+        const DWORD imageBytes = static_cast<DWORD>(w) * static_cast<DWORD>(h) * 4;
+        BITMAPFILEHEADER fh{};
+        fh.bfType = 0x4D42;
+        fh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+        fh.bfSize = fh.bfOffBits + imageBytes;
+        fwrite(&fh, sizeof(fh), 1, file);
+        fwrite(&bi.bmiHeader, sizeof(bi.bmiHeader), 1, file);
+        fwrite(bits, imageBytes, 1, file);
+        fclose(file);
+        written = true;
+    }
+    DeleteObject(bmp);
+    DeleteDC(dc);
+    return written;
 }
 
 static int LayoutReport(HWND hwnd, UINT dpi) {
@@ -268,7 +328,11 @@ int wmain(int argc, wchar_t** argv) {
     bool dropFiles = false;
     int dropX = 0, dropY = 0;
     std::vector<std::wstring> dropPaths;
+    const wchar_t* shotPath = nullptr;
+    int selectTab = -1;
     for (int i = 3; i < argc; ++i) {
+        if (wcsncmp(argv[i], L"shot=", 5) == 0) shotPath = argv[i] + 5;
+        if (wcsncmp(argv[i], L"select=", 7) == 0) selectTab = _wtoi(argv[i] + 7);
         if (wcsncmp(argv[i], L"dropfiles=", 10) == 0) {
             // dropfiles=X,Y,path|path
             dropFiles = true;
@@ -387,6 +451,29 @@ int wmain(int argc, wchar_t** argv) {
         SendMessageW(hwnd, WM_DPICHANGED, MAKEWPARAM(simDpi, simDpi), reinterpret_cast<LPARAM>(&suggested));
         printf("after simulated change to %u DPI:\n", simDpi);
         LayoutReport(hwnd, simDpi);
+    }
+
+    if (selectTab >= 0) {
+        // As a click on that row would: select it, and tell the window the selection changed.
+        HWND list = GetDlgItem(hwnd, 100);
+        SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(selectTab), 0);
+        SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(100, LBN_SELCHANGE), reinterpret_cast<LPARAM>(list));
+    }
+
+    if (shotPath) {
+        // Let it finish painting (themes, fonts), then take the picture and go.
+        const DWORD settle = GetTickCount() + 600;
+        MSG pending;
+        while (GetTickCount() < settle) {
+            while (PeekMessageW(&pending, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&pending);
+                DispatchMessageW(&pending);
+            }
+            Sleep(10);
+        }
+        const bool saved = SaveShot(hwnd, shotPath);
+        printf(saved ? "shot: %ls\n" : "shot FAILED: %ls\n", shotPath);
+        return saved ? 0 : 2;
     }
 
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
