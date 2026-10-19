@@ -14,6 +14,7 @@
 #include "DisplayWidget.h"
 #include "SettingsWindow.h"
 #include "ShortcutsWindow.h"
+#include "LayoutsWindow.h"
 #include "Strings.h"
 
 #include <shellapi.h>
@@ -116,6 +117,7 @@ bool App::Create(HINSTANCE hInstance) {
     // Notes found before the settings were read are worded now. A second balloon replaces the
     // first, so they are joined into one message, the crash first: it is the more important one.
     if (m_restartedAfterCrash) AddStartupNotice(TR(CrashRestarted));
+    CarryOverDisplayLayouts();
     if (!BuildTabsFrom(m_settings, hInstance)) return false;
     // After the tabs: the display shortcuts exist only while there is a Displays tab.
     RegisterShortcuts();
@@ -129,6 +131,27 @@ bool App::Create(HINSTANCE hInstance) {
     AddTrayIcon();
     if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str());
     return true;
+}
+
+void App::CarryOverDisplayLayouts() {
+    // The Displays tab used to have four fixed buttons. Someone who had the tab keeps them, as
+    // saved layouts with the same names in the same order - the order of their shortcuts - worked
+    // out once from the monitors present now. Done once: removing them all later means "the
+    // automatic ones", not "bring the old ones back".
+    if (Config::DisplayLayoutsCarried()) return;
+    const bool hasDisplaysTab = std::any_of(m_settings.begin(), m_settings.end(), [](const TabSettings& t) {
+        return t.widgetType == WidgetType::Displays;
+    });
+    if (hasDisplaysTab && Config::DisplayLayoutList().empty()) {
+        const std::vector<DisplayTopology::Monitor> monitors = DisplayTopology::Enumerate();
+        const std::wstring tvId = DisplayTopology::ResolveTvId(monitors, Config::DisplayTvMonitor());
+        const std::wstring mainId = DisplayTopology::ResolveMainId(monitors, tvId, Config::DisplayMainMonitor());
+        Config::SetDisplayLayoutList(DisplayLayouts::FromProfiles(monitors, tvId, mainId));
+        Diagnostics::Info("Displays: carried the four fixed layouts over as %zu saved ones",
+                          Config::DisplayLayoutList().size());
+    }
+    Config::SetDisplayLayoutsCarried(true);
+    if (!Config::Save(m_settings)) Diagnostics::Error("Config: could not save the carried-over display layouts");
 }
 
 void App::ShowBalloon(const wchar_t* text, bool warning) {
@@ -191,7 +214,7 @@ void App::CheckAutostart() {
     }
 }
 void App::UpdateDisplayHotkeys(std::vector<std::wstring>* taken) {
-    static_assert(kDisplayHotkeyCount == DisplayWidget::kProfileCount,
+    static_assert(kDisplayHotkeyCount == static_cast<int>(DisplayLayouts::kMaxLayouts),
                   "one shortcut per Displays layout");
     if (!m_utilityHwnd) return;
 
@@ -256,7 +279,8 @@ void App::OpenSettings() {
                                  ApplySettings(settings);
                              },
                              [this](const wchar_t* problem) { ShowBalloon(problem); },
-                             [this] { OpenActionsEditor(); }, [this] { OpenShortcutsEditor(); });
+                             [this] { OpenActionsEditor(); }, [this] { OpenShortcutsEditor(); },
+                             [this] { OpenLayoutsEditor(); });
 }
 
 void App::ApplySettings(const std::vector<TabSettings>& settings) {
@@ -319,6 +343,24 @@ void App::OpenActionsEditor() {
     m_actionsWindow = std::make_unique<ActionsWindow>();
     m_actionsWindow->Create(m_hInstance, Config::QuickActionList(),
                             [this](std::vector<QuickAction> list) { ApplyActions(std::move(list)); });
+}
+
+void App::OpenLayoutsEditor() {
+    if (m_layoutsWindow && IsWindow(m_layoutsWindow->Hwnd())) {
+        SetForegroundWindow(m_layoutsWindow->Hwnd());
+        return;
+    }
+    m_layoutsWindow = std::make_unique<LayoutsWindow>();
+    m_layoutsWindow->Create(m_hInstance, Config::DisplayLayoutList(),
+                            [this](std::vector<DisplayLayouts::Layout> layouts) { ApplyLayouts(std::move(layouts)); });
+}
+
+void App::ApplyLayouts(std::vector<DisplayLayouts::Layout> layouts) {
+    Config::SetDisplayLayoutList(std::move(layouts));
+    if (!Config::Save(m_settings)) ShowBalloon(TR(SaveFailedSettings));
+    for (auto& tab : m_tabs) {
+        if (tab->WidgetType() == WidgetType::Displays) tab->RefreshWidget();
+    }
 }
 
 void App::OpenShortcutsEditor() {
@@ -588,6 +630,11 @@ int App::RunMessageLoop() {
         const HWND actionsHwnd =
             (s_instance && s_instance->m_actionsWindow) ? s_instance->m_actionsWindow->Hwnd() : nullptr;
         if (actionsHwnd && IsWindow(actionsHwnd) && IsDialogMessage(actionsHwnd, &msg)) {
+            continue;
+        }
+        const HWND layoutsHwnd =
+            (s_instance && s_instance->m_layoutsWindow) ? s_instance->m_layoutsWindow->Hwnd() : nullptr;
+        if (layoutsHwnd && IsWindow(layoutsHwnd) && IsDialogMessage(layoutsHwnd, &msg)) {
             continue;
         }
         const HWND shortcutsHwnd =

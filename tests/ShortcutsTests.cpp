@@ -71,14 +71,14 @@ void TestClashes() {
     families.displayModifiers = families.tabModifiers;
     CHECK(Shortcuts::Problem(families).find(L"Open tab") != std::wstring::npos);
 
-    // Exit on Ctrl+Alt+3 is tab 3; on Ctrl+Alt+Shift+2, display layout 2; Ctrl+Alt+Shift+7 is not
-    // one of the four layouts, and is fine.
+    // Exit on Ctrl+Alt+3 is tab 3; on Ctrl+Alt+Shift+2, display layout 2; Ctrl+Alt+Shift+Q is not
+    // one of the layouts' digits, and is fine.
     Shortcuts::Set chord = set;
     chord.exit = Shortcut{MOD_CONTROL | MOD_ALT, '3'};
     CHECK(!Shortcuts::Problem(chord).empty());
     chord.exit = Shortcut{MOD_CONTROL | MOD_ALT | MOD_SHIFT, '2'};
     CHECK(!Shortcuts::Problem(chord).empty());
-    chord.exit = Shortcut{MOD_CONTROL | MOD_ALT | MOD_SHIFT, '7'};
+    chord.exit = Shortcut{MOD_CONTROL | MOD_ALT | MOD_SHIFT, 'Q'};
     CHECK(Shortcuts::Problem(chord).empty());
 
     // Off is never a clash, even when two are off.

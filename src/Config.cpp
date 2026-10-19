@@ -183,6 +183,8 @@ int g_openDelayMs = 0;
 bool g_startupHintShown = false;
 std::wstring g_recentFolder;             // empty means Downloads, resolved where it is used
 Shortcuts::Set g_shortcuts;
+std::vector<DisplayLayouts::Layout> g_layouts; // empty means the automatic ones
+bool g_layoutsCarried = false;
 std::vector<QuickAction> g_quickActions; // empty means "the defaults", resolved by the accessor
 
 // EDID ids are upper case ("SAM7A08"); a hand-edited value should match whatever
@@ -219,6 +221,13 @@ std::vector<QuickAction> QuickActionList() {
 void SetQuickActionList(std::vector<QuickAction> list) {
     g_quickActions = QuickActions::Sanitize(std::move(list));
 }
+
+std::vector<DisplayLayouts::Layout> DisplayLayoutList() { return g_layouts; }
+void SetDisplayLayoutList(std::vector<DisplayLayouts::Layout> layouts) {
+    g_layouts = DisplayLayouts::Sanitize(std::move(layouts));
+}
+bool DisplayLayoutsCarried() { return g_layoutsCarried; }
+void SetDisplayLayoutsCarried(bool carried) { g_layoutsCarried = carried; }
 
 Shortcuts::Set ShortcutSet() { return g_shortcuts; }
 void SetShortcutSet(const Shortcuts::Set& set) { g_shortcuts = set; }
@@ -259,17 +268,23 @@ std::vector<TabSettings> LoadOrDefault() {
     g_startupHintShown = false;
     g_recentFolder.clear();
     g_shortcuts = Shortcuts::Set{};
+    g_layouts.clear();
+    g_layoutsCarried = false;
     g_quickActions.clear();
     Strings::SetCurrent(Language::English); // absent means the default, like everything here
     TabSettings current;
     QuickAction action;
     std::vector<QuickAction> actions;
+    DisplayLayouts::Layout layout;
+    std::vector<DisplayLayouts::Layout> layouts;
     bool inTab = false;
     bool inSettings = false;
     bool inAction = false;
+    bool inLayout = false;
 
     auto flush = [&] {
         if (inAction) actions.push_back(action);
+        if (inLayout) layouts.push_back(layout);
         if (!inTab) return;
         ConfigLimits::Clamp(current);
         result.push_back(current);
@@ -282,32 +297,20 @@ std::vector<TabSettings> LoadOrDefault() {
         }
         if (line.empty()) continue;
 
-        if (line == L"[tab]") {
+        if (line == L"[tab]" || line == L"[settings]" || line == L"[action]" || line == L"[layout]") {
             flush();
-            current = TabSettings{};
-            inTab = true;
-            inSettings = false;
-            inAction = false;
-            continue;
-        }
-        if (line == L"[settings]") {
-            flush();
-            inTab = false;
-            inSettings = true;
-            inAction = false;
-            continue;
-        }
-        if (line == L"[action]") {
-            flush();
-            action = QuickAction{};
-            inTab = false;
-            inSettings = false;
-            inAction = true;
+            inTab = line == L"[tab]";
+            inSettings = line == L"[settings]";
+            inAction = line == L"[action]";
+            inLayout = line == L"[layout]";
+            if (inTab) current = TabSettings{};
+            if (inAction) action = QuickAction{};
+            if (inLayout) layout = DisplayLayouts::Layout{};
             continue;
         }
 
         const size_t eq = line.find(L'=');
-        if (eq == std::wstring::npos || (!inTab && !inSettings && !inAction)) continue;
+        if (eq == std::wstring::npos || (!inTab && !inSettings && !inAction && !inLayout)) continue;
         const std::wstring key = line.substr(0, eq);
         const std::wstring value = line.substr(eq + 1);
 
@@ -315,6 +318,11 @@ std::vector<TabSettings> LoadOrDefault() {
             if (key == L"name") action.name = value;
             else if (key == L"target") action.target = value;
             else if (key == L"args") action.arguments = value;
+            continue;
+        }
+        if (inLayout) {
+            if (key == L"name") layout.name = value;
+            else if (key == L"monitors") layout.ids = DisplayLayouts::SplitIds(value);
             continue;
         }
 
@@ -338,6 +346,7 @@ std::vector<TabSettings> LoadOrDefault() {
             }
             if (key == L"recentFolder") g_recentFolder = RecentFiles::SanitizeFolder(value);
             if (key == L"language") Strings::SetCurrent(Strings::FromCode(value));
+            if (key == L"displayLayoutsCarried" && (value == L"1" || value == L"true")) g_layoutsCarried = true;
             // Each keeps its default when the value does not parse: a typo must not switch it off.
             if (key == L"shortcutExit") Shortcuts::Parse(value, g_shortcuts.exit);
             if (key == L"shortcutPause") Shortcuts::Parse(value, g_shortcuts.pause);
@@ -369,6 +378,7 @@ std::vector<TabSettings> LoadOrDefault() {
     // No [action] sections (a file from before the actions were editable) and nothing usable in
     // them both mean the original three, which QuickActionList() supplies for an empty list.
     g_quickActions = QuickActions::Sanitize(std::move(actions));
+    g_layouts = DisplayLayouts::Sanitize(std::move(layouts));
 
     // An empty but perfectly valid file (the user removed every tab) is honoured
     // as "no tabs"; a file we could not make sense of falls back to defaults.
@@ -401,6 +411,7 @@ bool Save(const std::vector<TabSettings>& tabs) {
     file << L"openDelayMs=" << g_openDelayMs << L"\n";
     if (g_startupHintShown) file << L"startupHintShown=1\n";
     if (!g_recentFolder.empty()) file << L"recentFolder=" << g_recentFolder << L"\n";
+    if (g_layoutsCarried) file << L"displayLayoutsCarried=1\n";
 
     for (const auto& t : tabs) {
         file << L"[tab]\n";
@@ -422,6 +433,12 @@ bool Save(const std::vector<TabSettings>& tabs) {
             file << L"target=" << a.target << L"\n";
             if (!a.arguments.empty()) file << L"args=" << a.arguments << L"\n";
         }
+    }
+
+    for (const DisplayLayouts::Layout& l : g_layouts) {
+        file << L"[layout]\n";
+        file << L"name=" << l.name << L"\n";
+        file << L"monitors=" << DisplayLayouts::JoinIds(l.ids) << L"\n";
     }
 
     if (!WriteUtf8File(temp, file.str())) {

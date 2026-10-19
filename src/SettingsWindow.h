@@ -26,10 +26,12 @@ public:
     using ActionsCallback = std::function<void()>;
     // The "Shortcuts..." button: the shortcuts have a window of their own, which the owner opens.
     using ShortcutsCallback = std::function<void()>;
+    // The Displays tab's layouts have a window of their own too. Optional.
+    using LayoutsCallback = std::function<void()>;
 
     bool Create(HINSTANCE hInstance, std::vector<TabSettings> initial, SaveCallback onSave,
                 ProblemCallback onProblem = {}, ActionsCallback onEditActions = {},
-                ShortcutsCallback onEditShortcuts = {});
+                ShortcutsCallback onEditShortcuts = {}, LayoutsCallback onEditLayouts = {});
     HWND Hwnd() const { return m_hwnd; }
 
     // The footer lists the shortcuts; called when they change while the window is open.
@@ -124,6 +126,7 @@ private:
     ProblemCallback m_onProblem;
     ActionsCallback m_onEditActions;
     ShortcutsCallback m_onEditShortcuts;
+    LayoutsCallback m_onEditLayouts;
     std::vector<int> m_delayChoices; // milliseconds, parallel to the combo box
 
     // The folder the Recent files tabs list (a setting of the app, not of one tab): held here while

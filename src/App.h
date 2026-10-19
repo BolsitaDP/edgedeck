@@ -14,6 +14,7 @@ class Tab;
 class SettingsWindow;
 class ActionsWindow;
 class ShortcutsWindow;
+class LayoutsWindow;
 
 // Shared window class names, registered once by App::Create and referenced
 // by Tab when it creates its own HWNDs.
@@ -100,6 +101,11 @@ private:
     // The Shortcuts window: keeps and registers the set, and returns what could not be registered
     // as a sentence (empty when all of it was).
     void OpenShortcutsEditor();
+    // The Displays tab's layouts: their window, and keeping what it saved.
+    void OpenLayoutsEditor();
+    void ApplyLayouts(std::vector<DisplayLayouts::Layout> layouts);
+    // Once: an existing Displays tab's four fixed layouts become saved ones.
+    void CarryOverDisplayLayouts();
     std::wstring ApplyShortcuts(const Shortcuts::Set& set);
     // Passes a layout shortcut to the first Displays tab.
     void SwitchDisplays(int profileIndex);
@@ -112,6 +118,7 @@ private:
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     std::unique_ptr<ActionsWindow> m_actionsWindow;
     std::unique_ptr<ShortcutsWindow> m_shortcutsWindow;
+    std::unique_ptr<LayoutsWindow> m_layoutsWindow;
     // What the tabs were last built from. Kept so a change to one global (the startup hint, the
     // Quick Actions list) can be saved without reading the file back and losing a change that
     // is only in memory.
@@ -137,12 +144,11 @@ private:
     // with the exit hotkey's id.
     static constexpr int kOpenHotkeyBase = 2;
     static constexpr int kOpenHotkeyCount = 9;
-    // Ctrl+Alt+Shift+1..4: the Displays tab's four layouts, in the order its
-    // buttons appear. The extra Shift keeps them clear of the tab openers, and
-    // they are registered only while there is a Displays tab to act on, so an
-    // install that never uses the widget never claims the keys.
+    // Ctrl+Alt+Shift+1..9 by default: the Displays tab's layouts, in the order its buttons
+    // appear. They are registered only while there is a Displays tab to act on, so an install
+    // that never uses the widget never claims the keys.
     static constexpr int kDisplayHotkeyBase = kOpenHotkeyBase + kOpenHotkeyCount;
-    static constexpr int kDisplayHotkeyCount = 4;
+    static constexpr int kDisplayHotkeyCount = Shortcuts::kDisplayCount;
     // Ctrl+Alt+P: pause or resume the tabs.
     static constexpr int kPauseHotkeyId = kDisplayHotkeyBase + kDisplayHotkeyCount;
 

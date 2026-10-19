@@ -5,6 +5,7 @@
 //   lang=es : the windows in that language (the layout of each language is checked separately)
 //   window=actions : host the quick-actions editor instead of Settings, and report its layout
 //   window=shortcuts : host the shortcuts window instead
+//   window=layouts : host the display layouts window instead
 //   dropfiles=X,Y,paths : drag those files from "Explorer" onto the point
 //           (X,Y) of the editor's client area, given in logical 96-DPI units - a real OLE drag, so
 //           it goes through the same lookup of the window under the pointer a user's drag does -
@@ -20,6 +21,7 @@
 #include "Renderer.h"
 #include "SettingsWindow.h"
 #include "ShortcutsWindow.h"
+#include "LayoutsWindow.h"
 #include "Strings.h"
 
 #include <commctrl.h>
@@ -260,7 +262,7 @@ int wmain(int argc, wchar_t** argv) {
 
     const wchar_t* mode = argc > 1 ? argv[1] : L"follow";
     const int seconds = argc > 2 ? _wtoi(argv[2]) : 8;
-    bool drop = false, flip = false, hostActions = false, hostShortcuts = false;
+    bool drop = false, flip = false, hostActions = false, hostShortcuts = false, hostLayouts = false;
     int dropIndex = 1;
     UINT simDpi = 0;
     bool dropFiles = false;
@@ -290,6 +292,7 @@ int wmain(int argc, wchar_t** argv) {
         else if (wcscmp(argv[i], L"flip") == 0) flip = true;
         else if (wcscmp(argv[i], L"window=actions") == 0) hostActions = true;
         else if (wcscmp(argv[i], L"window=shortcuts") == 0) hostShortcuts = true;
+        else if (wcscmp(argv[i], L"window=layouts") == 0) hostLayouts = true;
         else if (wcsncmp(argv[i], L"dpi=", 4) == 0) simDpi = static_cast<UINT>(_wtoi(argv[i] + 4));
     }
 
@@ -318,7 +321,19 @@ int wmain(int argc, wchar_t** argv) {
     SettingsWindow settings;
     ActionsWindow editor;
     ShortcutsWindow shortcuts;
-    if (hostShortcuts) {
+    LayoutsWindow layouts;
+    if (hostLayouts) {
+        // A list with a layout naming a monitor that is not plugged in, so that row is laid out too.
+        std::vector<DisplayLayouts::Layout> list = {{L"Monitors 1 + 2", {L"GSM7768", L"SAM0F9D"}},
+                                                    {L"TV only", {L"SAM7A08"}},
+                                                    {L"Old desk", {L"DEL4321"}}};
+        if (!layouts.Create(GetModuleHandleW(nullptr), list, [](std::vector<DisplayLayouts::Layout> kept) {
+                printf("saved: %zu layout(s)\n", kept.size());
+                for (const auto& l : kept) printf("  layout: %ls | %ls\n", l.name.c_str(), DisplayLayouts::JoinIds(l.ids).c_str());
+            })) {
+            return 1;
+        }
+    } else if (hostShortcuts) {
         // A combination the list does not offer, so the window's added entry is laid out too.
         Shortcuts::Set set;
         set.displayModifiers = MOD_WIN | MOD_SHIFT | MOD_ALT;
@@ -345,7 +360,9 @@ int wmain(int argc, wchar_t** argv) {
     } else if (!settings.Create(GetModuleHandleW(nullptr), tabs, [](const std::vector<TabSettings>&) {})) {
         return 1;
     }
-    const auto windowHandle = [&] { return hostShortcuts ? shortcuts.Hwnd() : hostActions ? editor.Hwnd() : settings.Hwnd(); };
+    const auto windowHandle = [&] {
+        return hostLayouts ? layouts.Hwnd() : hostShortcuts ? shortcuts.Hwnd() : hostActions ? editor.Hwnd() : settings.Hwnd();
+    };
     HWND hwnd = windowHandle();
 
     printf("window DPI as created: %u\n", GetDpiForWindow(hwnd));

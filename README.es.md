@@ -38,7 +38,7 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 | **Volumen** | Un deslizador y un botón de silencio por cada dispositivo de salida de audio. |
 | **Brillo** | Un deslizador de brillo por cada monitor externo compatible con DDC/CI. |
 | **Letras** | La letra sincronizada de lo que suene, de LRCLIB. |
-| **Pantallas** | Un clic para cambiar qué monitores están encendidos (por ejemplo, los de escritorio o solo la TV). |
+| **Pantallas** | Un clic para cambiar qué monitores están encendidos. Guarda tus propias disposiciones (por ejemplo "monitores del escritorio" o "solo la TV") en **Disposiciones...**; sin ninguna guardada ofrece todos los monitores y cada uno solo. |
 
 ## Instalación
 
@@ -80,7 +80,7 @@ o desactiva cualquiera, en **Configuración > Atajos...**; por ejemplo, si otro 
 | `Ctrl+Alt+1` ... `Ctrl+Alt+9` | Abrir y fijar la pestaña 1 a 9 |
 | `Ctrl+Alt+P` | Pausar o reanudar las pestañas |
 | `Ctrl+Alt+Q` | Salir de EdgeDeck |
-| `Ctrl+Alt+Mayús+1` ... `4` | Cambiar la disposición de pantallas sin abrir el panel (solo con una pestaña Pantallas) |
+| `Ctrl+Alt+Mayús+1` ... `9` | Cambiar a la disposición 1 a 9 sin abrir el panel (solo con una pestaña Pantallas) |
 | Flechas | Moverse entre los controles del panel abierto; izquierda y derecha también ajustan un deslizador |
 | Rueda del ratón | Ajustar el control enfocado |
 | `Intro` / `Espacio` | Activar el control enfocado |
@@ -104,9 +104,9 @@ EdgeDeck cerrado.
 | Iniciar con Windows | **Iniciar con Windows** | (la lista de inicio de Windows) |
 | Carpeta de recientes | **Recientes**, o soltar una carpeta sobre la ventana | `recentFolder=` (vacío: Descargas) |
 | Cada pestaña | tipo, monitor, borde, posición vertical, tamaño de pestaña y panel | una sección `[tab]` cada una |
-| Acciones rápidas | **Acciones...** | una sección `[action]` cada una |
+| Acciones rápidas | **Acciones...** (con una pestaña Acciones rápidas seleccionada) | una sección `[action]` cada una |
 | Reiniciar tras un fallo | - | `restartAfterCrash=1` |
-| La TV y el monitor principal, para Pantallas | - | `tvMonitor=`, `mainMonitor=` (ids EDID) |
+| Disposiciones de pantallas | **Disposiciones...** (con una pestaña Pantallas seleccionada) | una sección `[layout]` cada una: `name=`, `monitors=` (ids EDID) |
 
 Los paneles siguen el color de acento de Windows, el modo claro u oscuro y los colores de alto
 contraste.

@@ -37,7 +37,7 @@ several of the same kind, on the left or right edge of any monitor.
 | **Volume** | A slider and a mute button for each audio output device. |
 | **Brightness** | A brightness slider for each external monitor that supports DDC/CI. |
 | **Lyrics** | Synced lyrics for whatever is playing, from LRCLIB. |
-| **Displays** | One click to switch which monitors are on (for example, desktop monitors or just the TV). |
+| **Displays** | One click to switch which monitors are on. Save your own layouts (for example "desk monitors" or "just the TV") in **Layouts...**; with none saved it offers all monitors and each one alone. |
 
 ## Install
 
@@ -77,7 +77,7 @@ of them off, in **Settings > Shortcuts...** - for example when another program a
 | `Ctrl+Alt+1` ... `Ctrl+Alt+9` | Open and pin tab 1 to 9 |
 | `Ctrl+Alt+P` | Pause or resume the tabs |
 | `Ctrl+Alt+Q` | Exit EdgeDeck |
-| `Ctrl+Alt+Shift+1` ... `4` | Switch the display layout without opening the panel (only while there is a Displays tab) |
+| `Ctrl+Alt+Shift+1` ... `9` | Switch to display layout 1 to 9 without opening the panel (only while there is a Displays tab) |
 | Arrow keys | Move between the controls of the open panel; left and right also adjust a slider |
 | Mouse wheel | Adjust the focused control |
 | `Enter` / `Space` | Activate the focused control |
@@ -100,9 +100,9 @@ plain text file you can also edit by hand while EdgeDeck is closed.
 | Start with Windows | **Start with Windows** | (the Windows startup list) |
 | Recent files folder | **Recent folder**, or drop a folder on the window | `recentFolder=` (empty: Downloads) |
 | Each tab | type, monitor, edge, vertical position, tab and panel size | a `[tab]` section each |
-| Quick actions | **Actions...** | an `[action]` section each |
+| Quick actions | **Actions...** (with a Quick Actions tab selected) | an `[action]` section each |
 | Restart after a crash | - | `restartAfterCrash=1` |
-| The TV and the main monitor, for Displays | - | `tvMonitor=`, `mainMonitor=` (EDID ids) |
+| Display layouts | **Layouts...** (with a Displays tab selected) | a `[layout]` section each: `name=`, `monitors=` (EDID ids) |
 
 The panels follow your Windows accent colour, light or dark mode, and high-contrast colours.
 

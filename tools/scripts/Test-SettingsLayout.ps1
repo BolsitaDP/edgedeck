@@ -27,7 +27,7 @@
 param(
     [string]$Dpis = '96,120,144,168,192,240',
     [ValidateSet('dark', 'light', 'follow')][string]$Theme = 'dark',
-    [ValidateSet('settings', 'actions', 'shortcuts')][string]$Dialog = 'settings',
+    [ValidateSet('settings', 'actions', 'shortcuts', 'layouts')][string]$Dialog = 'settings',
     [ValidateSet('en', 'es')][string]$Language = 'en',
     [string]$ToolsDir,
     [string]$ScreenshotDir
@@ -48,7 +48,7 @@ foreach ($dpi in $scales) {
     $process = Start-Process -FilePath $harness -ArgumentList $harnessArgs -PassThru -RedirectStandardOutput $out
     if ($ScreenshotDir) {
         Start-Sleep -Milliseconds 1800
-        $class = @{ settings = 'EdgeDeckSettingsWindow'; actions = 'EdgeDeckActionsWindow'; shortcuts = 'EdgeDeckShortcutsWindow' }[$Dialog]
+        $class = @{ settings = 'EdgeDeckSettingsWindow'; actions = 'EdgeDeckActionsWindow'; shortcuts = 'EdgeDeckShortcutsWindow'; layouts = 'EdgeDeckLayoutsWindow' }[$Dialog]
         $window = @(Get-Wins $class -ProcessId $process.Id)[0]
         if ($window) {
             $v = Get-VisibleRect $window.Hwnd

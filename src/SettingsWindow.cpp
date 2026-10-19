@@ -83,13 +83,15 @@ constexpr int kMonitorDropWidth = 330;
 
 bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initial,
                              SaveCallback onSave, ProblemCallback onProblem,
-                             ActionsCallback onEditActions, ShortcutsCallback onEditShortcuts) {
+                             ActionsCallback onEditActions, ShortcutsCallback onEditShortcuts,
+                             LayoutsCallback onEditLayouts) {
     m_tabs = std::move(initial);
     m_recentFolder = Config::RecentFolder();
     m_onSave = std::move(onSave);
     m_onProblem = std::move(onProblem);
     m_onEditActions = std::move(onEditActions);
     m_onEditShortcuts = std::move(onEditShortcuts);
+    m_onEditLayouts = std::move(onEditLayouts);
     BuildMonitorChoices();
 
     static bool classRegistered = false;
@@ -235,10 +237,11 @@ void SettingsWindow::CreateControls(HINSTANCE hInstance) {
     m_downButton = make(L"BUTTON", TR(ButtonDown), BS_PUSHBUTTON, 188, 416, 48, 24, kIdDown);
 
     // Right: what belongs to the selected tab, then what belongs to the whole app.
-    make(L"STATIC", TR(SettingsWidgetType), 0, 220, 12, 160, 18, 0);
-    // The list of quick actions is shared by every Quick Actions tab, so it is edited in a window of
-    // its own; this is the way in from here (the tray menu and a tab's menu have it too).
-    m_actionsButton = make(L"BUTTON", TR(SettingsActions), BS_PUSHBUTTON, 388, 8, 88, 22, kIdActionsButton);
+    make(L"STATIC", TR(SettingsWidgetType), 0, 220, 12, 150, 18, 0);
+    // What a Quick Actions tab lists, and the layouts a Displays tab offers, are shared by every tab
+    // of that kind and edited in a window of their own; this button is the way in, and says which
+    // one it opens for the selected tab (LoadSelectedIntoControls).
+    m_actionsButton = make(L"BUTTON", TR(SettingsActions), BS_PUSHBUTTON, 372, 8, 104, 22, kIdActionsButton);
     m_typeCombo = make(L"COMBOBOX", nullptr, WS_BORDER | WS_VSCROLL | CBS_DROPDOWNLIST, 220, 30, 256,
                        200, kIdTypeCombo);
     for (const TypeEntry& entry : kTypes) {
@@ -414,6 +417,11 @@ void SettingsWindow::LoadSelectedIntoControls() {
         hasSelection && m_tabs[m_selectedIndex].widgetType == WidgetType::RecentFiles;
     EnableWindow(m_folderEdit, isRecentTab);
     SetWindowTextW(m_folderEdit, m_recentFolder.c_str());
+
+    const bool isDisplaysTab = hasSelection && m_tabs[m_selectedIndex].widgetType == WidgetType::Displays;
+    const bool isActionsTab = hasSelection && m_tabs[m_selectedIndex].widgetType == WidgetType::QuickActions;
+    SetWindowTextW(m_actionsButton, isDisplaysTab ? TR(SettingsLayouts) : TR(SettingsActions));
+    EnableWindow(m_actionsButton, isDisplaysTab || isActionsTab);
 
     if (!hasSelection) return;
     const TabSettings& t = m_tabs[m_selectedIndex];
@@ -697,7 +705,13 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             } else if (id == kIdSave) {
                 OnSave();
             } else if (id == kIdActionsButton) {
-                if (m_onEditActions) m_onEditActions();
+                const bool displays = m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_tabs.size()) &&
+                                      m_tabs[m_selectedIndex].widgetType == WidgetType::Displays;
+                if (displays) {
+                    if (m_onEditLayouts) m_onEditLayouts();
+                } else if (m_onEditActions) {
+                    m_onEditActions();
+                }
             } else if (id == kIdShortcutsButton) {
                 if (m_onEditShortcuts) m_onEditShortcuts();
             } else if (id == kIdClose) {

@@ -139,7 +139,15 @@ move and the panel re-reads while open, to follow volume keys pressed elsewhere.
 thread a minute), a 4 MB response cap, and a local cache (`lyrics_cache`); "no lyrics" is cached for
 7 days so a free public service is not asked again at every panel open.
 
-**Displays.** Turning a monitor on is `SetDisplayConfig`, which Windows holds while the panels
+**Displays.** A layout is a name and the EDID ids of the monitors it leaves on; every other
+connected monitor is switched off (`DisplayLayouts`). They are the user's, saved as `[layout]`
+sections and edited in their own window (*Add current* saves what is on now); with none saved the
+tab offers all monitors and each one alone, which fits any desk without setup. A layout is *on*
+when exactly its monitors are, and unavailable while one of them is unplugged. The tab used to have
+four fixed buttons built around one desk (desk monitors, the TV alone, everything, the main monitor
+alone) and a "largest panel is the TV" guess; an existing Displays tab has them carried over once,
+as saved layouts in the same order - the order of their shortcuts - and `displayLayoutsCarried=1`
+stops it happening again. Turning a monitor on is `SetDisplayConfig`, which Windows holds while the panels
 resync - seconds, with a TV in the chain - so it runs on the thread pool. Turning monitors off
 rewrites the current layout without them, so the others do not move; turning one on passes Windows
 only the paths and lets it fill in modes and positions from what it remembers for that exact set of

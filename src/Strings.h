@@ -200,9 +200,10 @@ enum class Language : int {
     X(ProfileTvOnly, L"TV only", L"Solo la TV")                                                              \
     X(ProfileAll, L"All monitors", L"Todos los monitores")                                                   \
     X(ProfileMainOnly, L"Main monitor only", L"Solo el monitor principal")                                   \
-    X(DisplaysNoOthers, L"No other monitors", L"No hay otros monitores")                                     \
-    X(DisplaysMainMissing, L"Main monitor not found", L"No se encontró el monitor principal")                \
-    X(DisplaysTvMissing, L"TV not connected", L"TV no conectada")                                            \
+    X(LayoutOnly, L"Only %ls", L"Solo %ls")                                                                  \
+    X(DisplaysNothingToSwitch, L"Connect another monitor to switch between them.",                           \
+      L"Conecta otro monitor para poder alternar entre ellos.")                                              \
+    X(DisplaysMissing, L"Not connected: %ls", L"No conectado: %ls")                                          \
     X(DisplaysCount, L"%zu monitors", L"%zu monitores")                                                      \
     X(DisplaysSwitching, L"Switching...", L"Cambiando...")                                                   \
     X(DisplaysActive, L"Active", L"Activo")                                                                  \
@@ -244,12 +245,28 @@ enum class Language : int {
       L"En un panel abierto, las flechas o la rueda mueven y ajustan,\r\n"                                   \
       L"Intro o Espacio activan, y Escape lo desfija y lo cierra.")                                          \
     X(SettingsShortcuts, L"Shortcuts...", L"Atajos...")                                                      \
+    X(SettingsLayouts, L"Layouts...", L"Disposiciones...")                                                   \
+    /* ---- the display layouts window ---- */                                                               \
+    X(LayoutsTitle, L"EdgeDeck Display Layouts", L"Disposiciones de pantallas de EdgeDeck")                  \
+    X(LayoutsList, L"Layouts", L"Disposiciones")                                                             \
+    X(LayoutsAddCurrent, L"Add current", L"Añadir la actual")                                                \
+    X(LayoutsMonitors, L"Monitors it turns on:", L"Monitores que enciende:")                                 \
+    X(LayoutsHelp,                                                                                           \
+      L"A layout turns its monitors on and the others off. Its place in the list is its shortcut "           \
+      L"(Settings > Shortcuts). With no layouts, the panel offers all monitors and each one alone.",         \
+      L"Una disposición enciende sus monitores y apaga los demás. Su lugar en la lista es su atajo "         \
+      L"(Configuración > Atajos). Sin disposiciones, el panel ofrece todos los monitores y cada uno solo.")  \
+    X(LayoutsNeedName, L"Give this layout a name, or remove it.", L"Ponle un nombre a esta disposición o quítala.") \
+    X(LayoutsNeedMonitor, L"Tick at least one monitor for this layout, or remove it.",                       \
+      L"Marca al menos un monitor para esta disposición o quítala.")                                         \
+    X(LayoutsFull, L"There are already %zu layouts, the most there can be.",                                 \
+      L"Ya hay %zu disposiciones, el máximo.")                                                               \
     /* ---- the shortcuts window ---- */                                                                     \
     X(ShortcutsTitle, L"EdgeDeck Shortcuts", L"Atajos de EdgeDeck")                                          \
     X(ShortcutExitLabel, L"Exit EdgeDeck:", L"Salir de EdgeDeck:")                                           \
     X(ShortcutPauseLabel, L"Pause or resume:", L"Pausar o reanudar:")                                        \
     X(ShortcutTabsLabel, L"Open tab 1 to 9:", L"Abrir pestaña 1 a 9:")                                       \
-    X(ShortcutDisplaysLabel, L"Switch displays 1 to 4:", L"Cambiar pantallas 1 a 4:")                        \
+    X(ShortcutDisplaysLabel, L"Display layout 1 to 9:", L"Disposición 1 a 9:")                        \
     X(ShortcutsHelp,                                                                                         \
       L"Click a box and press the keys you want. Backspace leaves it without a shortcut. Each one needs "    \
       L"Ctrl, Alt or Win.",                                                                                  \

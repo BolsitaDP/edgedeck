@@ -63,6 +63,10 @@ add_executable(EdgeDeck WIN32
     src/VolumeControls.h
     src/DisplayWidget.cpp
     src/DisplayWidget.h
+    src/DisplayLayouts.cpp
+    src/DisplayLayouts.h
+    src/LayoutsWindow.cpp
+    src/LayoutsWindow.h
     src/DisplayControls.cpp
     src/DisplayControls.h
     src/DisplayTopology.cpp

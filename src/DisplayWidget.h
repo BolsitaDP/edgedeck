@@ -2,19 +2,20 @@
 
 #include "AsyncResult.h"
 #include "DisplayControls.h"
+#include "DisplayLayouts.h"
 #include "DisplayTopology.h"
 #include "PanelWidget.h"
 
 #include <string>
 #include <vector>
 
-// Four buttons that decide which monitors are switched on: the desk monitors, the TV
-// alone, all of them, or the main monitor alone. The button matching what is on right
-// now is marked, so the panel doubles as a read-out of the current layout.
+// One button per display layout - the user's saved ones, or "all monitors" and each monitor alone
+// when none are saved (see DisplayLayouts). Each switches its monitors on and every other one off;
+// the one matching what is on right now is marked, so the panel doubles as a read-out of the layout.
 //
-// The monitor list is read when the panel opens and again after a switch - there
-// is no polling. Switching runs on the thread pool because Windows holds the call
-// for as long as the panels take to resync.
+// The monitor list is read when the panel opens and again after a switch - there is no polling.
+// Switching runs on the thread pool because Windows holds the call for as long as the panels take
+// to resync.
 class DisplayWidget : public PanelWidget {
 public:
     WidgetType Type() const override { return WidgetType::Displays; }
@@ -31,42 +32,45 @@ public:
     void OnShortcut(int controlId, HWND ownerHwnd) override;
     void OnAsyncResult(UINT message, WPARAM wParam) override;
     void OnPanelOpening(HWND ownerHwnd) override;
+    void OnSettingsChanged() override;
 
     std::wstring AccessibleSummary() const override;
     std::wstring AccessibleControlText(int controlId) const override;
 
-    int FocusableControlCount() const override { return kProfileCount; }
+    int FocusableControlCount() const override { return RowCount(); }
     int FocusedControl() const override { return m_focusedControl; }
     void SetFocusedControl(int controlId) override { m_focusedControl = controlId; }
     bool OnKeyDown(UINT key, int focusedControl) override;
 
-    static constexpr int kProfileCount = 4;
     static constexpr UINT kRefreshMessage = kWidgetMessageFirst + 41;
     static constexpr UINT kApplyMessage = kWidgetMessageFirst + 42;
 
 private:
-    DisplayTopology::ProfileState StateOf(int profileIndex) const;
-    std::wstring Subtitle(int profileIndex, const DisplayTopology::ProfileState& state) const;
+    int RowCount() const { return static_cast<int>(m_layouts.size()); }
+    DisplayLayouts::State StateOf(int row) const;
+    std::wstring Subtitle(int row, const DisplayLayouts::State& state) const;
+    // The layouts to show for these monitors: the saved ones, or the automatic ones.
+    void ChooseLayouts();
     // supersede: a refresh already in flight is abandoned (its reply will be
     // dropped as stale) and a fresh one is started, which is what is wanted right
     // after a switch - the older read predates it.
     void RequestRefresh(HWND ownerHwnd, bool supersede = false);
 
     std::vector<DisplayTopology::Monitor> m_monitors;
-    std::wstring m_tvId;
-    std::wstring m_mainId;
+    std::vector<DisplayLayouts::Layout> m_layouts;
+    bool m_automatic = false; // m_layouts are the automatic ones (nothing saved)
     bool m_loaded = false;
 
     int m_hoveredControl = -1;
     int m_focusedControl = -1;
     HWND m_owner = nullptr;
 
-    // A shortcut pressed with the panel closed: which profile it asked for, and
-    // the id of the monitor read started on its behalf. The profile runs only
+    // A shortcut pressed with the panel closed: which layout it asked for, and
+    // the id of the monitor read started on its behalf. The layout runs only
     // when *that* read comes back - tying it to the id means a reply that was
     // superseded and dropped can never leave it armed for some later, unrelated
     // refresh (the next time the panel opens, say).
-    int m_shortcutProfile = -1;
+    int m_shortcutLayout = -1;
     std::uint64_t m_shortcutRefreshId = 0;
 
     RequestTracker m_requests;

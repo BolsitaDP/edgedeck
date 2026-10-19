@@ -23,13 +23,13 @@ namespace Shortcuts {
 
 inline constexpr UINT kModifierMask = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_WIN;
 inline constexpr int kTabCount = 9;     // open tab 1..9
-inline constexpr int kDisplayCount = 4; // the Displays tab's four layouts
+inline constexpr int kDisplayCount = 9; // the Displays tab's layouts 1..9 (DisplayLayouts::kMaxLayouts)
 
 struct Set {
     Shortcut exit{MOD_CONTROL | MOD_ALT, 'Q'};
     Shortcut pause{MOD_CONTROL | MOD_ALT, 'P'};
     UINT tabModifiers = MOD_CONTROL | MOD_ALT;                  // + 1..9; 0 = off
-    UINT displayModifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT;  // + 1..4; 0 = off
+    UINT displayModifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT;  // + 1..9; 0 = off
 
     bool operator==(const Set& o) const {
         return exit == o.exit && pause == o.pause && tabModifiers == o.tabModifiers &&

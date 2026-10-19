@@ -9,6 +9,7 @@
 #include "Placement.h"
 #include "QuickAction.h"
 #include "Shortcuts.h"
+#include "DisplayLayouts.h"
 
 // The user-configurable subset of a tab's layout. Tab's own TabConfig also
 // carries fixed constants (corner radius, animation timing) that aren't
@@ -128,6 +129,16 @@ void SetQuickActionList(std::vector<QuickAction> list);
 // Held in memory like the theme and written by Save ([settings] recentFolder=...).
 std::wstring RecentFolder();
 void SetRecentFolder(const std::wstring& folder);
+
+// The layouts the Displays tab switches between, in order (see DisplayLayouts.h). Empty - the
+// default - means the automatic ones. [layout] sections, written by Save.
+std::vector<DisplayLayouts::Layout> DisplayLayoutList();
+void SetDisplayLayoutList(std::vector<DisplayLayouts::Layout> layouts);
+
+// Whether an existing setup's four fixed Displays layouts have been carried over into saved ones
+// (done once; see App). [settings] displayLayoutsCarried=1.
+bool DisplayLayoutsCarried();
+void SetDisplayLayoutsCarried(bool carried);
 
 // The system-wide keyboard shortcuts (see Shortcuts.h). Absent or unreadable values are the
 // defaults; written by Save as shortcutExit=, shortcutPause=, shortcutTabs=, shortcutDisplays=.

@@ -21,10 +21,12 @@ add_executable(EdgeDeckTests
     RecentFilesTests.cpp
     StringsTests.cpp
     ShortcutsTests.cpp
+    DisplayLayoutsTests.cpp
     ${CMAKE_SOURCE_DIR}/src/ActionIcons.cpp
     ${CMAKE_SOURCE_DIR}/src/RecentFiles.cpp
     ${CMAKE_SOURCE_DIR}/src/Strings.cpp
     ${CMAKE_SOURCE_DIR}/src/Shortcuts.cpp
+    ${CMAKE_SOURCE_DIR}/src/DisplayLayouts.cpp
     ${CMAKE_SOURCE_DIR}/src/Fullscreen.cpp
     ${CMAKE_SOURCE_DIR}/src/Placement.cpp
     ${CMAKE_SOURCE_DIR}/src/QuickAction.cpp
