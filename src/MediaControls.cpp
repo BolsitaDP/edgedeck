@@ -188,7 +188,21 @@ private:
                                          std::move(playback), std::move(properties)});
     }
 
+    // A fire_and_forget coroutine has nobody to hand an exception to: one that escapes ends the
+    // process (std::terminate). WinRT throws for ordinary things here - the media service
+    // restarting, a session that went away, a Windows "N" edition without the media components -
+    // so neither coroutine lets one out. Failing to register only means the panel learns of changes
+    // when it is opened, which is how it reads them anyway.
     static winrt::fire_and_forget RegisterAsync(std::shared_ptr<State> state) {
+        try {
+            co_await RegisterOn(state);
+        } catch (...) {
+            Diagnostics::Error("Media: could not watch for media changes (0x%08lX)",
+                               static_cast<unsigned long>(winrt::to_hresult().value));
+        }
+    }
+
+    static winrt::Windows::Foundation::IAsyncAction RegisterOn(std::shared_ptr<State> state) {
         co_await winrt::resume_background();
         Manager manager = co_await Manager::RequestAsync();
 
@@ -231,7 +245,11 @@ private:
     }
 
     static winrt::fire_and_forget UnregisterAsync(std::shared_ptr<State> state) {
-        co_await winrt::resume_background();
+        try {
+            co_await winrt::resume_background();
+        } catch (...) {
+            co_return;
+        }
         std::lock_guard<std::mutex> lock(state->mutex);
         if (!state->registered) {
             co_return;
@@ -239,13 +257,20 @@ private:
 
         // remove_ first, release the handlers second - never the other way
         // round. Dropping a handler while its token is still live is precisely
-        // the dangling registration described on Watched.
-        state->manager.CurrentSessionChanged(state->currentSessionToken);
-        state->manager.SessionsChanged(state->sessionsChangedToken);
+        // the dangling registration described on Watched. Each removal on its
+        // own: a session that has gone throws, and the others still have to go.
+        auto remove = [](auto&& removal) {
+            try {
+                removal();
+            } catch (...) {
+            }
+        };
+        remove([&] { state->manager.CurrentSessionChanged(state->currentSessionToken); });
+        remove([&] { state->manager.SessionsChanged(state->sessionsChangedToken); });
 
         for (auto& w : state->watched) {
-            w.session.PlaybackInfoChanged(w.playbackToken);
-            w.session.MediaPropertiesChanged(w.propertiesToken);
+            remove([&] { w.session.PlaybackInfoChanged(w.playbackToken); });
+            remove([&] { w.session.MediaPropertiesChanged(w.propertiesToken); });
         }
 
         // Only now, with nothing registered anywhere, can the handlers go.
