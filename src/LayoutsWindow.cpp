@@ -205,10 +205,18 @@ void LayoutsWindow::StoreControlsIntoSelected() {
     if (m_selected < 0 || m_selected >= static_cast<int>(m_layouts.size())) return;
     DisplayLayouts::Layout& layout = m_layouts[static_cast<size_t>(m_selected)];
     layout.name = TextOf(m_nameEdit);
-    layout.ids.clear();
-    for (size_t i = 0; i < m_monitorChecks.size(); ++i) {
-        if (SendMessageW(m_monitorChecks[i], BM_GETCHECK, 0, 0) == BST_CHECKED) layout.ids.push_back(m_monitors[i].id);
+    // A monitor with no box here (past the rows there is room for) cannot have been unticked, so it
+    // stays in the layout: selecting a layout or renaming it must not drop part of it.
+    std::vector<std::wstring> ids;
+    const auto boxed = m_monitors.begin() + static_cast<std::ptrdiff_t>(m_monitorChecks.size());
+    for (const std::wstring& id : layout.ids) {
+        const bool shown = std::any_of(m_monitors.begin(), boxed, [&](const MonitorChoice& c) { return c.id == id; });
+        if (!shown) ids.push_back(id);
     }
+    for (size_t i = 0; i < m_monitorChecks.size(); ++i) {
+        if (SendMessageW(m_monitorChecks[i], BM_GETCHECK, 0, 0) == BST_CHECKED) ids.push_back(m_monitors[i].id);
+    }
+    layout.ids = std::move(ids);
 }
 
 void LayoutsWindow::OnNameEdited() {
