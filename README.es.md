@@ -38,7 +38,7 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 | **Acciones rápidas** | Tu propia lista de cosas que abrir —programas, documentos, carpetas, direcciones web—, cada una con su icono. Se edita en su propia ventana, o arrastrando archivos y accesos directos desde el Explorador. |
 | **Archivos recientes** | Los archivos más nuevos de una carpeta (Descargas por defecto), con hace cuánto llegó cada uno. Clic para abrirlo. |
 | **Multimedia** | Cada app que está reproduciendo algo —Spotify, una pestaña del navegador, VLC— con anterior, reproducir/pausa y siguiente. |
-| **Volumen** | Un deslizador y un botón de silencio por cada dispositivo de salida de audio. |
+| **Volumen** | Un deslizador y un botón de silencio por cada dispositivo de salida de audio, y un botón **Usar** para que otro sea el predeterminado (altavoces o auriculares con un clic). Debajo, el silencio del micrófono. |
 | **Brillo** | Un deslizador de brillo por cada monitor externo compatible con DDC/CI, y para la pantalla integrada de un portátil. |
 | **Letras** | La letra de lo que suene, de LRCLIB: línea a línea al ritmo de la canción donde LRCLIB la tiene sincronizada, y si no, el texto sin más, que avanza con la canción. Una letra un poco adelantada o atrasada se corrige de medio segundo en medio segundo, y un clic en una línea pone la canción desde ahí. |
 | **Pantallas** | Un clic para cambiar qué monitores están encendidos. Guarda tus propias disposiciones (por ejemplo "monitores del escritorio" o "solo la TV") en **Disposiciones...**; sin ninguna guardada ofrece todos los monitores y cada uno solo. |

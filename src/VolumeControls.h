@@ -64,4 +64,20 @@ bool QueryState(const std::wstring& id, DeviceInfo& out);
 // which case the caller should re-read the state rather than assume success.
 bool SetVolume(const std::wstring& id, int percent, bool muted);
 
+// Makes an output the default one, for every role (console, multimedia, communications) as
+// Windows' own sound settings do. Windows publishes no API for this: it goes through the
+// IPolicyConfig interface its settings use, undocumented but unchanged since Windows 7 and relied
+// on by every sound switcher. False when it is refused or the interface is not there.
+bool SetDefaultOutput(const std::wstring& id);
+
+// The default recording device - the microphone apps use unless told otherwise.
+struct MicrophoneInfo {
+    std::wstring id;
+    std::wstring name;
+    bool muted = false;
+};
+// False when there is no recording device at all.
+bool QueryMicrophone(MicrophoneInfo& out);
+bool SetMicrophoneMuted(const std::wstring& id, bool muted);
+
 } // namespace VolumeControls

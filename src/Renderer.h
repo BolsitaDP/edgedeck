@@ -186,6 +186,7 @@ public:
     void DrawHoverFill(D2D1_RECT_F rect) override;
     void DrawProgress(D2D1_RECT_F rect, float value01, bool indeterminate) override;
     void DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) override;
+    void DrawMicButton(D2D1_RECT_F rect, bool muted, bool hovered) override;
 
 private:
     bool EnsureTarget();

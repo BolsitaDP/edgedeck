@@ -17,6 +17,10 @@ constexpr float kMuteGap = 8.0f;
 constexpr float kGrabSlack = 8.0f;
 constexpr float kTagGap = 8.0f;
 constexpr float kTextLineHeight = 18.0f; // one line of the 13.5 px item text
+constexpr float kUseWidth = 52.0f;
+constexpr float kUseHeight = 20.0f;
+constexpr float kMicGap = 10.0f;     // between the outputs and the microphone
+constexpr float kMicRowHeight = 30.0f;
 constexpr int kStepPercent = 5;
 } // namespace
 
@@ -37,8 +41,12 @@ float VolumeWidget::RowTop(int row) const {
 
 float VolumeWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     if (m_rows.empty()) return 40.0f;
-    return static_cast<float>(m_rows.size()) * kRowHeight +
-           static_cast<float>(m_rows.size() - 1) * kRowGap;
+    return MicTop() + (m_hasMic ? kMicRowHeight : 0.0f);
+}
+
+float VolumeWidget::MicTop() const {
+    if (m_rows.empty()) return 0.0f;
+    return static_cast<float>(m_rows.size()) * kRowHeight + static_cast<float>(m_rows.size() - 1) * kRowGap + kMicGap;
 }
 
 namespace {
@@ -53,6 +61,17 @@ D2D1_RECT_F MuteRectFor(int row, float width) {
     float x = width - kPaddingX - kMuteSize;
     float cy = (track.top + track.bottom) / 2.0f;
     return D2D1::RectF(x, cy - kMuteSize / 2.0f, x + kMuteSize, cy + kMuteSize / 2.0f);
+}
+
+// The "Use" button sits where the default output has its tag: at the end of the name's line.
+D2D1_RECT_F UseRectFor(int row, float width) {
+    const float top = row * (kRowHeight + kRowGap) + (kTextLineHeight - kUseHeight) / 2.0f + 1.0f;
+    return D2D1::RectF(width - kPaddingX - kUseWidth, top, width - kPaddingX, top + kUseHeight);
+}
+
+D2D1_RECT_F MicButtonRect(float micTop, float width) {
+    const float cy = micTop + kMicRowHeight / 2.0f;
+    return D2D1::RectF(width - kPaddingX - kMuteSize, cy - kMuteSize / 2.0f, width - kPaddingX, cy + kMuteSize / 2.0f);
 }
 } // namespace
 
@@ -74,6 +93,10 @@ void VolumeWidget::Draw(IPanelPainter& painter, float width, float /*contentHeig
             // Centred on the name's line of text, which sits at the top of its rect.
             const D2D1_RECT_F line = D2D1::RectF(nameRect.left, top, nameRect.right, top + kTextLineHeight);
             nameRect.right = painter.DrawTag(line, TR(VolumeDefault)) - kTagGap;
+        } else {
+            const D2D1_RECT_F use = UseRectFor(i, width);
+            painter.DrawTextButton(use, TR(VolumeUse), m_hovered == kUseControl + i);
+            nameRect.right = use.left - kTagGap;
         }
         painter.DrawLabel(nameRect, r.info.name.c_str(), false);
 
@@ -94,6 +117,18 @@ void VolumeWidget::Draw(IPanelPainter& painter, float width, float /*contentHeig
         int muteId = i * 2 + kMuteButton;
         painter.DrawMuteButton(MuteRectFor(i, width), r.info.muted, m_hovered == muteId);
     }
+
+    if (m_hasMic) {
+        const float micTop = MicTop();
+        const D2D1_RECT_F button = MicButtonRect(micTop, width);
+        const float textTop = micTop + (kMicRowHeight - kTextLineHeight) / 2.0f - 1.0f;
+        // The device's name alone: Windows names recording devices "Microphone (...)" already, and
+        // the button beside it is a microphone.
+        painter.DrawLabel(D2D1::RectF(kPaddingX, textTop, button.left - kTagGap, textTop + kNameHeight),
+                          m_mic.name.c_str(), m_mic.muted);
+        const int micId = MicControl();
+        painter.DrawMicButton(button, m_mic.muted, m_hovered == micId || m_focused == micId);
+    }
 }
 
 int VolumeWidget::RowAtY(float y) const {
@@ -106,6 +141,12 @@ int VolumeWidget::RowAtY(float y) const {
 }
 
 int VolumeWidget::HitTest(float x, float y, float width, float /*contentHeight*/) const {
+    auto inside = [&](const D2D1_RECT_F& r) { return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; };
+    if (m_hasMic && inside(MicButtonRect(MicTop(), width))) return MicControl();
+    for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
+        if (!m_rows[i].info.isDefault && inside(UseRectFor(i, width))) return kUseControl + i;
+    }
+
     int row = RowAtY(y);
     if (row < 0) return -1;
 
@@ -143,8 +184,29 @@ bool VolumeWidget::Commit(int row, int percent, bool muted) {
     return true;
 }
 
+void VolumeWidget::ToggleMicrophone() {
+    if (!m_hasMic) return;
+    if (VolumeControls::SetMicrophoneMuted(m_mic.id, !m_mic.muted)) {
+        m_mic.muted = !m_mic.muted;
+    } else {
+        // Refused: show what is really so.
+        VolumeControls::MicrophoneInfo actual;
+        m_hasMic = VolumeControls::QueryMicrophone(actual);
+        if (m_hasMic) m_mic = actual;
+    }
+}
+
 void VolumeWidget::Activate(int controlId, HWND /*ownerHwnd*/) {
     if (controlId < 0) return;
+    if (m_hasMic && controlId == MicControl()) return ToggleMicrophone();
+    if (controlId >= kUseControl) {
+        const int row = controlId - kUseControl;
+        if (row >= static_cast<int>(m_rows.size())) return;
+        // Re-listed either way: the default device is listed first, and its tag moves.
+        VolumeControls::SetDefaultOutput(m_rows[row].info.id);
+        Refresh();
+        return;
+    }
     int row = controlId / 2;
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
     if (controlId % 2 == kMuteButton) {
@@ -170,6 +232,9 @@ void VolumeWidget::Refresh() {
         m_rows.push_back(std::move(r));
     }
     m_hasLoaded = true;
+    VolumeControls::MicrophoneInfo mic;
+    m_hasMic = VolumeControls::QueryMicrophone(mic);
+    m_mic = m_hasMic ? mic : VolumeControls::MicrophoneInfo{};
 
     for (size_t i = 0; i < m_rows.size(); ++i) {
         if (!dragging.empty() && m_rows[i].info.id == dragging) {
@@ -211,6 +276,12 @@ void VolumeWidget::OnTick() {
         m_rows[i].info.percent = live[i].percent;
         m_rows[i].info.muted = live[i].muted;
     }
+
+    // The microphone too: muted from a headset's button or a call app, it says so here.
+    if (m_hasMic) {
+        VolumeControls::MicrophoneInfo mic;
+        if (VolumeControls::QueryMicrophone(mic) && mic.id == m_mic.id) m_mic.muted = mic.muted;
+    }
 }
 
 bool VolumeWidget::OnDragBegin(float x, float y, float width, float /*contentHeight*/,
@@ -250,6 +321,14 @@ std::wstring VolumeWidget::AccessibleSummary() const {
 
 std::wstring VolumeWidget::AccessibleControlText(int controlId) const {
     if (controlId < 0) return {};
+    if (m_hasMic && controlId == MicControl()) {
+        return Strings::Format(m_mic.muted ? Strings::Id::VolumeMicMuted : Strings::Id::VolumeMicOn, m_mic.name.c_str());
+    }
+    if (controlId >= kUseControl) {
+        const int row = controlId - kUseControl;
+        if (row >= static_cast<int>(m_rows.size())) return {};
+        return Strings::Format(Strings::Id::VolumeUseNamed, m_rows[row].info.name.c_str());
+    }
     int row = controlId / 2;
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return {};
 
@@ -271,11 +350,18 @@ bool VolumeWidget::OnKeyDown(UINT key, int focusedControl) {
         case VK_RIGHT:
         case VK_UP:
         case VK_DOWN: {
+            // The microphone is one more row below the outputs, with a single control.
+            const int rowCount = static_cast<int>(m_rows.size()) + (m_hasMic ? 1 : 0);
+            const bool onMic = m_hasMic && focusedControl == MicControl();
             int delta = (key == VK_LEFT || key == VK_UP) ? -1 : 1;
-            int newRow = focusedControl / 2 + delta;
-            if (newRow < 0) newRow = static_cast<int>(m_rows.size()) - 1;
-            if (newRow >= static_cast<int>(m_rows.size())) newRow = 0;
-            next = newRow * 2 + (focusedControl % 2);
+            int newRow = (focusedControl < 0 ? -1 : focusedControl / 2) + delta;
+            if (newRow < 0) newRow = rowCount - 1;
+            if (newRow >= rowCount) newRow = 0;
+            if (m_hasMic && newRow == static_cast<int>(m_rows.size())) {
+                next = MicControl();
+            } else {
+                next = newRow * 2 + (onMic || focusedControl < 0 ? 0 : focusedControl % 2);
+            }
             break;
         }
         case VK_SPACE:

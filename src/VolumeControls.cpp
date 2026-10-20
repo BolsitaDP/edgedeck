@@ -53,7 +53,7 @@ public:
     // IMMDeviceEnumerator::GetDeviceById takes, so calling it through the header
     // would pass the wrong arguments. EnumAudioEndpoints and Item are declared
     // correctly and cost the same in-process call.
-    bool Open(const std::wstring& id) {
+    bool Open(const std::wstring& id, EDataFlow flow = eRender) {
         ComPtr<IMMDeviceEnumerator> enumerator;
         if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_INPROC_SERVER,
                                     IID_PPV_ARGS(enumerator.GetAddressOf()))) ||
@@ -62,7 +62,7 @@ public:
         }
 
         ComPtr<IMMDeviceCollection> collection;
-        if (FAILED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATEMASK_ACTIVE,
+        if (FAILED(enumerator->EnumAudioEndpoints(flow, DEVICE_STATEMASK_ACTIVE,
                                                   collection.GetAddressOf())) ||
             !collection) {
             return false;
@@ -216,6 +216,27 @@ std::wstring CachedFriendlyName(IMMDevice* device, const std::wstring& id) {
     cache.push_back(Entry{id, name});
     return name;
 }
+
+// IPolicyConfig, the interface Windows' own sound settings use to change the default device.
+// Undocumented: the layout is the one every sound switcher declares, unchanged since Windows 7.
+// Only SetDefaultEndpoint is called; the slots before it are spelled out so it lands on the right
+// one, with argument types that do not matter here.
+MIDL_INTERFACE("f8679f50-850a-41cf-9c72-430f290290c8")
+IPolicyConfig : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetMixFormat(PCWSTR, void**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(PCWSTR, INT, void**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ResetDeviceFormat(PCWSTR) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(PCWSTR, void*, void*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(PCWSTR, INT, PINT64, PINT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(PCWSTR, PINT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetShareMode(PCWSTR, void*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetShareMode(PCWSTR, void*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR deviceId, ERole role) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(PCWSTR, INT) = 0;
+};
+constexpr CLSID kPolicyConfigClient = {0x870af99c, 0x171d, 0x4f9e, {0xaf, 0x0d, 0xe6, 0x3d, 0xf4, 0x0c, 0x2b, 0xc9}};
 
 } // namespace
 
@@ -411,6 +432,64 @@ bool SetVolume(const std::wstring& id, int percent, bool muted) {
     // every level above 0% was out of range and refused, and 0% was 0 dB, the loudest there is.
     const float level = static_cast<float>(percent) / 100.0f;
     return SUCCEEDED(volume->SetMasterVolumeLevelScalar(level, nullptr));
+}
+
+bool SetDefaultOutput(const std::wstring& id) {
+    if (id.empty()) return false;
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    ComPtr<IPolicyConfig> policy;
+    const HRESULT created = CoCreateInstance(kPolicyConfigClient, nullptr, CLSCTX_ALL,
+                                             __uuidof(IPolicyConfig), reinterpret_cast<void**>(policy.GetAddressOf()));
+    if (FAILED(created) || !policy) {
+        Diagnostics::Error("Volume: cannot change the default output here (0x%08lX)", static_cast<unsigned long>(created));
+        return false;
+    }
+    // All three roles, as the sound settings do: console alone would leave calls on the old device.
+    bool ok = true;
+    for (ERole role : {eConsole, eMultimedia, eCommunications}) {
+        const HRESULT hr = policy->SetDefaultEndpoint(id.c_str(), role);
+        if (FAILED(hr)) {
+            Diagnostics::Error("Volume: changing the default output was refused (0x%08lX)", static_cast<unsigned long>(hr));
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+bool QueryMicrophone(MicrophoneInfo& out) {
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(enumerator.GetAddressOf()))) ||
+        !enumerator) {
+        return false;
+    }
+    ComPtr<IMMDevice> device;
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, device.GetAddressOf())) || !device) {
+        return false; // no recording device: not an error, the panel simply has no microphone row
+    }
+    LPWSTR raw = nullptr;
+    if (FAILED(device->GetId(&raw)) || !raw) return false;
+    out.id = raw;
+    CoTaskMemFree(raw);
+    out.name = CachedFriendlyName(device.Get(), out.id);
+    if (out.name.empty()) out.name = FallbackName(out.id);
+    int ignored = 0;
+    return ReadState(device.Get(), ignored, out.muted);
+}
+
+bool SetMicrophoneMuted(const std::wstring& id, bool muted) {
+    if (id.empty()) return false;
+    ComApartment apartment;
+    if (!apartment.Ok()) return false;
+
+    Endpoint endpoint;
+    if (!endpoint.Open(id, eCapture) || !endpoint.Volume()) return false;
+    return SUCCEEDED(endpoint.Volume()->SetMute(muted ? TRUE : FALSE, nullptr));
 }
 
 } // namespace VolumeControls

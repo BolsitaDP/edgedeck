@@ -196,6 +196,10 @@ enum class Language : int {
     X(VolumeNoDevices, L"No audio output devices", L"No hay dispositivos de salida de audio")                \
     X(VolumeChecking, L"Checking audio...", L"Buscando audio...")                                            \
     X(VolumeDefault, L"Default", L"Predeterminado")                                                          \
+    X(VolumeUse, L"Use", L"Usar")                                                                            \
+    X(VolumeUseNamed, L"Make %ls the default output", L"Usar %ls como salida predeterminada")                \
+    X(VolumeMicMuted, L"Microphone %ls: muted", L"Micrófono %ls: silenciado")                                \
+    X(VolumeMicOn, L"Microphone %ls: on", L"Micrófono %ls: activado")                                        \
     X(VolumeSpeakers, L"Speakers", L"Altavoces")                                                             \
     X(VolumeSummaryNone, L"Volume. No audio output devices.", L"Volumen. No hay dispositivos de salida de audio.") \
     X(VolumeSummaryOne, L"Volume. %zu output device.", L"Volumen. %zu dispositivo de salida.")               \

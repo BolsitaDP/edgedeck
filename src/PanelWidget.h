@@ -88,6 +88,9 @@ public:
     // exist in Segoe UI Emoji, so a glyph here would render as a tofu box for
     // the same reason U+23EE did.
     virtual void DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) = 0;
+
+    // The same button for a microphone: a microphone, slashed when muted.
+    virtual void DrawMicButton(D2D1_RECT_F rect, bool muted, bool hovered) = 0;
 };
 
 // The payload of PanelWidget::kNoticeMessage.

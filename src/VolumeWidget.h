@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
-// One row per active output device: name, a volume slider and a mute toggle.
+// One row per active output device: name, a volume slider and a mute toggle; a "Use" button on
+// each output that is not the default one, to make it so; and, when there is a recording device,
+// a last row with the microphone's mute.
 // Unlike the brightness widget, Core Audio volume is an in-process call, so the
 // slider writes on every change (no deferred write) and the panel re-reads
 // while it is open, which is what keeps it in step with volume keys pressed in
@@ -38,7 +40,7 @@ public:
     std::wstring AccessibleSummary() const override;
     std::wstring AccessibleControlText(int controlId) const override;
 
-    int FocusableControlCount() const override { return static_cast<int>(m_rows.size()) * 2; }
+    int FocusableControlCount() const override { return MicControl() + (m_hasMic ? 1 : 0); }
     int FocusedControl() const override { return m_focused; }
     void SetFocusedControl(int controlId) override { m_focused = controlId; }
     bool OnKeyDown(UINT key, int focusedControl) override;
@@ -53,13 +55,21 @@ private:
     };
 
     static constexpr int kMuteButton = 1; // control id within a row: 0 = slider, 1 = mute
+    // The "Use" button of row r is kUseControl + r. The microphone's mute comes right after the
+    // rows' controls, so keyboard focus reaches it as one more stop.
+    static constexpr int kUseControl = 1000;
+    int MicControl() const { return static_cast<int>(m_rows.size()) * 2; }
+    float MicTop() const;
 
     float RowTop(int row) const;
     int RowAtY(float y) const;
     void Refresh();
     bool Commit(int row, int percent, bool muted);
+    void ToggleMicrophone();
 
     std::vector<Row> m_rows;
+    VolumeControls::MicrophoneInfo m_mic;
+    bool m_hasMic = false;
     bool m_hasLoaded = false;
     int m_hovered = -1;
     int m_focused = -1;

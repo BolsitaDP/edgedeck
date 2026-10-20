@@ -182,6 +182,33 @@ ID2D1PathGeometry* SpeakerGeometry() {
     return geometry.Get();
 }
 
+// A microphone's stand, on the same 16-unit grid centred on 0,0 as the speaker: the cradle under
+// the capsule, the stem and the foot. Stroked, not filled; the capsule is a rounded rectangle
+// drawn with it.
+ID2D1PathGeometry* MicStandGeometry() {
+    static ComPtr<ID2D1PathGeometry> geometry = []() -> ComPtr<ID2D1PathGeometry> {
+        ID2D1Factory* factory = D2DFactory();
+        ComPtr<ID2D1PathGeometry> g;
+        if (!factory || FAILED(factory->CreatePathGeometry(g.GetAddressOf()))) return nullptr;
+
+        ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(g->Open(sink.GetAddressOf()))) return nullptr;
+        sink->BeginFigure(D2D1_POINT_2F{-4.5f, -1.0f}, D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddBezier(D2D1::BezierSegment(D2D1_POINT_2F{-4.5f, 4.0f}, D2D1_POINT_2F{4.5f, 4.0f},
+                                            D2D1_POINT_2F{4.5f, -1.0f}));
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->BeginFigure(D2D1_POINT_2F{0.0f, 2.8f}, D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddLine(D2D1_POINT_2F{0.0f, 5.5f});
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->BeginFigure(D2D1_POINT_2F{-2.5f, 5.5f}, D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddLine(D2D1_POINT_2F{2.5f, 5.5f});
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        if (FAILED(sink->Close())) return nullptr;
+        return g;
+    }();
+    return geometry.Get();
+}
+
 // Unit right-pointing triangle: (0,0), (1,0.5), (0,1). Callers scale and place
 // it with a transform, which is also how the previous-track shape is produced
 // (by mirroring the X scale).
@@ -1117,6 +1144,32 @@ void Renderer::DrawSpeaker(D2D1_RECT_F rect, ID2D1SolidColorBrush* brush) {
     keep.Compose(D2D1::Matrix3x2F::Scale(scale, scale) *
                   D2D1::Matrix3x2F::Translation(cx, cy));
     m_target->FillGeometry(body, brush);
+}
+
+void Renderer::DrawMicButton(D2D1_RECT_F rect, bool muted, bool hovered) {
+    if (!m_target) return;
+    const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
+    m_target->FillRoundedRectangle(rr, m_controlBrush.Get());
+    if (hovered) m_target->FillRoundedRectangle(rr, m_hoverBrush.Get());
+
+    ID2D1SolidColorBrush* brush = muted ? m_accentBrush.Get() : m_secondaryTextBrush.Get();
+    ID2D1StrokeStyle* stroke = RoundStrokeStyle();
+    ID2D1PathGeometry* stand = MicStandGeometry();
+    if (!stroke || !stand) return;
+    {
+        const float cx = (rect.left + rect.right) / 2.0f;
+        const float cy = (rect.top + rect.bottom) / 2.0f;
+        const float scale = std::min(rect.right - rect.left, rect.bottom - rect.top) / 16.0f;
+        const ScopedTransform keep(m_target.Get());
+        keep.Compose(D2D1::Matrix3x2F::Scale(scale, scale) * D2D1::Matrix3x2F::Translation(cx, cy));
+        m_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(-2.2f, -6.5f, 2.2f, 1.5f), 2.2f, 2.2f), brush);
+        m_target->DrawGeometry(stand, brush, 1.1f, stroke);
+    }
+    if (!muted) return;
+    // The slash, as on the speaker.
+    const float inset = (rect.right - rect.left) * 0.22f;
+    m_target->DrawLine(D2D1::Point2F(rect.right - inset, rect.top + inset),
+                       D2D1::Point2F(rect.left + inset, rect.bottom - inset), brush, 1.5f, stroke);
 }
 
 void Renderer::DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) {

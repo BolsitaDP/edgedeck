@@ -146,6 +146,13 @@ name. Recent Spotify versions, like any app with Chromium embedded, report the i
 shares, `Chromium.<hash of the user>`; for that one the running programs with a libcef.dll beside
 them are looked at, once per app.
 
+**Volume** reopens each endpoint from its id on every call instead of holding COM objects (see
+`VolumeControls.h`). The level is set with `SetMasterVolumeLevelScalar`: the decibel call takes
+-65..0 dB, where a 0-1 fraction is refused above 0 and is the loudest setting at 0. Windows has no
+public API for changing the default output; *Use* goes through `IPolicyConfig`, the interface its
+own sound settings use, for all three roles. The microphone row is the default recording device
+(console role), muted with the same endpoint-volume interface.
+
 **Brightness** shows the value live while dragging, but writes DDC/CI once, on release: several
 monitors keep brightness in non-volatile memory. A rejected write puts the row back to the last value
 the hardware confirmed. Core Audio volume is an in-process call, so the volume slider writes on every

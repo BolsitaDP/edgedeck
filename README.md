@@ -37,7 +37,7 @@ several of the same kind, on the left or right edge of any monitor.
 | **Quick Actions** | Your own list of things to open - programs, documents, folders, web addresses - each with its icon. Edit it in its own window, or drag files and shortcuts onto it from Explorer. |
 | **Recent files** | The newest files in a folder (Downloads by default), with how long ago each arrived. Click one to open it. |
 | **Media** | Every app that is playing something - Spotify, a browser tab, VLC - with previous, play/pause and next. |
-| **Volume** | A slider and a mute button for each audio output device. |
+| **Volume** | A slider and a mute button for each audio output device, and a **Use** button to make another one the default (speakers or headphones in one click). Below them, the microphone's mute. |
 | **Brightness** | A brightness slider for each external monitor that supports DDC/CI, and for a laptop's built-in screen. |
 | **Lyrics** | The lyrics of whatever is playing, from LRCLIB: line by line in time with the song where LRCLIB has them synced, otherwise the plain text, scrolling as the song goes. Lyrics a little early or late can be moved half a second at a time, and a click on a line plays the song from it. |
 | **Displays** | One click to switch which monitors are on. Save your own layouts (for example "desk monitors" or "just the TV") in **Layouts...**; with none saved it offers all monitors and each one alone. |

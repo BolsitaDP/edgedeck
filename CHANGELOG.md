@@ -14,6 +14,7 @@ The first public version. EdgeDeck so far:
 - Recent files: the newest files in a folder (Downloads by default).
 - Media, Volume, Brightness (external monitors over DDC/CI, and a laptop's built-in screen) and
   Lyrics (LRCLIB).
+- Volume switches the default output in one click and mutes the microphone.
 - Lyrics follow the song line by line where LRCLIB has them synced, and otherwise show the plain
   lyrics, scrolling with the song; of several versions, the one as long as the track playing.
   Synced lyrics can be moved half a second at a time when they are timed to another release of the
