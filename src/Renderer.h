@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "LayeredTarget.h"
 #include "PanelWidget.h"
@@ -157,6 +158,11 @@ public:
     // moveHovered and moving light the move handle: under the pointer, and while it is held.
     void DrawPanel(float w, float h, PanelWidget* widget, bool pinned, bool pinHovered, bool moveHovered,
                    bool moving, const wchar_t* notice = nullptr);
+
+    // For tools that picture a panel without a screen (tools/src/panelshot.cpp): the last frame
+    // drawn, as premultiplied BGRA rows, top to bottom. False on the region fallback, which keeps
+    // no pixels of its own.
+    bool CopyPixels(std::vector<std::uint8_t>& bgra, UINT& widthPx, UINT& heightPx) const;
 
     // 1px inner outline. Called after Clear in both DrawTab and DrawPanel.
     void DrawEdge(float w, float h);

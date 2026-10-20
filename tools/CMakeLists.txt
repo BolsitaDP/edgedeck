@@ -46,6 +46,11 @@ target_link_libraries(backdrop PRIVATE user32 gdi32)
 edgedeck_tool(fullscreenwin src/fullscreenwin.cpp)
 target_link_libraries(fullscreenwin PRIVATE user32 gdi32)
 
+# One widget's panel, drawn by the product's own Tab and Renderer and written as a picture - with
+# deskrun, without anything appearing on the screen in use.
+edgedeck_tool(panelshot src/panelshot.cpp ${core_sources})
+target_link_libraries(panelshot PRIVATE ${core_libs})
+
 # Runs a program on a desktop nobody sees, so a window can be drawn and captured (settingsharness
 # shot=...) without appearing on, or taking the focus from, the one in use.
 edgedeck_tool(deskrun src/deskrun.cpp)

@@ -676,6 +676,15 @@ void Renderer::DrawTab(bool hovered, float w, float h, const wchar_t* glyph) {
 
 // Forwards the rendered bitmap to the window. A no-op on the region path, where
 // the target presents itself.
+bool Renderer::CopyPixels(std::vector<std::uint8_t>& bgra, UINT& widthPx, UINT& heightPx) const {
+    if (!m_layered || !m_layered->Pixels()) return false;
+    widthPx = m_layered->WidthPx();
+    heightPx = m_layered->HeightPx();
+    const BYTE* pixels = m_layered->Pixels();
+    bgra.assign(pixels, pixels + static_cast<size_t>(widthPx) * heightPx * 4);
+    return true;
+}
+
 void Renderer::PresentLayered() {
     if (m_layered && m_target) m_layered->Present(m_hwnd, kSurfaceAlpha);
 }

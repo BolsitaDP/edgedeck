@@ -335,6 +335,15 @@ void Tab::SetPaused(bool paused) {
     }
 }
 
+bool Tab::SnapshotPanel(std::vector<std::uint8_t>& bgra, UINT& widthPx, UINT& heightPx, bool asUnpinned) {
+    if (!m_panelHwnd || !m_widget) return false;
+    const bool pinned = m_pinned;
+    if (asUnpinned) m_pinned = false;
+    DrawPanelSurface();
+    m_pinned = pinned;
+    return m_panelRenderer.CopyPixels(bgra, widthPx, heightPx);
+}
+
 void Tab::SetHiddenForFullscreen(bool hidden) {
     if (m_fullscreenHidden == hidden) return;
     m_fullscreenHidden = hidden;

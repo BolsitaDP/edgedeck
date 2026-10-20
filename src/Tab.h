@@ -77,6 +77,11 @@ public:
     void SetPaused(bool paused);
     bool IsPaused() const { return m_paused; }
 
+    // For tools that picture a panel without a screen (tools/src/panelshot.cpp): draws the panel
+    // now - as an unpinned one when asked, whatever it is - and copies its premultiplied BGRA
+    // pixels. False when there is no panel or no pixels to copy.
+    bool SnapshotPanel(std::vector<std::uint8_t>& bgra, UINT& widthPx, UINT& heightPx, bool asUnpinned);
+
     // A full-screen app (a video, a game) is in front of this tab's monitor: the tab gets out of
     // the way, as the taskbar does, and comes back when the app leaves full screen. An open panel
     // that is not pinned closes; a keyboard shortcut still opens one. Separate from the pause,
