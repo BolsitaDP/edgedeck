@@ -102,8 +102,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupA
 Filename: "{app}\EdgeDeck.exe"; Description: "{cm:LaunchProgram,EdgeDeck}"; Flags: nowait postinstall
 
 [UninstallDelete]
-; What the zip's installer left beside the program, if this replaced one.
+; What the zip's installer left beside the program, if this replaced one - its uninstaller and the
+; symbols of a build installed with install.ps1 -Build - and then the folder, if nothing else is in it.
 Type: files; Name: "{app}\uninstall.ps1"
+Type: files; Name: "{app}\EdgeDeck.pdb"
+Type: dirifempty; Name: "{app}"
 
 [Code]
 const
