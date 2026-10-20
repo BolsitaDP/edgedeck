@@ -21,6 +21,12 @@ on:
 permissions:
   contents: write
 
+# One run per tag (or per rehearsed version) at a time: a tag pushed again while its first run is
+# still going waits for it, instead of two runs racing to create the same release.
+concurrency:
+  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-2022
