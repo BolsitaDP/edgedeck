@@ -13,7 +13,7 @@
     EdgeDeck (the test copy's windows are found by process).
 #>
 [CmdletBinding()]
-param([string]$ToolsDir)
+param([string]$ToolsDir, [ValidateSet('right', 'left')][string]$Edge = 'right')
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\UiHelpers.ps1"
 Add-Type -AssemblyName System.Windows.Forms
@@ -42,7 +42,7 @@ function Get-HandlePoint($panel) {
 }
 
 # Holds the left button at (X, Y) and drags vertically by Dy in small steps, as a hand would.
-function Drag-Vertically($x, $y, $dy) {
+function Drag-Vertically([int]$x, [int]$y, [int]$dy) {
     Move-Mouse $x $y
     Start-Sleep -Milliseconds 120
     [Ui]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero) # left down
@@ -59,7 +59,7 @@ function Read-Ratio($app) {
     return $null
 }
 
-$app = Start-TestApp -Tabs @('QuickActions') -Settings @('theme=Dark', 'fullscreenGuard=0') -StartupSeconds 3
+$app = Start-TestApp -Tabs @('QuickActions') -TabExtra @("edge=$Edge") -Settings @('theme=Dark', 'fullscreenGuard=0') -StartupSeconds 3
 $app2 = $null
 try {
     $tab = @(Get-TestTabs $app)[0]
@@ -77,13 +77,23 @@ try {
     $panelDuring = Get-TestPanel $app
     Check 'while held, the tab follows the pointer' ($during.T -eq $startTop - 200) "tab top $($during.T), expected $($startTop - 200)"
     Check 'while held, the panel moves with it' ($panelDuring -and ($panelDuring.T - $during.T) -eq $panelOffset) "panel top $($panelDuring.T)"
-    Check 'the tab stays on its edge' ($during.R -eq $monitor.Right)
+    Check 'the tab stays on its edge' ($(if ($Edge -eq 'left') { $during.L -eq $monitor.Left } else { $during.R -eq $monitor.Right }))
     Release-Button
     Check 'the panel is still open after letting go' ([bool](Get-TestPanel $app))
 
     $ratio = Read-Ratio $app
     $expectedTop = $monitor.Y + [math]::Truncate(($monitor.Height - $tabHeight) * $ratio)
     Check 'the new place is saved, to the pixel' ($ratio -ne $null -and $expectedTop -eq $startTop - 200) "ratio $ratio gives top $expectedTop, tab is at $($startTop - 200)"
+
+    # 2a. Far past the bottom: the tab goes all the way down, though the pointer meets the screen's
+    # edge first (the handle is below the panel's top, and the panel stays on the monitor).
+    $panel = Get-TestPanel $app
+    $handle = Get-HandlePoint $panel
+    Drag-Vertically $handle.X $handle.Y $monitor.Height
+    Release-Button
+    $bottom = @(Get-TestTabs $app)[0]
+    Check 'dragged past the bottom, the tab reaches the bottom of the monitor' ($bottom.B -eq $monitor.Bottom) "tab bottom $($bottom.B)"
+    Check 'the very bottom is saved as 1' ((Read-Ratio $app) -eq 1)
 
     # 2. Far past the top: the tab stops at the monitor's top edge.
     $panel = Get-TestPanel $app

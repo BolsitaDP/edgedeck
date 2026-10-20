@@ -599,8 +599,15 @@ void Tab::BeginMove(int cursorScreenY) {
 
 void Tab::MoveWith(int cursorScreenY) {
     const int tabHeight = m_tabRectPx.bottom - m_tabRectPx.top;
-    const int top = Placement::ClampTabTop(m_moveStartTabTop + (cursorScreenY - m_moveStartCursorY), tabHeight,
-                                           m_monitorRectPx);
+    int wanted = m_moveStartTabTop + (cursorScreenY - m_moveStartCursorY);
+    // The handle sits below the panel's top and the panel stays on the monitor, so followed one to
+    // one the pointer meets the screen's edge with the tab still short of it - 30-odd pixels on a
+    // monitor with nothing above or below. Pushed against the monitor's edge, the tab goes all the
+    // way.
+    if (cursorScreenY <= m_monitorRectPx.top) wanted = m_monitorRectPx.top;
+    if (cursorScreenY >= m_monitorRectPx.bottom - 1) wanted = m_monitorRectPx.bottom - tabHeight;
+    const int top = Placement::ClampTabTop(wanted, tabHeight, m_monitorRectPx);
+
     if (top == m_tabRectPx.top) return; // pressed against the top or bottom: nothing to do
     OffsetRect(&m_tabRectPx, 0, top - m_tabRectPx.top);
     // The panel stays centred on the tab, as it is placed, and stops at the monitor's edges.
