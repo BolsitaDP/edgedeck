@@ -93,6 +93,13 @@ void DialogTheme::Apply(HWND window) {
     }
 
     EnumChildWindows(window, ThemeChild, m_themed ? 1 : 0);
+    // The window's own scroll bar, when it has one (Settings on a short screen). Only on a change:
+    // SetWindowTheme sends the window WM_THEMECHANGED, whose handler applies the theme again, and
+    // setting it every time would recurse until the stack ran out.
+    if (m_windowThemed != m_themed) {
+        m_windowThemed = m_themed;
+        SetWindowTheme(window, m_themed ? L"DarkMode_Explorer" : nullptr, nullptr);
+    }
     RedrawWindow(window, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME | RDW_UPDATENOW);
 }

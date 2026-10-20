@@ -72,6 +72,7 @@ public:
 
 private:
     bool m_themed = false;
+    bool m_windowThemed = false; // the visual style last given to the window itself
     HBRUSH m_windowBrush = nullptr;  // dialog background
     HBRUSH m_controlBrush = nullptr; // edit boxes and lists
     HBRUSH m_dividerBrush = nullptr; // lines between sections, in either look

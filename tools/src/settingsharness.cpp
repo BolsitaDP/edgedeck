@@ -18,6 +18,8 @@
 //           once. Run it through deskrun and it happens on a desktop nobody sees: a picture of
 //           the window without it ever appearing on, or taking the focus from, the screen in use.
 //   select=N : select the Nth tab of the Settings list (0-based) before anything else.
+//   scroll=bottom : scroll the window to its end (it scrolls when it is taller than the screen) and
+//           report where Save then is, before any shot.
 // Always prints a layout report: controls outside the client area, overlapping controls, and
 // text that is wider (or, for the footer, taller) than the control that holds it.
 #include "ActionsWindow.h"
@@ -126,6 +128,15 @@ static int LayoutReport(HWND hwnd, UINT dpi) {
     const auto kids = CollectChildren(hwnd);
     int problems = 0;
     printf("layout @%u dpi: client %ldx%ld, %zu controls\n", dpi, client.right, client.bottom, kids.size());
+    // A window too tall for its monitor scrolls: its controls belong inside the scrolled height.
+    if (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_VSCROLL) {
+        SCROLLINFO info{sizeof(info)};
+        info.fMask = SIF_RANGE | SIF_PAGE;
+        if (GetScrollInfo(hwnd, SB_VERT, &info)) {
+            printf("  scrolls: %d px of content in a %ld px window\n", info.nMax + 1, client.bottom);
+            client.bottom = info.nMax + 1;
+        }
+    }
 
     for (const Child& c : kids) {
         if (c.rect.left < 0 || c.rect.top < 0 || c.rect.right > client.right || c.rect.bottom > client.bottom) {
@@ -330,9 +341,11 @@ int wmain(int argc, wchar_t** argv) {
     std::vector<std::wstring> dropPaths;
     const wchar_t* shotPath = nullptr;
     int selectTab = -1;
+    bool scrollBottom = false;
     for (int i = 3; i < argc; ++i) {
         if (wcsncmp(argv[i], L"shot=", 5) == 0) shotPath = argv[i] + 5;
         if (wcsncmp(argv[i], L"select=", 7) == 0) selectTab = _wtoi(argv[i] + 7);
+        if (wcscmp(argv[i], L"scroll=bottom") == 0) scrollBottom = true;
         if (wcsncmp(argv[i], L"dropfiles=", 10) == 0) {
             // dropfiles=X,Y,path|path
             dropFiles = true;
@@ -458,6 +471,18 @@ int wmain(int argc, wchar_t** argv) {
         HWND list = GetDlgItem(hwnd, 100);
         SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(selectTab), 0);
         SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(100, LBN_SELCHANGE), reinterpret_cast<LPARAM>(list));
+    }
+
+    if (scrollBottom) {
+        SendMessageW(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
+        RECT client{};
+        GetClientRect(hwnd, &client);
+        RECT save{};
+        GetWindowRect(GetDlgItem(hwnd, 109), &save);
+        MapWindowPoints(nullptr, hwnd, reinterpret_cast<POINT*>(&save), 2);
+        const bool inside = save.top >= 0 && save.bottom <= client.bottom;
+        printf("scrolled to the end: Save at y %ld-%ld in a %ld px window - %s\n", save.top, save.bottom, client.bottom,
+               inside ? "visible" : "NOT VISIBLE");
     }
 
     if (shotPath) {

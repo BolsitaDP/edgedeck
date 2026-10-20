@@ -156,8 +156,9 @@ bool SettingsWindow::Create(HINSTANCE hInstance, std::vector<TabSettings> initia
                           mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - height) / 2);
     }
 
-    m_hwnd = CreateWindowExW(exStyle, kSettingsClassName, TR(SettingsTitle), style, x, y, width,
-                             height, nullptr, nullptr, hInstance, this);
+    RECT placed = FitRect(RECT{x, y, x + width, y + height});
+    m_hwnd = CreateWindowExW(exStyle, kSettingsClassName, TR(SettingsTitle), style, placed.left, placed.top,
+                             placed.right - placed.left, placed.bottom - placed.top, nullptr, nullptr, hInstance, this);
     if (!m_hwnd) return false;
 
     ShowWindow(m_hwnd, SW_SHOW);
@@ -201,6 +202,7 @@ void SettingsWindow::ApplyDpi(UINT dpi) {
     HFONT previousHeading = m_headerFont;
     m_font = MakeFont(false);
     m_headerFont = MakeFont(true);
+    m_scrollY = 0; // laid out again from the top; UpdateScroll follows the new size
     for (const Placement& p : m_placements) {
         const int left = Scale(p.x);
         const int top = Scale(p.y);
@@ -213,6 +215,56 @@ void SettingsWindow::ApplyDpi(UINT dpi) {
     SendMessageW(m_monitorCombo, CB_SETDROPPEDWIDTH, static_cast<WPARAM>(Scale(kMonitorDropWidth)), 0);
     // Deleted only after every control has been handed the new one.
     if (previous) DeleteObject(previous);
+}
+
+RECT SettingsWindow::FitRect(RECT window) const {
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromRect(&window, MONITOR_DEFAULTTONEAREST), &mi)) return window;
+    const RECT& work = mi.rcWork;
+    if (window.bottom - window.top > work.bottom - work.top) {
+        window.top = work.top;
+        window.bottom = work.bottom;
+        // Room for the scroll bar, so it does not cover the right-hand column.
+        window.right += GetSystemMetricsForDpi(SM_CXVSCROLL, m_dpi);
+    } else if (window.bottom > work.bottom) {
+        OffsetRect(&window, 0, work.bottom - window.bottom);
+    }
+    if (window.top < work.top) OffsetRect(&window, 0, work.top - window.top);
+    return window;
+}
+
+void SettingsWindow::UpdateScroll() {
+    if (!m_hwnd) return;
+    RECT client{};
+    GetClientRect(m_hwnd, &client);
+    const int content = Scale(kClientHeight);
+    const int page = client.bottom - client.top;
+    if (content <= page) {
+        if (m_scrollY != 0) ScrollTo(0);
+        ShowScrollBar(m_hwnd, SB_VERT, FALSE);
+        return;
+    }
+    SCROLLINFO info{sizeof(info)};
+    info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    info.nMin = 0;
+    info.nMax = content - 1;
+    info.nPage = static_cast<UINT>(page);
+    info.nPos = m_scrollY;
+    ShowScrollBar(m_hwnd, SB_VERT, TRUE);
+    SetScrollInfo(m_hwnd, SB_VERT, &info, TRUE);
+    if (m_scrollY > content - page) ScrollTo(content - page);
+}
+
+void SettingsWindow::ScrollTo(int y) {
+    RECT client{};
+    GetClientRect(m_hwnd, &client);
+    const int limit = std::max(0, Scale(kClientHeight) - static_cast<int>(client.bottom - client.top));
+    y = std::clamp(y, 0, limit);
+    if (y == m_scrollY) return;
+    const int dy = m_scrollY - y;
+    m_scrollY = y;
+    ScrollWindowEx(m_hwnd, 0, dy, nullptr, nullptr, nullptr, nullptr, SW_SCROLLCHILDREN | SW_INVALIDATE | SW_ERASE);
+    SetScrollPos(m_hwnd, SB_VERT, m_scrollY, TRUE);
 }
 
 void SettingsWindow::CreateControls(HINSTANCE hInstance) {
@@ -688,6 +740,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             CreateControls(cs->hInstance);
             RefreshList(0);
             ApplyTheme();
+            UpdateScroll();
             m_drop.Attach(hwnd, [this](std::vector<std::wstring> paths) {
                 OnFoldersDropped(std::move(paths));
             });
@@ -724,10 +777,11 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             ApplyDpi(HIWORD(wParam));
             const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
             if (suggested) {
-                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
-                             suggested->right - suggested->left, suggested->bottom - suggested->top,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
+                const RECT fitted = FitRect(*suggested);
+                SetWindowPos(hwnd, nullptr, fitted.left, fitted.top, fitted.right - fitted.left,
+                             fitted.bottom - fitted.top, SWP_NOZORDER | SWP_NOACTIVATE);
             }
+            UpdateScroll();
             return 0;
         }
         case WM_SETTINGCHANGE:
@@ -775,6 +829,35 @@ LRESULT SettingsWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_HSCROLL:
             if (reinterpret_cast<HWND>(lParam) == m_positionTrackbar) OnTrackbarChanged();
             return 0;
+        case WM_SIZE:
+            UpdateScroll();
+            break;
+        case WM_VSCROLL: {
+            SCROLLINFO info{sizeof(info)};
+            info.fMask = SIF_ALL;
+            GetScrollInfo(hwnd, SB_VERT, &info);
+            int y = m_scrollY;
+            switch (LOWORD(wParam)) {
+                case SB_LINEUP: y -= Scale(24); break;
+                case SB_LINEDOWN: y += Scale(24); break;
+                case SB_PAGEUP: y -= static_cast<int>(info.nPage); break;
+                case SB_PAGEDOWN: y += static_cast<int>(info.nPage); break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION: y = info.nTrackPos; break;
+                case SB_TOP: y = 0; break;
+                case SB_BOTTOM: y = info.nMax; break;
+                default: break;
+            }
+            ScrollTo(y);
+            return 0;
+        }
+        case WM_MOUSEWHEEL:
+            // Only when the content scrolls; a wheel over a list or a combo box is theirs.
+            if (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_VSCROLL) {
+                ScrollTo(m_scrollY - MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), Scale(48), WHEEL_DELTA));
+                return 0;
+            }
+            break;
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;

@@ -83,6 +83,16 @@ private:
     // scale - without recreating a single control.
     void ApplyDpi(UINT dpi);
 
+    // A screen with little height (1366x768 at 125%, 1080p at 175%) has less room than the window
+    // needs, and the footer - Save - would be off the bottom of it. The window is then made as
+    // tall as the monitor's work area allows, a scroll bar's width wider, and its content scrolls.
+    // FitRect trims a window rectangle to the work area of the monitor it is on; UpdateScroll sets
+    // the scroll bar for the current size; ScrollTo moves the content.
+    RECT FitRect(RECT window) const;
+    void UpdateScroll();
+    void ScrollTo(int y);
+    int m_scrollY = 0; // pixels the content is scrolled up by
+
     HWND m_hwnd = nullptr;
     HWND m_list = nullptr;
     HWND m_typeCombo = nullptr;

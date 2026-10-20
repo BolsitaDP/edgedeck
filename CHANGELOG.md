@@ -37,6 +37,8 @@ The first public version. EdgeDeck so far:
 - Starting EdgeDeck again while it runs opens its Settings, instead of seeming to do nothing.
 - *Report a problem...* opens a bug report already filled in, with the end of the log on the
   clipboard.
+- On a screen too short for it (1366x768 at 125%, 1080p at 175%), Settings fits the work area and
+  scrolls, so Save is always reachable.
 - A settings file that cannot be read, or that a newer version wrote, is copied to
   `config.backup.txt` before it is replaced, and EdgeDeck says so. A file saved as ANSI by an editor
   keeps its accents.
