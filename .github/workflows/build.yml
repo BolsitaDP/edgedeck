@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Building and testing only reads the code. Without this the token gets whatever the repository's
+# default is, which for older repositories is write access - and this workflow also runs for pull
+# requests from anyone.
+permissions:
+  contents: read
+
 jobs:
   windows:
     runs-on: windows-2022
