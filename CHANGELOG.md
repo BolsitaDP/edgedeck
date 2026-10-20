@@ -14,6 +14,8 @@ The first public version. EdgeDeck so far:
 - Recent files: the newest files in a folder (Downloads by default).
 - Media, Volume, Brightness (external monitors over DDC/CI, and a laptop's built-in screen) and
   Lyrics (LRCLIB).
+- Lyrics follow the song line by line where LRCLIB has them synced, and otherwise show the plain
+  lyrics, scrolling with the song; of several versions, the one as long as the track playing.
 - Displays: switch which monitors are on, between layouts you save (up to nine, each with a
   shortcut) or, with none saved, all monitors and each one alone. An existing setup's four fixed
   layouts are carried over as saved ones.

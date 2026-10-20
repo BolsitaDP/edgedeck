@@ -37,6 +37,7 @@ public:
     void Activate(int /*controlId*/, HWND /*ownerHwnd*/) override {}
     void OnAsyncResult(UINT message, WPARAM wParam) override;
     void OnPanelOpening(HWND ownerHwnd) override;
+    void OnPanelVisibilityChanged(bool visible) override { m_visible = visible; }
 
     bool WantsTicks() const override { return m_state == State::Ready; }
     void OnTick() override;
@@ -55,7 +56,12 @@ private:
     enum class State { Loading, Ready, Empty };
 
     void UpdateCurrentLine(int positionMs);
-    void ApplyTrack(const std::wstring& trackKey, std::vector<LrcLyrics::Line> lines, int positionMs);
+    void ApplyTrack(const LrcLyrics::Result& result);
+    // The first line shown: around the current one for synced lyrics, and for plain ones - which
+    // have no times - as far down as the song is through, so the text keeps up with it.
+    int FirstShownLine() const;
+    // The track's name, and for plain lyrics a second line saying they are not synced.
+    float HeaderHeight() const { return m_synced ? 24.0f : 48.0f; }
     void ShowEmpty(LrcLyrics::Status status);
 
     State m_state = State::Loading;
@@ -63,6 +69,15 @@ private:
     std::wstring m_trackKey;
     std::vector<LrcLyrics::Line> m_lines;
     int m_currentLine = -1; // index into m_lines closest to the last known position
+    bool m_synced = true;   // m_lines carry times
+    int m_positionMs = 0;
+    int m_durationMs = 0;
+    // Media change events come whether or not the panel is open: they are acted on only while it
+    // is, since opening it looks again anyway. And after a failed lookup, another is not tried
+    // for kRetryAfterFailureMs, so a flaky network is not asked again on every pause and skip.
+    bool m_visible = false;
+    ULONGLONG m_failedAt = 0;
+    static constexpr ULONGLONG kRetryAfterFailureMs = 30000;
 
     HWND m_owner = nullptr;
     RequestTracker m_requests;

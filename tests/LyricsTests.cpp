@@ -105,9 +105,87 @@ void TestUtf8Content() {
     CHECK_EQ(lines[0].text, std::wstring(L"\x00E1\x00E9\x00ED \x4E2D\x6587"));
 }
 
+using LrcLyrics::Candidate;
+
+void TestPickPrefersSyncedOfTheSameLength() {
+    TEST("Lyrics: synced lyrics of the playing length are chosen, over plain and over other lengths");
+    std::vector<Candidate> list = {
+        {371000, false, L"", L"plain words"},           // plain only (what LRCLIB had for the song that failed)
+        {280000, false, L"[00:01.00]other cut", L""},   // synced, but another recording
+        {366000, false, L"[00:01.00]this one", L""},    // synced, 0.5 s from the player's length
+    };
+    auto c = LrcLyrics::PickLyrics(list, 366560);
+    CHECK(c.index == 2 && c.synced);
+    // Unknown length: any synced record will do; the first one found is as good as another.
+    c = LrcLyrics::PickLyrics(list, 0);
+    CHECK(c.synced && (c.index == 1 || c.index == 2));
+}
+
+void TestPickFallsBackToPlain() {
+    TEST("Lyrics: with no synced lyrics of that length, the plain ones closest in length");
+    std::vector<Candidate> plainOnly = {
+        {280000, false, L"", L"short version"},
+        {371000, false, L"", L"long version"},
+    };
+    auto c = LrcLyrics::PickLyrics(plainOnly, 366560);
+    CHECK(c.index == 1 && !c.synced);
+
+    // Synced, but for a recording 90 s longer: plain lyrics are better than a wrong highlight.
+    std::vector<Candidate> mixed = {{456000, false, L"[00:01.00]x", L""}, {360000, false, L"", L"words"}};
+    c = LrcLyrics::PickLyrics(mixed, 366560);
+    CHECK(c.index == 1 && !c.synced);
+    // ...and when there is nothing else, those synced lyrics after all.
+    c = LrcLyrics::PickLyrics({{456000, false, L"[00:01.00]x", L""}}, 366560);
+    CHECK(c.index == 0 && c.synced);
+}
+
+void TestPickSkipsInstrumentalAndEmpty() {
+    TEST("Lyrics: instrumental and empty records are never chosen");
+    std::vector<Candidate> list = {{366000, true, L"[00:01.00]la", L"la"}, {366000, false, L"", L""}};
+    CHECK(LrcLyrics::PickLyrics(list, 366000).index == -1);
+    CHECK(LrcLyrics::PickLyrics({}, 366000).index == -1);
+}
+
+void TestPlainLines() {
+    TEST("Lyrics: plain lyrics become lines without times, verses kept apart by one blank line");
+    auto lines = LrcLyrics::PlainLines(L"\r\nUno\r\ndos  \r\n\r\n\r\nTres\n\n");
+    CHECK_EQ(lines.size(), size_t{4});
+    if (lines.size() == 4) {
+        CHECK(lines[0].text == L"Uno" && lines[0].timeMs == -1);
+        CHECK(lines[1].text == L"dos");
+        CHECK(lines[2].text.empty());
+        CHECK(lines[3].text == L"Tres");
+    }
+    CHECK(LrcLyrics::PlainLines(L"").empty());
+    CHECK(LrcLyrics::PlainLines(L"\n \n").empty());
+}
+
+void TestCacheRoundTrip() {
+    TEST("Lyrics: the cache keeps synced and plain lyrics, accents included, and reads old files");
+    std::vector<LrcLyrics::Line> lines = {{1000, L"Corazón"}, {2500, L"Aragón 中"}};
+    std::vector<LrcLyrics::Line> back;
+    bool synced = false;
+    CHECK(LrcLyrics::ParseCache(LrcLyrics::SerializeCache(lines, true), back, synced));
+    CHECK(synced && back.size() == 2 && back[0].timeMs == 1000 && back[1].text == L"Aragón 中");
+
+    auto plain = LrcLyrics::PlainLines(L"Son al son\n\nOtra estrofa");
+    CHECK(LrcLyrics::ParseCache(LrcLyrics::SerializeCache(plain, false), back, synced));
+    CHECK(!synced && back.size() == 3 && back[1].text.empty() && back[2].timeMs == -1);
+
+    // A file written before plain lyrics existed: no marker, synced lines.
+    CHECK(LrcLyrics::ParseCache(L"1000\tfirst\r\n2000\tsecond\r\n", back, synced));
+    CHECK(synced && back.size() == 2 && back[1].text == L"second");
+    CHECK(!LrcLyrics::ParseCache(L"", back, synced));
+}
+
 } // namespace
 
 void RunLyricsTests() {
+    TestPickPrefersSyncedOfTheSameLength();
+    TestPickFallsBackToPlain();
+    TestPickSkipsInstrumentalAndEmpty();
+    TestPlainLines();
+    TestCacheRoundTrip();
     TestSimpleLine();
     TestFractionDigits();
     TestRepeatedTimestamp();

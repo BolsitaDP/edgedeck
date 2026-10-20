@@ -23,7 +23,7 @@ struct Line {
 enum class Status {
     Success,
     NothingPlaying, // no active media session, or it reports no title
-    NoLyrics,       // LRCLIB has nothing synced for this track
+    NoLyrics,       // LRCLIB has no lyrics for this track, synced or plain
     NetworkError,
 };
 
@@ -32,8 +32,41 @@ struct Result : AsyncEnvelope {
     Status status = Status::NetworkError;
     std::wstring trackKey; // "Artist - Title", used for caching and display
     std::vector<Line> lines;
+    // Synced lyrics have a time on every line. Plain ones - all LRCLIB has for many songs - have
+    // none (timeMs -1): the panel shows them as text that scrolls with the song.
+    bool synced = true;
     int positionMs = 0; // local playback position at fetch time
+    int durationMs = 0; // the track's length, 0 when the player does not say
 };
+
+// One record LRCLIB offered for a search. Its fields may be missing or JSON null; empty here.
+struct Candidate {
+    int durationMs = 0; // 0 when not known
+    bool instrumental = false;
+    std::wstring synced; // LRC text
+    std::wstring plain;  // plain text
+};
+
+// Which record to show for a track durationMs long (0: unknown), and whether it is the synced one.
+// Synced lyrics are shown only for a recording of the same length (within kDurationToleranceMs):
+// another recording's timings would highlight the wrong lines. Failing that, plain lyrics -
+// the closest in length - and only when there are none, synced lyrics of another length.
+// Instrumental records are skipped. Index -1: nothing to show.
+inline constexpr int kDurationToleranceMs = 10000;
+struct Choice {
+    int index = -1;
+    bool synced = false;
+};
+Choice PickLyrics(const std::vector<Candidate>& candidates, int durationMs);
+
+// Plain lyrics as lines without times (timeMs -1): one per line of text, a run of blank lines kept
+// as one blank line (verses stay apart), none at either end.
+std::vector<Line> PlainLines(const std::wstring& text);
+
+// The lyrics cache file's text and back. "#plain" on the first line marks plain lyrics; a file
+// without it (every file written before) is synced lines, "time<TAB>text".
+std::wstring SerializeCache(const std::vector<Line>& lines, bool synced);
+bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced);
 
 // Parses LRC text ("[mm:ss.xx]line", repeatable and multi-timestamp tags) into
 // sorted, timestamped lines. Exposed for tests; not used outside this module at

@@ -29,7 +29,7 @@ const wchar_t* LyricsWidget::PanelTitle() const { return TR(LyricsTitle); }
 float LyricsWidget::PreferredContentHeight(float /*logicalWidth*/) const {
     if (m_state != State::Ready) return kLineHeight * 2.0f;
     int shown = std::min<int>(kMaxVisibleLines, static_cast<int>(m_lines.size()));
-    return kHeaderHeight + static_cast<float>(shown) * kLineHeight;
+    return HeaderHeight() + static_cast<float>(shown) * kLineHeight;
 }
 
 void LyricsWidget::Draw(IPanelPainter& painter, float width, float /*contentHeight*/) {
@@ -53,27 +53,43 @@ void LyricsWidget::Draw(IPanelPainter& painter, float width, float /*contentHeig
         return;
     }
 
-    painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kHeaderHeight),
-                      m_trackKey.c_str(), true);
+    painter.DrawLabel(D2D1::RectF(kPaddingX, 0.0f, width - kPaddingX, kHeaderHeight), m_trackKey.c_str(), true);
+    // Plain lyrics say so, on a line of their own (beside the track it was cut off): there is no
+    // line to light up, only the text, which keeps up with the song as a whole.
+    if (!m_synced) {
+        painter.DrawLabel(D2D1::RectF(kPaddingX, kHeaderHeight, width - kPaddingX, 2.0f * kHeaderHeight),
+                          TR(LyricsNotSyncedNote), true);
+    }
 
-    int total = static_cast<int>(m_lines.size());
-    int shown = std::min(kMaxVisibleLines, total);
+    const int total = static_cast<int>(m_lines.size());
+    const int shown = std::min(kMaxVisibleLines, total);
+    const int start = FirstShownLine();
+    for (int i = 0; i < shown; ++i) {
+        const int idx = start + i;
+        const float y = HeaderHeight() + static_cast<float>(i) * kLineHeight;
+        // Synced: the current line bright, the rest muted. Plain: all of it plain text.
+        const bool muted = m_synced && idx != m_currentLine;
+        painter.DrawLabel(D2D1::RectF(kPaddingX, y, width - kPaddingX, y + kLineHeight), m_lines[idx].text.c_str(),
+                          muted);
+    }
+}
 
+int LyricsWidget::FirstShownLine() const {
+    const int total = static_cast<int>(m_lines.size());
+    const int shown = std::min(kMaxVisibleLines, total);
+    const int last = std::max(0, total - shown);
+    if (!m_synced) {
+        if (m_durationMs <= 0) return 0;
+        const double through = std::clamp(static_cast<double>(m_positionMs) / m_durationMs, 0.0, 1.0);
+        return std::clamp(static_cast<int>(through * last + 0.5), 0, last);
+    }
     // Centre the window on the current line, but only scroll once the current
     // line has actually left the comfortable middle of the view - otherwise the
     // whole block would creep upward one line at a time for the whole song.
     int desired = m_currentLine - kLinesBeforeCurrent;
     if (m_currentLine <= kLinesBeforeCurrent) desired = 0;
     if (m_currentLine >= total - kLinesAfterCurrent) desired = total - kLinesAfterCurrent;
-    int start = std::clamp(desired, 0, std::max(0, total - shown));
-
-    for (int i = 0; i < shown; ++i) {
-        int idx = start + i;
-        float y = kHeaderHeight + static_cast<float>(i) * kLineHeight;
-        bool isCurrent = (idx == m_currentLine);
-        painter.DrawLabel(D2D1::RectF(kPaddingX, y, width - kPaddingX, y + kLineHeight),
-                          m_lines[idx].text.c_str(), !isCurrent);
-    }
+    return std::clamp(desired, 0, last);
 }
 
 void LyricsWidget::OnPanelOpening(HWND ownerHwnd) {
@@ -99,7 +115,9 @@ void LyricsWidget::OnTick() {
 }
 
 void LyricsWidget::UpdateCurrentLine(int positionMs) {
+    m_positionMs = positionMs;
     m_currentLine = -1;
+    if (!m_synced) return; // no times: FirstShownLine follows the position instead
     for (size_t i = 0; i < m_lines.size(); ++i) {
         if (m_lines[i].timeMs <= positionMs) {
             m_currentLine = static_cast<int>(i);
@@ -109,11 +127,12 @@ void LyricsWidget::UpdateCurrentLine(int positionMs) {
     }
 }
 
-void LyricsWidget::ApplyTrack(const std::wstring& trackKey, std::vector<LrcLyrics::Line> lines,
-                              int positionMs) {
-    m_trackKey = trackKey;
-    m_lines = std::move(lines);
-    UpdateCurrentLine(positionMs);
+void LyricsWidget::ApplyTrack(const LrcLyrics::Result& result) {
+    m_trackKey = result.trackKey;
+    m_lines = result.lines;
+    m_synced = result.synced;
+    m_durationMs = result.durationMs;
+    UpdateCurrentLine(result.positionMs);
     m_state = State::Ready;
 }
 
@@ -132,8 +151,9 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 
     if (message == kChangedMessage) {
         // Bare notification: take a fresh sample and let the handler below decide
-        // whether the track actually changed.
-        if (m_owner && m_nowPlayingRequestId == 0) {
+        // whether the track actually changed. Not while the panel is closed: opening it looks
+        // again anyway, and nothing should go to the network for a panel nobody sees.
+        if (m_visible && m_owner && m_nowPlayingRequestId == 0) {
             m_nowPlayingRequestId = m_requests.Begin();
             MediaControls::QueryNowPlaying(m_owner, kNowPlayingMessage, m_nowPlayingRequestId);
         }
@@ -147,8 +167,10 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
         m_fetchRequestId = 0;
 
         if (result->status == LrcLyrics::Status::Success) {
-            ApplyTrack(result->trackKey, std::move(result->lines), result->positionMs);
+            m_failedAt = 0;
+            ApplyTrack(*result);
         } else {
+            m_failedAt = result->status == LrcLyrics::Status::NetworkError ? GetTickCount64() : 0;
             ShowEmpty(result->status);
         }
         return discard();
@@ -176,13 +198,16 @@ void LyricsWidget::OnAsyncResult(UINT message, WPARAM wParam) {
 
         if (m_state == State::Ready && key == m_trackKey) {
             // Same track, just a new position sample: move the highlight and
-            // nothing else.
+            // nothing else. (The length too, if the lookup did not have it: plain lyrics follow it.)
+            if (m_durationMs <= 0 && now->durationMs > 0) m_durationMs = static_cast<int>(now->durationMs);
             UpdateCurrentLine(static_cast<int>(now->positionMs));
             return discard();
         }
 
         // Different track (or the first sample after a failed lookup): fetch
-        // the new lyrics, caching first so a cached track costs no network.
+        // the new lyrics, caching first so a cached track costs no network. After a network
+        // failure, not again for a while: every pause and skip is a change event.
+        if (m_failedAt != 0 && GetTickCount64() - m_failedAt < kRetryAfterFailureMs) return discard();
         m_fetchRequestId = m_requests.Begin();
         LrcLyrics::FetchCurrentLyrics(m_owner, kFetchMessage, m_fetchRequestId);
         return discard();

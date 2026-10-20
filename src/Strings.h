@@ -219,7 +219,8 @@ enum class Language : int {
     X(LyricsTitle, L"Lyrics", L"Letras")                                                                     \
     X(LyricsLooking, L"Looking up lyrics...", L"Buscando la letra...")                                       \
     X(LyricsNothingPlaying, L"Nothing playing right now", L"No se está reproduciendo nada")                  \
-    X(LyricsNone, L"No synced lyrics for this track", L"No hay letra sincronizada para esta pista")          \
+    X(LyricsNone, L"No lyrics for this track", L"No hay letra para esta pista")                              \
+    X(LyricsNotSyncedNote, L"Not synced: scrolls with the song", L"Sin sincronizar: avanza con la canción")  \
     X(LyricsUnreachable, L"Could not reach the lyrics service", L"No se pudo conectar con el servicio de letras") \
     X(LyricsSummaryNothing, L"Lyrics. Nothing to show.", L"Letras. Nada que mostrar.")                       \
     X(LyricsSummaryTrack, L"Lyrics for %ls.", L"Letra de %ls.")                                              \

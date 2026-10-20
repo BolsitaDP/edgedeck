@@ -9,6 +9,7 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cwctype>
 #include <fstream>
 #include <sstream>
@@ -19,11 +20,16 @@ namespace {
 using Manager = winrt::Windows::Media::Control::
     GlobalSystemMediaTransportControlsSessionManager;
 using winrt::Windows::Data::Json::JsonArray;
+using winrt::Windows::Data::Json::JsonValueType;
 
 // How long a "this track has no synced lyrics" answer is trusted before we ask
 // LRCLIB again. Without this, every single panel open on an unsynced track is
 // another HTTP request to a free, volunteer-run public service.
 constexpr long long kNegativeCacheTtlMs = 7LL * 24 * 60 * 60 * 1000;
+// The extension of a "no lyrics" marker. Markers used to end in .none - but the lookup that wrote
+// them threw away every result list whose first record had no synced lyrics, and plain lyrics
+// altogether, so those markers say nothing true and are ignored by being under another name.
+constexpr const wchar_t* kNoLyricsMarker = L".nolyrics";
 
 // A lyrics response is a few KB; anything past this is not a lyrics file and
 // buffering it would just be a way to exhaust memory.
@@ -81,23 +87,56 @@ std::wstring CachePathFor(const std::wstring& trackKey, const wchar_t* extension
     return dir + L"\\" + SanitizeForFilename(trackKey) + extension;
 }
 
-bool ReadCache(const std::wstring& trackKey, std::vector<Line>& outLines) {
-    std::wstring path = CachePathFor(trackKey, L".txt");
-    if (path.empty()) return false;
-    std::wifstream file(path);
-    if (!file) return false;
+std::wstring Utf8ToWide(const std::string& s); // below, with the other text helpers
 
-    std::wstring line;
-    while (std::getline(file, line)) {
-        if (!line.empty() && line.back() == L'\r') line.pop_back();
-        size_t tab = line.find(L'\t');
-        if (tab == std::wstring::npos) continue;
-        outLines.push_back({_wtoi(line.substr(0, tab).c_str()), line.substr(tab + 1)});
+// The cache is UTF-8 text, read and written as bytes. It used to go through std::wofstream in the
+// "C" locale, which cannot write a character outside ASCII: the first accent in a title or a line -
+// "Aragón", "corazón" - failed the write, and Spanish lyrics were never cached at all.
+bool ReadUtf8File(const std::wstring& path, std::wstring& out) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart > 2 * 1024 * 1024) {
+        CloseHandle(file);
+        return false;
     }
-    return !outLines.empty();
+    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    const BOOL ok = bytes.empty() || ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr);
+    CloseHandle(file);
+    if (!ok) return false;
+    bytes.resize(read);
+    out = Utf8ToWide(bytes);
+    return true;
 }
 
-void WriteCache(const std::wstring& trackKey, const std::vector<Line>& lines) {
+bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
+    std::string bytes;
+    if (!text.empty()) {
+        const int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0,
+                                               nullptr, nullptr);
+        if (length <= 0) return false;
+        bytes.assign(static_cast<size_t>(length), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), bytes.data(), length, nullptr,
+                            nullptr);
+    }
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = bytes.empty() || WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
+    CloseHandle(file);
+    return ok && written == bytes.size();
+}
+
+bool ReadCache(const std::wstring& trackKey, std::vector<Line>& outLines, bool& synced) {
+    std::wstring path = CachePathFor(trackKey, L".txt");
+    std::wstring text;
+    if (path.empty() || !ReadUtf8File(path, text)) return false;
+    return ParseCache(text, outLines, synced);
+}
+
+void WriteCache(const std::wstring& trackKey, const std::vector<Line>& lines, bool synced) {
     std::wstring path = CachePathFor(trackKey, L".txt");
     if (path.empty()) return;
 
@@ -105,25 +144,18 @@ void WriteCache(const std::wstring& trackKey, const std::vector<Line>& lines) {
     // halfway through can't leave a half-written lyrics file that would then be
     // served from cache forever.
     std::wstring temp = path + L".tmp";
-    {
-        std::wofstream file(temp, std::ios::trunc);
-        if (!file) return;
-        for (const auto& l : lines) file << l.timeMs << L'\t' << l.text << L'\n';
-        if (!file) {
-            file.close();
-            DeleteFileW(temp.c_str());
-            return;
-        }
+    if (!WriteUtf8File(temp, SerializeCache(lines, synced))) {
+        DeleteFileW(temp.c_str());
+        return;
     }
     if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         DeleteFileW(temp.c_str());
     }
 }
-
 // "we already asked LRCLIB about this track and it had nothing" marker, with the
 // time of the query so the marker can expire.
 bool ReadNegativeCache(const std::wstring& trackKey) {
-    std::wstring path = CachePathFor(trackKey, L".none");
+    std::wstring path = CachePathFor(trackKey, kNoLyricsMarker);
     if (path.empty()) return false;
     std::wifstream file(path);
     if (!file) return false;
@@ -143,7 +175,7 @@ bool ReadNegativeCache(const std::wstring& trackKey) {
 }
 
 void WriteNegativeCache(const std::wstring& trackKey) {
-    std::wstring path = CachePathFor(trackKey, L".none");
+    std::wstring path = CachePathFor(trackKey, kNoLyricsMarker);
     if (path.empty()) return;
     FILETIME ft{};
     GetSystemTimeAsFileTime(&ft);
@@ -288,6 +320,86 @@ std::vector<Line> ParseLrc(const std::wstring& lrc) {
     return lines;
 }
 
+Choice PickLyrics(const std::vector<Candidate>& candidates, int durationMs) {
+    auto distance = [&](const Candidate& c) {
+        // An unknown length on either side matches anything, equally well.
+        if (durationMs <= 0 || c.durationMs <= 0) return 0;
+        return std::abs(c.durationMs - durationMs);
+    };
+    int bestSynced = -1;
+    int bestPlain = -1;
+    int anySynced = -1;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        const Candidate& c = candidates[i];
+        if (c.instrumental) continue;
+        const int index = static_cast<int>(i);
+        if (!c.synced.empty()) {
+            if (anySynced < 0 || distance(c) < distance(candidates[static_cast<size_t>(anySynced)])) anySynced = index;
+            if (distance(c) <= kDurationToleranceMs &&
+                (bestSynced < 0 || distance(c) < distance(candidates[static_cast<size_t>(bestSynced)]))) {
+                bestSynced = index;
+            }
+        }
+        if (!c.plain.empty() &&
+            (bestPlain < 0 || distance(c) < distance(candidates[static_cast<size_t>(bestPlain)]))) {
+            bestPlain = index;
+        }
+    }
+    if (bestSynced >= 0) return {bestSynced, true};
+    if (bestPlain >= 0) return {bestPlain, false};
+    if (anySynced >= 0) return {anySynced, true};
+    return {};
+}
+
+std::vector<Line> PlainLines(const std::wstring& text) {
+    std::vector<Line> lines;
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t end = text.find(L'\n', start);
+        if (end == std::wstring::npos) end = text.size();
+        std::wstring line = text.substr(start, end - start);
+        while (!line.empty() && (line.back() == L'\r' || line.back() == L' ' || line.back() == L'\t')) line.pop_back();
+        const bool blank = line.find_first_not_of(L" \t") == std::wstring::npos;
+        if (!blank) {
+            lines.push_back({-1, line});
+        } else if (!lines.empty() && !lines.back().text.empty()) {
+            lines.push_back({-1, L""});
+        }
+        start = end + 1;
+    }
+    while (!lines.empty() && lines.back().text.empty()) lines.pop_back();
+    return lines;
+}
+
+std::wstring SerializeCache(const std::vector<Line>& lines, bool synced) {
+    std::wstring text = synced ? L"" : L"#plain\n";
+    for (const Line& l : lines) text += std::to_wstring(l.timeMs) + L"\t" + l.text + L"\n";
+    return text;
+}
+
+bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced) {
+    lines.clear();
+    synced = true;
+    size_t start = 0;
+    bool first = true;
+    while (start < text.size()) {
+        size_t end = text.find(L'\n', start);
+        if (end == std::wstring::npos) end = text.size();
+        std::wstring line = text.substr(start, end - start);
+        start = end + 1;
+        if (!line.empty() && line.back() == L'\r') line.pop_back();
+        if (first && line == L"#plain") {
+            synced = false;
+            first = false;
+            continue;
+        }
+        first = false;
+        const size_t tab = line.find(L'\t');
+        if (tab == std::wstring::npos) continue;
+        lines.push_back({_wtoi(line.substr(0, tab).c_str()), line.substr(tab + 1)});
+    }
+    return !lines.empty();
+}
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -432,8 +544,10 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
         auto mediaProps = co_await session.TryGetMediaPropertiesAsync();
         std::wstring title = mediaProps.Title().c_str();
         std::wstring artist = mediaProps.Artist().c_str();
-        result->positionMs =
-            static_cast<int>(session.GetTimelineProperties().Position().count() / 10000);
+        const auto timeline = session.GetTimelineProperties();
+        result->positionMs = static_cast<int>(timeline.Position().count() / 10000);
+        const long long lengthMs = (timeline.EndTime() - timeline.StartTime()).count() / 10000;
+        result->durationMs = lengthMs > 0 ? static_cast<int>(lengthMs) : 0;
 
         if (title.empty()) {
             result->status = Status::NothingPlaying;
@@ -444,7 +558,7 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
         result->trackKey = trackKey;
 
         // Cache hit: done, no network call at all.
-        if (ReadCache(trackKey, result->lines)) {
+        if (ReadCache(trackKey, result->lines, result->synced)) {
             result->status = Status::Success;
             co_return;
         }
@@ -464,38 +578,51 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
             co_return;
         }
 
-        std::wstring synced;
+        // Every record's fields are read one by one, and a field that is missing or JSON null is
+        // simply empty. LRCLIB sends "syncedLyrics": null for a song it has only plain lyrics for,
+        // and the getter with a default throws on a null that is there - which threw away the
+        // whole list whenever its first record had no synced lyrics, and cached "none" for a week.
+        std::vector<Candidate> candidates;
         try {
-            JsonArray candidates = JsonArray::Parse(Utf8ToWide(resp.body));
-            for (auto const& candidate : candidates) {
-                auto obj = candidate.GetObject();
-                if (obj.GetNamedBoolean(L"instrumental", false)) continue;
-                std::wstring s = obj.GetNamedString(L"syncedLyrics", L"").c_str();
-                if (!s.empty()) {
-                    synced = s;
-                    break;
+            const JsonArray list = JsonArray::Parse(Utf8ToWide(resp.body));
+            for (auto const& item : list) {
+                if (item.ValueType() != JsonValueType::Object) continue;
+                const auto obj = item.GetObject();
+                auto text = [&](const wchar_t* name) {
+                    const auto value = obj.TryLookup(name);
+                    return (value && value.ValueType() == JsonValueType::String) ? std::wstring(value.GetString())
+                                                                                 : std::wstring();
+                };
+                Candidate c;
+                c.synced = text(L"syncedLyrics");
+                c.plain = text(L"plainLyrics");
+                if (const auto value = obj.TryLookup(L"instrumental"); value && value.ValueType() == JsonValueType::Boolean) {
+                    c.instrumental = value.GetBoolean();
                 }
+                if (const auto value = obj.TryLookup(L"duration"); value && value.ValueType() == JsonValueType::Number) {
+                    c.durationMs = static_cast<int>(value.GetNumber() * 1000.0);
+                }
+                candidates.push_back(std::move(c));
             }
         } catch (...) {
-            // Malformed or unexpected payload: treat as "nothing found" rather
-            // than as a network failure, and remember that so we don't re-fetch.
-            synced.clear();
+            // Not a JSON array at all: nothing found, rather than a network failure.
+            candidates.clear();
         }
 
-        if (synced.empty()) {
-            WriteNegativeCache(trackKey);
-            result->status = Status::NoLyrics;
-            co_return;
+        const Choice choice = PickLyrics(candidates, result->durationMs);
+        std::vector<Line> lines;
+        if (choice.index >= 0) {
+            const Candidate& picked = candidates[static_cast<size_t>(choice.index)];
+            lines = choice.synced ? ParseLrc(picked.synced) : PlainLines(picked.plain);
         }
-
-        std::vector<Line> lines = ParseLrc(synced);
         if (lines.empty()) {
             WriteNegativeCache(trackKey);
             result->status = Status::NoLyrics;
             co_return;
         }
 
-        WriteCache(trackKey, lines);
+        WriteCache(trackKey, lines, choice.synced);
+        result->synced = choice.synced;
         result->lines = std::move(lines);
         result->status = Status::Success;
     } catch (...) {
