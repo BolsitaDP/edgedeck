@@ -11,6 +11,9 @@
 //   pause.txt      toggles "Pause tabs" / "Resume tabs"
 //   restart.txt    "Restart EdgeDeck": a new copy with the same arguments, then this one exits
 //   editor.txt     opens the quick-actions editor
+//   updates.txt    "Check for updates..." (opens the browser)
+//   report.txt     "Report a problem..." (opens the browser, fills the clipboard)
+//   settings.txt   opens Settings (and from it, with its buttons, the Shortcuts and Layouts windows)
 //
 // usage: apptest <trigger-folder> [flags a restart adds: --restarted-after-crash --previous-pid=N]
 #include "App.h"
@@ -106,6 +109,18 @@ int wmain(int argc, wchar_t** argv) {
             if (GetFileAttributesW((dir + L"\\pause.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\pause.txt").c_str());
                 app.TogglePaused();
+            }
+            if (GetFileAttributesW((dir + L"\\updates.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\updates.txt").c_str());
+                app.OpenReleasesPage();
+            }
+            if (GetFileAttributesW((dir + L"\\report.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\report.txt").c_str());
+                app.ReportProblem();
+            }
+            if (GetFileAttributesW((dir + L"\\settings.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileW((dir + L"\\settings.txt").c_str());
+                app.OpenSettings();
             }
             if (GetFileAttributesW((dir + L"\\editor.txt").c_str()) != INVALID_FILE_ATTRIBUTES) {
                 DeleteFileW((dir + L"\\editor.txt").c_str());

@@ -17,6 +17,12 @@
     Results are noisy at this scale (tens of milliseconds); judge the memory columns and the
     trend over several runs, not one number.
 
+.PARAMETER Widgets
+    The tabs each run has, top to bottom (QuickActions, Media, Volume, Brightness, Lyrics,
+    Displays, Recent). The hover cycles use the first; at the end every tab's panel is opened
+    once, and the memory and handles after that are reported too - what a widget costs shows up
+    the first time its panel opens, not at idle.
+
 .PARAMETER ExeA / ExeB
     The two EdgeDeck.exe files to compare. Typical: the previous build copied aside, and the
     new one. Giving the same file twice is a useful sanity check of the noise floor.
@@ -29,6 +35,7 @@ param(
     [string]$LabelB = 'B',
     [int]$Runs = 3,
     [int]$HoverCycles = 12,
+    [string[]]$Widgets = @('QuickActions', 'QuickActions'),
     [switch]$StopRunningInstance
 )
 $ErrorActionPreference = 'Stop'
@@ -41,22 +48,12 @@ function Measure-Once($label, $exe) {
     $scratch = New-ScratchDir
     $appdata = Join-Path $scratch 'appdata'
     New-Item -ItemType Directory -Path "$appdata\EdgeDeck" -Force | Out-Null
-    Set-Content -Path "$appdata\EdgeDeck\config.txt" -Encoding ASCII -Value @"
-[settings]
-theme=Dark
-[tab]
-widget=QuickActions
-verticalRatio=0.30
-tabWidth=26
-tabHeight=76
-panelWidth=300
-[tab]
-widget=QuickActions
-verticalRatio=0.60
-tabWidth=26
-tabHeight=76
-panelWidth=300
-"@
+    $text = "[settings]`ntheme=Dark`n"
+    for ($w = 0; $w -lt $Widgets.Count; $w++) {
+        $ratio = if ($Widgets.Count -eq 1) { 0.5 } else { 0.15 + 0.7 * $w / ($Widgets.Count - 1) }
+        $text += "[tab]`nwidget=$($Widgets[$w])`nverticalRatio=$($ratio.ToString([Globalization.CultureInfo]::InvariantCulture))`ntabWidth=26`ntabHeight=76`npanelWidth=300`n"
+    }
+    Set-Content -Path "$appdata\EdgeDeck\config.txt" -Encoding ASCII -Value $text
     $real = $env:LOCALAPPDATA; $env:LOCALAPPDATA = $appdata
     try { $proc = Start-Process -FilePath $exe -PassThru } finally { $env:LOCALAPPDATA = $real }
     try {
@@ -77,6 +74,12 @@ panelWidth=300
             }
             Move-Mouse ($primary.R / 2) ($primary.B / 2); Start-Sleep -Milliseconds 700
         }
+        # Every panel once: the cost of what each widget loads the first time it is shown.
+        foreach ($each in @(Get-Wins 'EdgeDeckTabWindow' -ProcessId $proc.Id | Where-Object Visible | Sort-Object T)) {
+            Move-Mouse (($each.L + $each.R) / 2) (($each.T + $each.B) / 2); Start-Sleep -Milliseconds 1500
+            Move-Mouse ($primary.R / 2) ($primary.B / 2); Start-Sleep -Milliseconds 700
+        }
+        Start-Sleep -Seconds 2
         $p.Refresh()
         [pscustomobject]@{
             Build = $label
@@ -87,6 +90,7 @@ panelWidth=300
             WorkingSetEndMB = [math]::Round($p.WorkingSet64 / 1MB, 1)
             Threads = $p.Threads.Count
             Handles = $p.HandleCount
+            PrivateEndMB = [math]::Round($p.PrivateMemorySize64 / 1MB, 1)
         }
     } finally {
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
@@ -109,4 +113,5 @@ $results | Group-Object Build | ForEach-Object {
         ($g | Measure-Object WorkingSetIdleMB -Average).Average, ($g | Measure-Object PrivateIdleMB -Average).Average,
         ($g | Measure-Object WorkingSetEndMB -Average).Average, ($g | Measure-Object Threads -Average).Average,
         ($g | Measure-Object Handles -Average).Average
+    '   private after every panel={0:N1} MB' -f ($g | Measure-Object PrivateEndMB -Average).Average
 }

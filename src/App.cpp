@@ -170,6 +170,7 @@ bool App::Create(HINSTANCE hInstance) {
         Diagnostics::Info("Started from a temporary folder (probably inside a zip)");
         AddStartupNotice(TR(RunningFromTemp));
     } else if (m_firstRun) {
+        Diagnostics::Info("First start on this account: showing the welcome");
         AddStartupNotice(TR(Welcome), false);
     }
     CarryOverDisplayLayouts();

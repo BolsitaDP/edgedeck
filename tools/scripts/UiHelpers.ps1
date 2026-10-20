@@ -69,7 +69,11 @@ function Get-ToolsDir {
     $candidates = @($Override, $scriptToolsDir, $env:EDGEDECK_TOOLS_DIR,
                     (Join-Path $script:RepoRoot 'build-tools\tools\Release'),
                     (Join-Path $script:RepoRoot 'build\tools\Release')) | Where-Object { $_ }
-    foreach ($dir in $candidates) { if (Test-Path -LiteralPath (Join-Path $dir 'apptest.exe')) { return $dir } }
+    # Absolute, always: a tool's path is handed to the test copy (a quick action's target, say),
+    # which resolves a relative one against its own working folder, not this script's.
+    foreach ($dir in $candidates) {
+        if (Test-Path -LiteralPath (Join-Path $dir 'apptest.exe')) { return (Resolve-Path -LiteralPath $dir).Path }
+    }
     throw "The developer tools are not built. Run:`n  cmake -S . -B build-tools -G `"Visual Studio 17 2022`" -A x64 -DEDGEDECK_BUILD_TOOLS=ON -DEDGEDECK_BUILD_TESTS=OFF`n  cmake --build build-tools --config Release"
 }
 
@@ -180,12 +184,16 @@ function Start-TestApp {
                          separated by `n), e.g. @('edge=left', 'edge=left`nmonitor=SAM0F9D').
     .PARAMETER Raw       Text appended to the config after the tabs, as it is - for sections that
                          are not tabs, such as [action] rows for the Quick Actions panel.
+    .PARAMETER ConfigText  The whole config.txt, exactly as given (no [settings] or tabs added) - for a
+                         damaged or foreign file. Overrides -Tabs, -Settings, -TabExtra and -Raw.
+    .PARAMETER Exe       Another apptest.exe to start (a copy elsewhere, say in a temporary folder).
     .PARAMETER FirstRun  Write no config at all: the copy starts as on a machine that never ran
                          EdgeDeck (default tabs, the welcome notification).
     .OUTPUTS   An object with Process, Scratch, AppData, Trigger and Log.
     #>
     param([string[]]$Tabs = @('QuickActions'), [string[]]$Settings = @('theme=Dark'), [string]$ToolsDir,
-          [double]$StartupSeconds = 3, [string[]]$TabExtra = @(), [string]$Raw = '', [switch]$FirstRun)
+          [double]$StartupSeconds = 3, [string[]]$TabExtra = @(), [string]$Raw = '', [switch]$FirstRun,
+          [string]$ConfigText, [string]$Exe)
     $scratch = New-ScratchDir
     $appdata = Join-Path $scratch 'appdata'
     $trigger = Join-Path $scratch 'trig'
@@ -199,6 +207,7 @@ function Start-TestApp {
         if ($i -lt $TabExtra.Count -and $TabExtra[$i]) { $text += $TabExtra[$i] + "`n" }
     }
     if ($Raw) { $text += $Raw.TrimEnd("`n") + "`n" }
+    if ($PSBoundParameters.ContainsKey('ConfigText')) { $text = $ConfigText }
     # UTF-8 without a BOM, which is what the app writes: ASCII would turn an accented name into '?'.
     if (-not $FirstRun) {
         [IO.File]::WriteAllText("$appdata\EdgeDeck\config.txt", $text, (New-Object Text.UTF8Encoding($false)))
@@ -206,7 +215,8 @@ function Start-TestApp {
 
     $real = $env:LOCALAPPDATA
     $env:LOCALAPPDATA = $appdata
-    try { $process = Start-Process -FilePath (Get-Tool apptest $ToolsDir) -ArgumentList "`"$trigger`"" -PassThru }
+    $program = if ($Exe) { $Exe } else { Get-Tool apptest $ToolsDir }
+    try { $process = Start-Process -FilePath $program -ArgumentList "`"$trigger`"" -PassThru }
     finally { $env:LOCALAPPDATA = $real }
     Start-Sleep -Seconds $StartupSeconds
     [pscustomobject]@{ Process = $process; Scratch = $scratch; AppData = $appdata; Trigger = $trigger
