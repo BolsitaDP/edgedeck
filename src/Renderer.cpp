@@ -44,11 +44,8 @@ IDWriteFactory* DWriteFactoryPtr() {
 // trimming DirectWrite clips the string wherever the layout box runs out, which
 // lands mid-glyph and reads as a rendering bug. Word granularity drops the
 // overflow a whole word at a time, so a long label degrades into a shorter true
-// one instead of nonsense.
-//
-// A trailing ellipsis would need a custom IDWriteInlineObject, which is a lot
-// of COM for a cosmetic detail, and DWRITE_TRIMMING's own `delimiter` field is
-// a *leading* marker (meant for path-style truncation), so it cannot do the job.
+// one instead of nonsense, and the ellipsis DirectWrite provides says that it
+// did: without it "Artist - Son Al" reads as the whole title.
 IDWriteTextFormat* MakeFormat(float sizePx, DWRITE_FONT_WEIGHT weight, bool centered,
                               const wchar_t* family = L"Segoe UI") {
     if (!DWriteFactoryPtr()) return nullptr;
@@ -63,7 +60,10 @@ IDWriteTextFormat* MakeFormat(float sizePx, DWRITE_FONT_WEIGHT weight, bool cent
     if (centered) f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
 
     const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_WORD, 0, L'\0'};
-    f->SetTrimming(&trimming, nullptr);
+    // The sign is made for this format's font and size, and lives as long as it.
+    ComPtr<IDWriteInlineObject> ellipsis;
+    DWriteFactoryPtr()->CreateEllipsisTrimmingSign(f.Get(), ellipsis.GetAddressOf());
+    f->SetTrimming(&trimming, ellipsis.Get());
     f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
     // Deliberately leaked: one set of formats per size for the life of the
