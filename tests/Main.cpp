@@ -24,6 +24,7 @@ void RunDisplayLayoutsTests();
 void RunBugReportTests();
 void RunLaptopBrightnessTests();
 void RunCrashTests();
+void RunAppNameTests();
 
 int wmain() {
     // The suites read and write the config file and the log under %LOCALAPPDATA%\EdgeDeck. They
@@ -47,7 +48,7 @@ int wmain() {
                             RunNoticeTests,      RunAutostartTests,   RunFullscreenTests, RunPlacementTests,
                             RunIconTests,        RunQuickActionTests, RunActionIconTests, RunRecentFilesTests,
                             RunStringsTests,     RunShortcutsTests,   RunDisplayLayoutsTests, RunBugReportTests, RunLaptopBrightnessTests,
-                            RunCrashTests};
+                            RunAppNameTests,     RunCrashTests};
     bool first = true;
     for (const Suite suite : suites) {
         if (!first) std::printf("\n");

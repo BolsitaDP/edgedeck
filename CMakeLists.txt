@@ -126,6 +126,8 @@ add_executable(EdgeDeck WIN32
     src/Actions.cpp
     src/Actions.h
     src/MediaControls.cpp
+    src/AppName.cpp
+    src/AppName.h
     src/MediaControls.h
     res/EdgeDeck.rc
 )
@@ -164,6 +166,7 @@ target_link_libraries(EdgeDeck PRIVATE
     uuid
     wbemuuid
     avrt
+    version
 )
 if (MSVC)
     # /utf-8 pins the source and execution character sets, so a stray non-ASCII

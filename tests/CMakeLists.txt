@@ -24,7 +24,9 @@ add_executable(EdgeDeckTests
     DisplayLayoutsTests.cpp
     BugReportTests.cpp
     LaptopBrightnessTests.cpp
+    AppNameTests.cpp
     ${CMAKE_SOURCE_DIR}/src/ActionIcons.cpp
+    ${CMAKE_SOURCE_DIR}/src/AppName.cpp
     ${CMAKE_SOURCE_DIR}/src/BugReport.cpp
     ${CMAKE_SOURCE_DIR}/src/LaptopBrightness.cpp
     ${CMAKE_SOURCE_DIR}/src/RecentFiles.cpp
@@ -77,6 +79,7 @@ target_link_libraries(EdgeDeckTests PRIVATE
     shlwapi
     shcore
     wbemuuid
+    version
 )
 
 if (MSVC)

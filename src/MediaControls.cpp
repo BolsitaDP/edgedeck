@@ -1,3 +1,4 @@
+#include "AppName.h"
 #include "Diagnostics.h"
 #include "Strings.h"
 #include "MediaControls.h"
@@ -39,24 +40,10 @@ public:
     WinRTSession session{nullptr};
 };
 
-// AUMIDs are sometimes a plain exe path ("C:\...\Spotify.exe"), sometimes a
-// package family id. Trim what's easy so classic desktop apps show a clean
-// name; anything else is shown close to as-is rather than guessed at.
-std::wstring PrettyName(winrt::hstring const& aumid) {
-    std::wstring name{aumid.c_str(), aumid.size()};
-    size_t slash = name.find_last_of(L"\\/");
-    if (slash != std::wstring::npos) name = name.substr(slash + 1);
-    if (name.size() > 4 && name.compare(name.size() - 4, 4, L".exe") == 0) {
-        name = name.substr(0, name.size() - 4);
-    }
-    return name.empty() ? std::wstring(TR(MediaTitle)) : name;
-}
-
 SessionInfo DescribeSession(WinRTSession const& session) {
     SessionInfo info;
     winrt::hstring aumid = session.SourceAppUserModelId();
     info.sourceId.assign(aumid.c_str(), aumid.size());
-    info.displayName = PrettyName(aumid);
 
     auto controls = session.GetPlaybackInfo().Controls();
     info.canPrevious = controls.IsPreviousEnabled();
@@ -311,6 +298,11 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
                 }
             } catch (...) {
             }
+            // After the title: for an app that only says it embeds Chromium, the title is what
+            // tells which running app it is.
+            SessionInfo& info = list->infos.back();
+            info.displayName = AppName::Resolve(info.sourceId, info.title);
+            if (info.displayName.empty()) info.displayName = TR(MediaTitle);
 
             list->handles.push_back(std::make_shared<ConcreteSessionHandle>(session));
         }

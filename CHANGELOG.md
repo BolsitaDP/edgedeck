@@ -16,6 +16,8 @@ The first public version. EdgeDeck so far:
   Lyrics (LRCLIB).
 - Lyrics follow the song line by line where LRCLIB has them synced, and otherwise show the plain
   lyrics, scrolling with the song; of several versions, the one as long as the track playing.
+- Media names each app as you know it, including those that only tell Windows they embed Chromium
+  (Spotify).
 - Displays: switch which monitors are on, between layouts you save (up to nine, each with a
   shortcut) or, with none saved, all monitors and each one alone. An existing setup's four fixed
   layouts are carried over as saved ones.
