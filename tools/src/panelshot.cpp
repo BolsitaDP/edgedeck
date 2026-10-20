@@ -3,14 +3,21 @@
 // to arrive, and the pixels it drew are composed over a plain colour and written as a BMP.
 //
 // usage: panelshot <widget> <dark|light> <out.bmp> [lang=en|es] [bg=RRGGBB] [wait=MS] [width=N]
-//                  [recent=FOLDER] [pinned]
+//                  [recent=FOLDER] [pinned] [press=X,Y ...] [appdata=FOLDER]
 //   widget: QuickActions, Media, Volume, Brightness, Lyrics, Displays, Recent
+//   press:  a click at X,Y in the panel's pixels, after the wait and before the picture - the
+//           panel's own mouse messages, so a button can be tried without a pointer. Repeatable;
+//           each is followed by a moment for what it started.
+//   appdata: the folder to use as LOCALAPPDATA, kept afterwards - so a second run finds what the
+//           first one saved (the lyrics cache, a timing correction). Default: a scratch folder,
+//           removed at the end.
 //
 // Run it through deskrun and the windows live on a desktop nobody sees: no tab appears on the
 // screen in use, nothing takes the focus and the cursor is not touched - so it runs while someone
 // works, and makes the README's pictures. LOCALAPPDATA is pointed at a scratch folder first, so it
 // reads no one's settings and writes no one's log. The data is this machine's: what is playing,
 // the audio devices, the monitors.
+#include "App.h"
 #include "BrightnessWidget.h"
 #include "Config.h"
 #include "DisplayWidget.h"
@@ -91,6 +98,30 @@ bool WriteComposited(const wchar_t* path, const std::vector<std::uint8_t>& bgra,
     return true;
 }
 
+// This thread's panel window: the one the tab made.
+HWND FindPanel() {
+    HWND found = nullptr;
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hwnd, LPARAM param) -> BOOL {
+            wchar_t name[64];
+            if (GetClassNameW(hwnd, name, 64) && wcscmp(name, kPanelClassName) == 0) {
+                *reinterpret_cast<HWND*>(param) = hwnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
+void Press(HWND panel, int x, int y) {
+    const LPARAM at = MAKELPARAM(x, y);
+    SendMessageW(panel, WM_MOUSEMOVE, 0, at);
+    SendMessageW(panel, WM_LBUTTONDOWN, MK_LBUTTON, at);
+    SendMessageW(panel, WM_LBUTTONUP, 0, at);
+}
+
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -101,9 +132,17 @@ int wmain(int argc, wchar_t** argv) {
     }
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // No one's settings or log: a scratch folder of its own.
+    // No one's settings or log: a scratch folder of its own, or the one asked for.
     std::error_code ec;
-    const auto scratch = std::filesystem::temp_directory_path(ec) / (L"edgedeck-panelshot-" + std::to_wstring(GetCurrentProcessId()));
+    std::filesystem::path scratch =
+        std::filesystem::temp_directory_path(ec) / (L"edgedeck-panelshot-" + std::to_wstring(GetCurrentProcessId()));
+    bool keepAppData = false;
+    for (int i = 4; i < argc; ++i) {
+        if (wcsncmp(argv[i], L"appdata=", 8) == 0) {
+            scratch = argv[i] + 8;
+            keepAppData = true;
+        }
+    }
     std::filesystem::create_directories(scratch, ec);
     SetEnvironmentVariableW(L"LOCALAPPDATA", scratch.c_str());
 
@@ -114,7 +153,13 @@ int wmain(int argc, wchar_t** argv) {
     DWORD wait = 1500;
     float width = 0.0f;
     bool pinned = false;
+    std::vector<POINT> presses;
     for (int i = 4; i < argc; ++i) {
+        if (wcsncmp(argv[i], L"press=", 6) == 0) {
+            int x = 0;
+            int y = 0;
+            if (swscanf_s(argv[i] + 6, L"%d,%d", &x, &y) == 2) presses.push_back({x, y});
+        }
         if (wcsncmp(argv[i], L"lang=", 5) == 0) Strings::SetCurrent(Strings::FromCode(argv[i] + 5));
         if (wcsncmp(argv[i], L"bg=", 3) == 0) {
             const unsigned long rgb = wcstoul(argv[i] + 3, nullptr, 16);
@@ -146,6 +191,13 @@ int wmain(int argc, wchar_t** argv) {
         if (tab.Create(instance)) {
             tab.RequestOpen();
             Pump(wait); // the slide, and the widget's first answers (icons, sessions, devices)
+            if (HWND panel = presses.empty() ? nullptr : FindPanel()) {
+                for (const POINT& at : presses) {
+                    Press(panel, at.x, at.y);
+                    wprintf(L"pressed %ld,%ld\n", at.x, at.y);
+                    Pump(400);
+                }
+            }
             std::vector<std::uint8_t> pixels;
             UINT w = 0;
             UINT h = 0;
@@ -159,6 +211,6 @@ int wmain(int argc, wchar_t** argv) {
     }
     Tab::UnregisterClasses();
     CoUninitialize();
-    std::filesystem::remove_all(scratch, ec);
+    if (!keepAppData) std::filesystem::remove_all(scratch, ec);
     return result;
 }

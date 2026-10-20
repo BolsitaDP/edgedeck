@@ -51,6 +51,11 @@ target_link_libraries(fullscreenwin PRIVATE user32 gdi32)
 edgedeck_tool(panelshot src/panelshot.cpp ${core_sources})
 target_link_libraries(panelshot PRIVATE ${core_libs})
 
+# The same panels opened and closed over and over, with what the process holds written after each
+# round: memory that settles versus memory that grows with use.
+edgedeck_tool(panelsoak src/panelsoak.cpp ${core_sources})
+target_link_libraries(panelsoak PRIVATE ${core_libs})
+
 # Runs a program on a desktop nobody sees, so a window can be drawn and captured (settingsharness
 # shot=...) without appearing on, or taking the focus from, the one in use.
 edgedeck_tool(deskrun src/deskrun.cpp)
