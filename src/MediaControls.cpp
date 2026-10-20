@@ -2,6 +2,7 @@
 #include "Diagnostics.h"
 #include "Strings.h"
 #include "MediaControls.h"
+#include "MediaPosition.h"
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -53,7 +54,7 @@ SessionInfo DescribeSession(WinRTSession const& session) {
                      GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
 
     auto timeline = session.GetTimelineProperties();
-    info.positionMs = timeline.Position().count() / 10000;
+    info.positionMs = MediaPosition::NowMs(session);
     info.durationMs = timeline.EndTime().count() / 10000;
     return info;
 }
@@ -367,7 +368,7 @@ winrt::fire_and_forget QueryNowPlayingAsync(HWND notifyWindow, UINT notifyMessag
             now->sourceId.assign(aumid.c_str(), aumid.size());
             now->isPlaying = session.GetPlaybackInfo().PlaybackStatus() ==
                              GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-            now->positionMs = session.GetTimelineProperties().Position().count() / 10000;
+            now->positionMs = MediaPosition::NowMs(session);
             now->durationMs = session.GetTimelineProperties().EndTime().count() / 10000;
 
             auto props = co_await session.TryGetMediaPropertiesAsync();

@@ -1,4 +1,5 @@
 #include "LrcLyrics.h"
+#include "MediaPosition.h"
 #include "Version.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -545,7 +546,7 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
         std::wstring title = mediaProps.Title().c_str();
         std::wstring artist = mediaProps.Artist().c_str();
         const auto timeline = session.GetTimelineProperties();
-        result->positionMs = static_cast<int>(timeline.Position().count() / 10000);
+        result->positionMs = static_cast<int>(MediaPosition::NowMs(session));
         const long long lengthMs = (timeline.EndTime() - timeline.StartTime()).count() / 10000;
         result->durationMs = lengthMs > 0 ? static_cast<int>(lengthMs) : 0;
 

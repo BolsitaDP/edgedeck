@@ -6,6 +6,7 @@
 #include "TestHarness.h"
 
 #include "LrcLyrics.h"
+#include "MediaPosition.h"
 
 #include <string>
 #include <vector>
@@ -180,12 +181,25 @@ void TestCacheRoundTrip() {
 
 } // namespace
 
+void TestPositionCatchesUp() {
+    TEST("Position: a playing track's reported position is moved on by the time since the report");
+    // Spotify reports every 4-5 s; read as is, the position was that far behind.
+    CHECK_EQ(MediaPosition::NowMs(74400, 3400, 148608, true), 77800LL);
+    CHECK_EQ(MediaPosition::NowMs(74400, 3400, 148608, false), 74400LL); // paused: it is where it was
+    CHECK_EQ(MediaPosition::NowMs(147000, 5000, 148608, true), 148608LL); // not past the end
+    CHECK_EQ(MediaPosition::NowMs(10000, 5000, 0, true), 15000LL);        // a stream has no end
+    CHECK_EQ(MediaPosition::NowMs(10000, -200, 148608, true), 10000LL);   // a report from the future
+    CHECK_EQ(MediaPosition::NowMs(10000, 7LL * 60 * 60 * 1000, 0, true), 10000LL); // no report time
+    CHECK_EQ(MediaPosition::NowMs(-1, 3000, 0, true), -1LL);              // no position at all
+}
+
 void RunLyricsTests() {
     TestPickPrefersSyncedOfTheSameLength();
     TestPickFallsBackToPlain();
     TestPickSkipsInstrumentalAndEmpty();
     TestPlainLines();
     TestCacheRoundTrip();
+    TestPositionCatchesUp();
     TestSimpleLine();
     TestFractionDigits();
     TestRepeatedTimestamp();
