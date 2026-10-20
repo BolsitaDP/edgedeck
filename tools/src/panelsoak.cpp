@@ -4,7 +4,10 @@
 // (RequestOpen, as a keyboard shortcut does), lets its data arrive, and closes it with Escape.
 //
 // usage: panelsoak <out.csv> [rounds=N] [open=MS] [closed=MS] [every=N] [widgets=A,B,...]
+//                  [heap=FILE]
 //   widgets: QuickActions, Media, Volume, Brightness, Lyrics, Displays, Recent (default: all)
+//   heap:    also writes, at each sample, how many blocks of each size the process heap holds -
+//            two samples apart, the sizes whose count keeps rising are what is being kept.
 //
 // Run it through deskrun: the windows live on a desktop nobody sees, so it runs while someone
 // works - nothing appears, nothing takes the focus, the cursor is not touched. LOCALAPPDATA is a
@@ -13,7 +16,9 @@
 // track, then reads its cache.
 //
 // The CSV has one line per sample: round, private and working-set KB, handles, GDI and USER
-// objects, threads.
+// objects, threads; then where the private memory is: committed in the process heaps (busy and
+// free), and committed private memory in all (the rest is stacks, and what libraries such as
+// Direct2D and WinRT reserve for themselves).
 #include "App.h"
 #include "BrightnessWidget.h"
 #include "Config.h"
@@ -35,6 +40,7 @@
 #include <cstdio>
 #include <cwchar>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -98,6 +104,27 @@ int ThreadCount() {
     return count;
 }
 
+// Bytes in use and committed across the process heaps, and committed private memory overall.
+void Where(size_t& heapBusy, size_t& heapCommitted, size_t& privateCommitted) {
+    heapBusy = heapCommitted = privateCommitted = 0;
+    HANDLE heaps[64];
+    const DWORD heapCount = std::min<DWORD>(GetProcessHeaps(64, heaps), 64);
+    for (DWORD h = 0; h < heapCount; ++h) {
+        if (!HeapLock(heaps[h])) continue;
+        PROCESS_HEAP_ENTRY entry{};
+        while (HeapWalk(heaps[h], &entry)) {
+            if (entry.wFlags & PROCESS_HEAP_REGION) heapCommitted += entry.Region.dwCommittedSize;
+            else if (entry.wFlags & PROCESS_HEAP_ENTRY_BUSY) heapBusy += entry.cbData;
+        }
+        HeapUnlock(heaps[h]);
+    }
+    MEMORY_BASIC_INFORMATION info{};
+    for (const char* at = nullptr; VirtualQuery(at, &info, sizeof(info)) == sizeof(info);
+         at = static_cast<const char*>(info.BaseAddress) + info.RegionSize) {
+        if (info.State == MEM_COMMIT && info.Type == MEM_PRIVATE) privateCommitted += info.RegionSize;
+    }
+}
+
 void Sample(FILE* out, int round) {
     PROCESS_MEMORY_COUNTERS_EX memory{};
     memory.cb = sizeof(memory);
@@ -106,8 +133,30 @@ void Sample(FILE* out, int round) {
     GetProcessHandleCount(GetCurrentProcess(), &handles);
     const DWORD gdi = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
     const DWORD user = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
-    fprintf(out, "%d,%zu,%zu,%lu,%lu,%lu,%d\n", round, memory.PrivateUsage / 1024, memory.WorkingSetSize / 1024,
-            handles, gdi, user, ThreadCount());
+    size_t heapBusy = 0;
+    size_t heapCommitted = 0;
+    size_t privateCommitted = 0;
+    Where(heapBusy, heapCommitted, privateCommitted);
+    fprintf(out, "%d,%zu,%zu,%lu,%lu,%lu,%d,%zu,%zu,%zu\n", round, memory.PrivateUsage / 1024,
+            memory.WorkingSetSize / 1024, handles, gdi, user, ThreadCount(), heapBusy / 1024, heapCommitted / 1024,
+            privateCommitted / 1024);
+    fflush(out);
+}
+
+// Busy blocks of every heap of the process, counted by size: "round,size,count" lines.
+void SampleHeap(FILE* out, int round) {
+    std::map<size_t, size_t> counts;
+    HANDLE heaps[64];
+    const DWORD heapCount = std::min<DWORD>(GetProcessHeaps(64, heaps), 64);
+    for (DWORD h = 0; h < heapCount; ++h) {
+        if (!HeapLock(heaps[h])) continue;
+        PROCESS_HEAP_ENTRY entry{};
+        while (HeapWalk(heaps[h], &entry)) {
+            if (entry.wFlags & PROCESS_HEAP_ENTRY_BUSY) ++counts[entry.cbData];
+        }
+        HeapUnlock(heaps[h]);
+    }
+    for (const auto& [size, count] : counts) fprintf(out, "%d,%zu,%zu\n", round, size, count);
     fflush(out);
 }
 
@@ -142,6 +191,7 @@ int wmain(int argc, wchar_t** argv) {
     DWORD openMs = 700;
     DWORD closedMs = 300;
     int every = 5;
+    FILE* heapOut = nullptr;
     std::vector<std::wstring> names = {L"QuickActions", L"Media", L"Volume", L"Brightness",
                                        L"Lyrics",       L"Displays", L"Recent"};
     for (int i = 2; i < argc; ++i) {
@@ -150,12 +200,13 @@ int wmain(int argc, wchar_t** argv) {
         if (wcsncmp(argv[i], L"closed=", 7) == 0) closedMs = static_cast<DWORD>(_wtoi(argv[i] + 7));
         if (wcsncmp(argv[i], L"every=", 6) == 0) every = std::max(1, _wtoi(argv[i] + 6));
         if (wcsncmp(argv[i], L"widgets=", 8) == 0) names = Split(argv[i] + 8);
+        if (wcsncmp(argv[i], L"heap=", 5) == 0) heapOut = _wfsopen(argv[i] + 5, L"w", _SH_DENYWR);
     }
 
     // Shared for reading, so a long run can be looked at while it goes.
     FILE* out = _wfsopen(argv[1], L"w", _SH_DENYWR);
     if (!out) return 3;
-    fprintf(out, "round,private_kb,ws_kb,handles,gdi,user,threads\n");
+    fprintf(out, "round,private_kb,ws_kb,handles,gdi,user,threads,heap_busy_kb,heap_commit_kb,private_commit_kb\n");
 
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 3;
     Config::SetCurrentThemeMode(ThemeMode::Dark);
@@ -187,6 +238,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         Pump(500);
         Sample(out, 0);
+        if (heapOut) SampleHeap(heapOut, 0);
 
         for (int round = 1; round <= rounds; ++round) {
             for (size_t i = 0; i < tabs.size(); ++i) {
@@ -195,13 +247,17 @@ int wmain(int argc, wchar_t** argv) {
                 SendMessageW(panels[i], WM_KEYDOWN, VK_ESCAPE, 0);
                 Pump(closedMs);
             }
-            if (round % every == 0 || round == rounds) Sample(out, round);
+            if (round % every == 0 || round == rounds) {
+                Sample(out, round);
+                if (heapOut) SampleHeap(heapOut, round);
+            }
         }
         wprintf(L"panelsoak: %d rounds of %zu panels\n", rounds, tabs.size());
     }
     Tab::UnregisterClasses();
     CoUninitialize();
     fclose(out);
+    if (heapOut) fclose(heapOut);
     std::filesystem::remove_all(scratch, ec);
     return result;
 }
