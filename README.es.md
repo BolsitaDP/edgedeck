@@ -6,8 +6,8 @@
 *[Read in English](README.md)*
 
 EdgeDeck pone pestañas pequeñas en el borde de la pantalla. Deja el puntero sobre una y se desliza
-un panel: lanzadores, controles de reproducción, volumen, brillo de los monitores, letras
-sincronizadas, disposiciones de pantallas, tus últimas descargas. Aparta el puntero y vuelve a su
+un panel: lanzadores, controles de reproducción, volumen, brillo de los monitores, letras de
+canciones, disposiciones de pantallas, tus últimas descargas. Aparta el puntero y vuelve a su
 sitio.
 
 Es una utilidad nativa de Windows escrita en C++ con Win32 y Direct2D —sin Electron, sin web view,
@@ -37,7 +37,7 @@ puedes tener varias del mismo tipo, en el borde izquierdo o derecho de cualquier
 | **Multimedia** | Cada app que está reproduciendo algo —Spotify, una pestaña del navegador, VLC— con anterior, reproducir/pausa y siguiente. |
 | **Volumen** | Un deslizador y un botón de silencio por cada dispositivo de salida de audio. |
 | **Brillo** | Un deslizador de brillo por cada monitor externo compatible con DDC/CI, y para la pantalla integrada de un portátil. |
-| **Letras** | La letra sincronizada de lo que suene, de LRCLIB. |
+| **Letras** | La letra de lo que suene, de LRCLIB: línea a línea al ritmo de la canción donde LRCLIB la tiene sincronizada, y si no, el texto sin más, que avanza con la canción. |
 | **Pantallas** | Un clic para cambiar qué monitores están encendidos. Guarda tus propias disposiciones (por ejemplo "monitores del escritorio" o "solo la TV") en **Disposiciones...**; sin ninguna guardada ofrece todos los monitores y cada uno solo. |
 
 ## Instalación

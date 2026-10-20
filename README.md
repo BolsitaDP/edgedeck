@@ -6,7 +6,7 @@
 *[Leer en español](README.es.md)*
 
 EdgeDeck puts small tabs on the edge of your screen. Rest the pointer on one and a panel slides
-out: launchers, media controls, volume, monitor brightness, synced lyrics, display layouts, your
+out: launchers, media controls, volume, monitor brightness, song lyrics, display layouts, your
 newest downloads. Move away and it slides back.
 
 It is a native Windows utility written in C++ with Win32 and Direct2D - no Electron, no web view,
@@ -36,7 +36,7 @@ several of the same kind, on the left or right edge of any monitor.
 | **Media** | Every app that is playing something - Spotify, a browser tab, VLC - with previous, play/pause and next. |
 | **Volume** | A slider and a mute button for each audio output device. |
 | **Brightness** | A brightness slider for each external monitor that supports DDC/CI, and for a laptop's built-in screen. |
-| **Lyrics** | Synced lyrics for whatever is playing, from LRCLIB. |
+| **Lyrics** | The lyrics of whatever is playing, from LRCLIB: line by line in time with the song where LRCLIB has them synced, otherwise the plain text, scrolling as the song goes. |
 | **Displays** | One click to switch which monitors are on. Save your own layouts (for example "desk monitors" or "just the TV") in **Layouts...**; with none saved it offers all monitors and each one alone. |
 
 ## Install

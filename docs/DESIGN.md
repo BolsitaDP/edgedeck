@@ -139,6 +139,13 @@ assumed. `DragAcceptFiles` does not do that for child controls.
 (`CurrentSessionChanged`, `SessionsChanged`) and each session's (`PlaybackInfoChanged`,
 `MediaPropertiesChanged`), so starting, pausing or skipping updates an open panel at once.
 
+A session names its app only by an AUMID. Windows' ways of turning one into the Start menu name
+(the shell's AppsFolder, WinRT's `AppInfo`) cost 8-13 MB of working set, so `AppName` reads the id
+for what it says instead: an executable's own file description, Chrome and Edge, a packaged app's
+name. Recent Spotify versions, like any app with Chromium embedded, report the id every such app
+shares, `Chromium.<hash of the user>`; for that one the running programs with a libcef.dll beside
+them are looked at, once per app.
+
 **Brightness** shows the value live while dragging, but writes DDC/CI once, on release: several
 monitors keep brightness in non-volatile memory. A rejected write puts the row back to the last value
 the hardware confirmed. Core Audio volume is an in-process call, so the volume slider writes on every
@@ -153,8 +160,12 @@ the EDID id in both names, or, with exactly one of each, taken as that one (`Lap
 
 **Lyrics** come from LRCLIB over one shared WinHTTP session with keep-alive and explicit timeouts
 (5 s resolve/connect/send, 8 s receive - WinHTTP's defaults are about 60 s, enough to hold a pool
-thread a minute), a 4 MB response cap, and a local cache (`lyrics_cache`); "no lyrics" is cached for
-7 days so a free public service is not asked again at every panel open.
+thread a minute), a 4 MB response cap, and a local cache (`lyrics_cache`, UTF-8); "no lyrics" is
+cached for 7 days so a free public service is not asked again at every panel open. Of the search's
+results, the synced lyrics closest to the track's length (within 10 s) win, then plain lyrics,
+which scroll in proportion to the position and say they are not synced. LRCLIB sends a missing
+version as `null`, which WinRT's `GetNamedString` throws on even with a default - every field is
+read with `TryLookup` and its type checked.
 
 **Displays.** A layout is a name and the EDID ids of the monitors it leaves on; every other
 connected monitor is switched off (`DisplayLayouts`). They are the user's, saved as `[layout]`
