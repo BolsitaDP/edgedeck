@@ -522,6 +522,10 @@ void Tab::BeginOpen() {
     if (m_widget) {
         m_widget->SetHovered(-1);
         m_widget->OnPanelOpening(m_tabHwnd);
+        // A widget that reads its data right here (Volume lists its devices) has its height now;
+        // only an asynchronous answer used to resize the panel, so Volume opened as tall as its
+        // "Checking audio..." line and showed one device of six.
+        ResizePanelToContent();
     }
 
     m_animFromX = m_panelClosedXPx;
@@ -915,6 +919,7 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (wParam == kTimerTick) {
                 if (m_widget && (m_state == State::Open || m_state == State::Opening)) {
                     m_widget->OnTick();
+                    ResizePanelToContent(); // a no-op unless the content's height changed
                     if (m_panelHwnd) InvalidateRect(m_panelHwnd, nullptr, FALSE);
                 }
                 return 0;
@@ -1074,6 +1079,7 @@ LRESULT Tab::HandlePanelMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 // tab it stays open, and it closes only once the cursor leaves
                 // (or never, if pinned).
                 m_widget->Activate(hit, m_tabHwnd);
+                ResizePanelToContent();
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
