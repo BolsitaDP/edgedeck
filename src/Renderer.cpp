@@ -1044,6 +1044,30 @@ void Renderer::DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) 
                        muted ? m_secondaryTextBrush.Get() : m_primaryTextBrush.Get());
 }
 
+float Renderer::DrawTag(D2D1_RECT_F rect, const wchar_t* text) {
+    if (!m_target || !DWriteFactoryPtr() || !DetailFormat()) return rect.right;
+    // Measured, so the tag is as wide as its word in any language. A layout per call is fine: the
+    // panel is painted on a change, not continuously.
+    ComPtr<IDWriteTextLayout> layout;
+    if (FAILED(DWriteFactoryPtr()->CreateTextLayout(text, static_cast<UINT32>(wcslen(text)), DetailFormat(),
+                                                    rect.right - rect.left, rect.bottom - rect.top,
+                                                    layout.GetAddressOf()))) {
+        return rect.right;
+    }
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+
+    constexpr float kPadX = 7.0f;
+    constexpr float kHeight = 18.0f;
+    const float width = std::min(metrics.width + 2.0f * kPadX, rect.right - rect.left);
+    const float cy = (rect.top + rect.bottom) / 2.0f;
+    const D2D1_RECT_F pill = D2D1::RectF(rect.right - width, cy - kHeight / 2.0f, rect.right, cy + kHeight / 2.0f);
+    m_target->FillRoundedRectangle(D2D1::RoundedRect(pill, kHeight / 2.0f, kHeight / 2.0f), m_controlBrush.Get());
+    m_target->DrawTextLayout(D2D1::Point2F(pill.left + kPadX, cy - metrics.height / 2.0f), layout.Get(),
+                             m_secondaryTextBrush.Get());
+    return pill.left;
+}
+
 void Renderer::DrawProgress(D2D1_RECT_F rect, float value01, bool indeterminate) {
     if (!m_target) return;
     const float halfThickness = (rect.bottom - rect.top) / 2.0f;

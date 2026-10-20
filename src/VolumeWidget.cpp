@@ -15,6 +15,8 @@ constexpr float kValueWidth = 44.0f;
 constexpr float kMuteSize = 22.0f;
 constexpr float kMuteGap = 8.0f;
 constexpr float kGrabSlack = 8.0f;
+constexpr float kTagGap = 8.0f;
+constexpr float kTextLineHeight = 18.0f; // one line of the 13.5 px item text
 constexpr int kStepPercent = 5;
 } // namespace
 
@@ -65,10 +67,15 @@ void VolumeWidget::Draw(IPanelPainter& painter, float width, float /*contentHeig
         const Row& r = m_rows[i];
         float top = RowTop(i);
 
-        const std::wstring name =
-            r.info.isDefault ? Strings::Format(Strings::Id::VolumeDefault, r.info.name.c_str()) : r.info.name;
-        painter.DrawLabel(D2D1::RectF(kPaddingX, top, width - kPaddingX, top + kNameHeight),
-                          name.c_str(), false);
+        // The default device says so in a tag at the end of its line, and its name is trimmed
+        // before the tag: appended to the name, the mark was the first thing a long name lost.
+        D2D1_RECT_F nameRect = D2D1::RectF(kPaddingX, top, width - kPaddingX, top + kNameHeight);
+        if (r.info.isDefault) {
+            // Centred on the name's line of text, which sits at the top of its rect.
+            const D2D1_RECT_F line = D2D1::RectF(nameRect.left, top, nameRect.right, top + kTextLineHeight);
+            nameRect.right = painter.DrawTag(line, TR(VolumeDefault)) - kTagGap;
+        }
+        painter.DrawLabel(nameRect, r.info.name.c_str(), false);
 
         D2D1_RECT_F track = TrackRectFor(i, width);
         bool active = (m_hovered == i * 2) || (m_dragRow == i) || (m_focused == i * 2);

@@ -181,6 +181,7 @@ public:
     void DrawSlider(D2D1_RECT_F track, float value01, float minValue01, float maxValue01,
                     bool active, bool enabled) override;
     void DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) override;
+    float DrawTag(D2D1_RECT_F rect, const wchar_t* text) override;
     void DrawProgress(D2D1_RECT_F rect, float value01, bool indeterminate) override;
     void DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) override;
 

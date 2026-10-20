@@ -67,6 +67,11 @@ public:
     // Short centered value text (e.g. "75%") next to a slider.
     virtual void DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) = 0;
 
+    // A small rounded tag with a word in it ("Default"), against rect's right edge and centred in
+    // its height. Returns the tag's left edge, so the text beside it can stop short of it: a mark
+    // appended to a long name is the part that gets trimmed away.
+    virtual float DrawTag(D2D1_RECT_F rect, const wchar_t* text) = 0;
+
     // Thin rounded progress bar (playback position), value01 clamped to [0,1].
     // `indeterminate` draws the muted full-width bar for a stream of unknown
     // length.
