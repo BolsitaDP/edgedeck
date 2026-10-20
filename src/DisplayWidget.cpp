@@ -80,6 +80,15 @@ std::wstring DisplayWidget::Subtitle(int row, const DisplayLayouts::State& state
     // Every monitor's name in one line does not fit beside the "Active" marker, and "all" is
     // better said as a count anyway.
     if (layout.ids.size() > 2) return Strings::Format(Strings::Id::DisplaysCount, layout.ids.size());
+    // One monitor: its name is already the layout's ("Only LG ULTRAWIDE"), so the line under it
+    // says something the name does not - the monitor's resolution.
+    if (layout.ids.size() == 1) {
+        for (const DisplayTopology::Monitor& m : m_monitors) {
+            if (m.id == layout.ids.front() && m.nativeWidth > 0 && m.nativeHeight > 0) {
+                return std::to_wstring(m.nativeWidth) + L" × " + std::to_wstring(m.nativeHeight);
+            }
+        }
+    }
     return DisplayLayouts::NameFor(layout.ids, m_monitors);
 }
 
