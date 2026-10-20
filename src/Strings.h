@@ -225,6 +225,11 @@ enum class Language : int {
     X(LyricsSummaryNothing, L"Lyrics. Nothing to show.", L"Letras. Nada que mostrar.")                       \
     X(LyricsSummaryTrack, L"Lyrics for %ls.", L"Letra de %ls.")                                              \
     X(LyricsSummaryLine, L"Lyrics for %ls. %ls", L"Letra de %ls. %ls")                                       \
+    X(LyricsTiming, L"Timing", L"Sincronía")                                                                 \
+    X(LyricsEarlier, L"Show the lyrics half a second earlier", L"Mostrar la letra medio segundo antes")      \
+    X(LyricsLater, L"Show the lyrics half a second later", L"Mostrar la letra medio segundo después")        \
+    X(LyricsOffset, L"Lyrics timing: %ls", L"Ajuste de la letra: %ls")                                       \
+    X(LyricsPlayFrom, L"Play from: %ls", L"Reproducir desde: %ls")                                           \
     /* ---- Displays ---- */                                                                                 \
     X(DisplaysTitle, L"Displays", L"Pantallas")                                                              \
     X(ProfileMainMonitors, L"Monitors 1 + 2", L"Monitores 1 + 2")                                            \

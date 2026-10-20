@@ -849,6 +849,22 @@ void Renderer::DrawRow(D2D1_RECT_F rect, const wchar_t* text, bool hovered) {
                        m_primaryTextBrush.Get());
 }
 
+void Renderer::DrawHoverFill(D2D1_RECT_F rect) {
+    if (!m_target) return;
+    // The same fill, and the same margins, as DrawRow's.
+    const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(
+        D2D1::RectF(rect.left - 10.0f, rect.top + 2.0f, rect.right + 10.0f, rect.bottom - 2.0f), 6.0f, 6.0f);
+    m_target->FillRoundedRectangle(rr, m_hoverBrush.Get());
+}
+
+void Renderer::DrawTextButton(D2D1_RECT_F rect, const wchar_t* text, bool hovered) {
+    if (!m_target) return;
+    const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rect, 5.0f, 5.0f);
+    m_target->FillRoundedRectangle(rr, hovered ? m_hoverBrush.Get() : m_controlBrush.Get());
+    m_target->DrawText(text, static_cast<UINT32>(wcslen(text)), ControlFormat(), rect,
+                       hovered ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get());
+}
+
 void Renderer::DrawLabel(D2D1_RECT_F rect, const wchar_t* text, bool muted) {
     if (!m_target) return;
     ID2D1SolidColorBrush* brush = muted ? m_secondaryTextBrush.Get() : m_primaryTextBrush.Get();

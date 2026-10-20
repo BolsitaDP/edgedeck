@@ -30,11 +30,16 @@ public:
     float PreferredContentHeight(float logicalWidth) const override;
     float MinContentWidth() const override { return 220.0f; }
     void Draw(IPanelPainter& painter, float width, float contentHeight) override;
-    int HitTest(float /*x*/, float /*y*/, float /*width*/, float /*contentHeight*/) const override {
-        return -1;
-    }
-    void SetHovered(int /*controlId*/) override {}
-    void Activate(int /*controlId*/, HWND /*ownerHwnd*/) override {}
+    // Synced lyrics have controls: two buttons beside the track's name that move the lyrics half
+    // a second earlier or later (for lyrics timed to another release of the song), and the lines,
+    // each of which plays the song from its time when clicked.
+    int HitTest(float x, float y, float width, float contentHeight) const override;
+    void SetHovered(int controlId) override { m_hovered = controlId; }
+    void Activate(int controlId, HWND ownerHwnd) override;
+    // From the keyboard, the timing is one control: left and right arrows move the lyrics.
+    int FocusableControlCount() const override { return Adjustable() ? 1 : 0; }
+    bool OnStepControl(int controlId, int direction, float& outValue01) override;
+    std::wstring AccessibleControlText(int controlId) const override;
     void OnAsyncResult(UINT message, WPARAM wParam) override;
     void OnPanelOpening(HWND ownerHwnd) override;
     void OnPanelVisibilityChanged(bool visible) override { m_visible = visible; }
@@ -55,6 +60,22 @@ public:
 private:
     enum class State { Loading, Ready, Empty };
 
+    // Control ids: the two timing buttons, then one per line from kLineControl.
+    static constexpr int kEarlierControl = 0;
+    static constexpr int kLaterControl = 1;
+    static constexpr int kLineControl = 100;
+
+    bool Adjustable() const { return m_state == State::Ready && m_synced; }
+    // Moves the lyrics by deltaMs (negative: earlier), shows it at once and remembers it.
+    void ShiftLyrics(int deltaMs);
+    // Where the lines end and the timing row starts.
+    float FooterTop() const;
+    // The timing buttons and the value between them, against the timing row's right edge.
+    D2D1_RECT_F EarlierRect(float width) const;
+    D2D1_RECT_F OffsetTextRect(float width) const;
+    D2D1_RECT_F LaterRect(float width) const;
+    std::wstring OffsetText() const;
+
     void UpdateCurrentLine(int positionMs);
     void ApplyTrack(const LrcLyrics::Result& result);
     // The first line shown: around the current one for synced lyrics, and for plain ones - which
@@ -72,6 +93,11 @@ private:
     bool m_synced = true;   // m_lines carry times
     int m_positionMs = 0;
     int m_durationMs = 0;
+    int m_offsetMs = 0; // lines are shown this much later than their times (negative: earlier)
+    int m_hovered = -1;
+    // The last click on a line: where it asked the song to go, and when (0: none pending).
+    int m_seekTargetMs = 0;
+    ULONGLONG m_seekedAt = 0;
     // Media change events come whether or not the panel is open: they are acted on only while it
     // is, since opening it looks again anyway. And after a failed lookup, another is not tried
     // for kRetryAfterFailureMs, so a flaky network is not asked again on every pause and skip.

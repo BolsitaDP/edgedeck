@@ -39,7 +39,7 @@ several of the same kind, on the left or right edge of any monitor.
 | **Media** | Every app that is playing something - Spotify, a browser tab, VLC - with previous, play/pause and next. |
 | **Volume** | A slider and a mute button for each audio output device. |
 | **Brightness** | A brightness slider for each external monitor that supports DDC/CI, and for a laptop's built-in screen. |
-| **Lyrics** | The lyrics of whatever is playing, from LRCLIB: line by line in time with the song where LRCLIB has them synced, otherwise the plain text, scrolling as the song goes. |
+| **Lyrics** | The lyrics of whatever is playing, from LRCLIB: line by line in time with the song where LRCLIB has them synced, otherwise the plain text, scrolling as the song goes. Lyrics a little early or late can be moved half a second at a time, and a click on a line plays the song from it. |
 | **Displays** | One click to switch which monitors are on. Save your own layouts (for example "desk monitors" or "just the TV") in **Layouts...**; with none saved it offers all monitors and each one alone. |
 
 ## Install

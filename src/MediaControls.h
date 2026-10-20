@@ -101,6 +101,11 @@ struct NowPlaying : AsyncEnvelope {
 
 void QueryNowPlaying(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId);
 
+// Asks the app Windows considers current to play from positionMs (a lyrics line clicked). No
+// reply: the next position sample shows whether it moved - an app that does not allow seeking
+// simply stays where it is.
+void SeekCurrent(long long positionMs);
+
 // Long-lived change notification. The returned object keeps a
 // GlobalSystemMediaTransportControlsSessionManager alive and subscribes to its
 // events, so a widget learns about a new session or a playback-state change the

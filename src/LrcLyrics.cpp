@@ -10,6 +10,7 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <mutex>
 #include <cstdlib>
 #include <cwctype>
 #include <fstream>
@@ -130,22 +131,27 @@ bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
     return ok && written == bytes.size();
 }
 
-bool ReadCache(const std::wstring& trackKey, std::vector<Line>& outLines, bool& synced) {
+bool ReadCache(const std::wstring& trackKey, std::vector<Line>& outLines, bool& synced, int& offsetMs) {
     std::wstring path = CachePathFor(trackKey, L".txt");
     std::wstring text;
     if (path.empty() || !ReadUtf8File(path, text)) return false;
-    return ParseCache(text, outLines, synced);
+    return ParseCache(text, outLines, synced, &offsetMs);
 }
 
-void WriteCache(const std::wstring& trackKey, const std::vector<Line>& lines, bool synced) {
+// A fetch and a correction can both write one track's file: one writer at a time, so neither
+// takes the other's temp file.
+std::mutex g_cacheWrite;
+
+void WriteCache(const std::wstring& trackKey, const std::vector<Line>& lines, bool synced, int offsetMs = 0) {
     std::wstring path = CachePathFor(trackKey, L".txt");
     if (path.empty()) return;
+    std::lock_guard<std::mutex> lock(g_cacheWrite);
 
     // Written to a sibling temp file and swapped in, so a crash or a full disk
     // halfway through can't leave a half-written lyrics file that would then be
     // served from cache forever.
     std::wstring temp = path + L".tmp";
-    if (!WriteUtf8File(temp, SerializeCache(lines, synced))) {
+    if (!WriteUtf8File(temp, SerializeCache(lines, synced, offsetMs))) {
         DeleteFileW(temp.c_str());
         return;
     }
@@ -372,15 +378,17 @@ std::vector<Line> PlainLines(const std::wstring& text) {
     return lines;
 }
 
-std::wstring SerializeCache(const std::vector<Line>& lines, bool synced) {
+std::wstring SerializeCache(const std::vector<Line>& lines, bool synced, int offsetMs) {
     std::wstring text = synced ? L"" : L"#plain\n";
+    if (offsetMs != 0) text += L"#offset\t" + std::to_wstring(offsetMs) + L"\n";
     for (const Line& l : lines) text += std::to_wstring(l.timeMs) + L"\t" + l.text + L"\n";
     return text;
 }
 
-bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced) {
+bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced, int* offsetMs) {
     lines.clear();
     synced = true;
+    if (offsetMs) *offsetMs = 0;
     size_t start = 0;
     bool first = true;
     while (start < text.size()) {
@@ -395,6 +403,10 @@ bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced
             continue;
         }
         first = false;
+        if (line.rfind(L"#offset\t", 0) == 0) {
+            if (offsetMs) *offsetMs = std::clamp(_wtoi(line.c_str() + 8), -kMaxOffsetMs, kMaxOffsetMs);
+            continue;
+        }
         const size_t tab = line.find(L'\t');
         if (tab == std::wstring::npos) continue;
         lines.push_back({_wtoi(line.substr(0, tab).c_str()), line.substr(tab + 1)});
@@ -559,7 +571,7 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
         result->trackKey = trackKey;
 
         // Cache hit: done, no network call at all.
-        if (ReadCache(trackKey, result->lines, result->synced)) {
+        if (ReadCache(trackKey, result->lines, result->synced, result->offsetMs)) {
             result->status = Status::Success;
             co_return;
         }
@@ -633,10 +645,52 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
     // The result is posted by post, on the way out of every path above.
 }
 
+// Corrections waiting to be written, the newest per track. A burst of clicks starts a burst of
+// writers; one writes at a time and each takes whatever is newest when it gets its turn, so the
+// file ends with the last value whatever order they run in. The list has its own lock, held only
+// to touch the list, so a click never waits for a disk.
+std::mutex g_offsetsMutex;
+std::mutex g_offsetWriter;
+std::vector<std::pair<std::wstring, int>> g_pendingOffsets;
+
+winrt::fire_and_forget SaveOffsetAsync() {
+    try {
+        co_await winrt::resume_background();
+    } catch (...) {
+        co_return;
+    }
+    std::lock_guard<std::mutex> writing(g_offsetWriter);
+    for (;;) {
+        std::pair<std::wstring, int> next;
+        {
+            std::lock_guard<std::mutex> lock(g_offsetsMutex);
+            if (g_pendingOffsets.empty()) break;
+            next = std::move(g_pendingOffsets.back());
+            g_pendingOffsets.pop_back();
+        }
+        const auto& [trackKey, offsetMs] = next;
+        std::vector<Line> lines;
+        bool synced = true;
+        int previous = 0;
+        if (ReadCache(trackKey, lines, synced, previous) && previous != offsetMs) {
+            WriteCache(trackKey, lines, synced, offsetMs);
+        }
+    }
+}
+
 } // namespace
 
 void FetchCurrentLyrics(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId) {
     FetchAsync(notifyWindow, notifyMessage, requestId);
+}
+
+void SaveOffset(const std::wstring& trackKey, int offsetMs) {
+    {
+        std::lock_guard<std::mutex> lock(g_offsetsMutex);
+        std::erase_if(g_pendingOffsets, [&](const auto& pending) { return pending.first == trackKey; });
+        g_pendingOffsets.emplace_back(trackKey, std::clamp(offsetMs, -kMaxOffsetMs, kMaxOffsetMs));
+    }
+    SaveOffsetAsync();
 }
 
 } // namespace LrcLyrics

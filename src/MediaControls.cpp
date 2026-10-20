@@ -8,6 +8,7 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Media.Control.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 
@@ -382,6 +383,21 @@ winrt::fire_and_forget QueryNowPlayingAsync(HWND notifyWindow, UINT notifyMessag
     }
     PostOrDelete(notifyWindow, notifyMessage, now);
 }
+
+winrt::fire_and_forget SeekCurrentAsync(long long positionMs) {
+    try {
+        co_await winrt::resume_background();
+        Manager manager = co_await Manager::RequestAsync();
+        WinRTSession session = manager.GetCurrentSession();
+        if (session && session.GetPlaybackInfo().Controls().IsPlaybackPositionEnabled()) {
+            co_await session.TryChangePlaybackPositionAsync(std::max(0LL, positionMs) * 10000);
+        }
+    } catch (...) {
+        // Nothing to report: the position stays where it was, which the panel already shows.
+    }
+}
+
+void SeekCurrent(long long positionMs) { SeekCurrentAsync(positionMs); }
 
 void RefreshSessions(HWND notifyWindow, UINT notifyMessage, std::uint64_t requestId,
                      std::uint64_t listGeneration) {

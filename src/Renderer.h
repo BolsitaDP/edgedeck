@@ -182,6 +182,8 @@ public:
                     bool active, bool enabled) override;
     void DrawValueText(D2D1_RECT_F rect, const wchar_t* text, bool muted) override;
     float DrawTag(D2D1_RECT_F rect, const wchar_t* text) override;
+    void DrawTextButton(D2D1_RECT_F rect, const wchar_t* text, bool hovered) override;
+    void DrawHoverFill(D2D1_RECT_F rect) override;
     void DrawProgress(D2D1_RECT_F rect, float value01, bool indeterminate) override;
     void DrawMuteButton(D2D1_RECT_F rect, bool muted, bool hovered) override;
 

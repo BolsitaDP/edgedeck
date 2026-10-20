@@ -72,6 +72,13 @@ public:
     // appended to a long name is the part that gets trimmed away.
     virtual float DrawTag(D2D1_RECT_F rect, const wchar_t* text) = 0;
 
+    // A small rounded button with a short text centred in it ("-", "+").
+    virtual void DrawTextButton(D2D1_RECT_F rect, const wchar_t* text, bool hovered) = 0;
+
+    // The hover fill a row gets under the pointer, without any text: for a widget that draws the
+    // row's text itself.
+    virtual void DrawHoverFill(D2D1_RECT_F rect) = 0;
+
     // Thin rounded progress bar (playback position), value01 clamped to [0,1].
     // `indeterminate` draws the muted full-width bar for a stream of unknown
     // length.

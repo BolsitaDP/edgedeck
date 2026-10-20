@@ -179,7 +179,22 @@ void TestCacheRoundTrip() {
     CHECK(!LrcLyrics::ParseCache(L"", back, synced));
 }
 
-} // namespace
+void TestCacheKeepsOffset() {
+    TEST("Lyrics: the cache keeps the timing correction, and files without one read as none");
+    std::vector<LrcLyrics::Line> lines = {{1000, L"uno"}, {2000, L"dos"}};
+    std::vector<LrcLyrics::Line> back;
+    bool synced = false;
+    int offset = 99;
+    CHECK(LrcLyrics::ParseCache(LrcLyrics::SerializeCache(lines, true, -1500), back, synced, &offset));
+    CHECK_EQ(offset, -1500);
+    CHECK(synced && back.size() == 2 && back[0].text == L"uno"); // the line is not read as lyrics
+    CHECK(LrcLyrics::ParseCache(LrcLyrics::SerializeCache(lines, true), back, synced, &offset));
+    CHECK_EQ(offset, 0);
+    CHECK(LrcLyrics::ParseCache(L"#offset\t999999\n1000\tx\n", back, synced, &offset));
+    CHECK_EQ(offset, LrcLyrics::kMaxOffsetMs); // a hand-edited file cannot push it past the limit
+    CHECK(LrcLyrics::ParseCache(L"#plain\n#offset\t500\n-1\tx\n", back, synced, &offset));
+    CHECK(!synced && offset == 500 && back.size() == 1);
+}
 
 void TestPositionCatchesUp() {
     TEST("Position: a playing track's reported position is moved on by the time since the report");
@@ -193,12 +208,15 @@ void TestPositionCatchesUp() {
     CHECK_EQ(MediaPosition::NowMs(-1, 3000, 0, true), -1LL);              // no position at all
 }
 
+} // namespace
+
 void RunLyricsTests() {
     TestPickPrefersSyncedOfTheSameLength();
     TestPickFallsBackToPlain();
     TestPickSkipsInstrumentalAndEmpty();
     TestPlainLines();
     TestCacheRoundTrip();
+    TestCacheKeepsOffset();
     TestPositionCatchesUp();
     TestSimpleLine();
     TestFractionDigits();

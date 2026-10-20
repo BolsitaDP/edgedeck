@@ -37,7 +37,14 @@ struct Result : AsyncEnvelope {
     bool synced = true;
     int positionMs = 0; // local playback position at fetch time
     int durationMs = 0; // the track's length, 0 when the player does not say
+    // How much later than their times the lines are shown: the user's correction for lyrics timed
+    // to another release of the song, remembered with the track's cached lyrics.
+    int offsetMs = 0;
 };
+
+// The correction the user can make, in steps of kOffsetStepMs up to kMaxOffsetMs either way.
+inline constexpr int kOffsetStepMs = 500;
+inline constexpr int kMaxOffsetMs = 30000;
 
 // One record LRCLIB offered for a search. Its fields may be missing or JSON null; empty here.
 struct Candidate {
@@ -64,9 +71,14 @@ Choice PickLyrics(const std::vector<Candidate>& candidates, int durationMs);
 std::vector<Line> PlainLines(const std::wstring& text);
 
 // The lyrics cache file's text and back. "#plain" on the first line marks plain lyrics; a file
-// without it (every file written before) is synced lines, "time<TAB>text".
-std::wstring SerializeCache(const std::vector<Line>& lines, bool synced);
-bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced);
+// without it (every file written before) is synced lines, "time<TAB>text". "#offset<TAB>ms" keeps
+// the user's correction (none: 0).
+std::wstring SerializeCache(const std::vector<Line>& lines, bool synced, int offsetMs = 0);
+bool ParseCache(const std::wstring& text, std::vector<Line>& lines, bool& synced, int* offsetMs = nullptr);
+
+// Remembers the user's correction for a track whose lyrics are cached, on a pool thread (it
+// rewrites the cache file). Nothing to do for a track with no cached lyrics.
+void SaveOffset(const std::wstring& trackKey, int offsetMs);
 
 // Parses LRC text ("[mm:ss.xx]line", repeatable and multi-timestamp tags) into
 // sorted, timestamped lines. Exposed for tests; not used outside this module at

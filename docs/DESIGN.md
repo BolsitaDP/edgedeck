@@ -165,7 +165,14 @@ cached for 7 days so a free public service is not asked again at every panel ope
 results, the synced lyrics closest to the track's length (within 10 s) win, then plain lyrics,
 which scroll in proportion to the position and say they are not synced. LRCLIB sends a missing
 version as `null`, which WinRT's `GetNamedString` throws on even with a default - every field is
-read with `TryLookup` and its type checked.
+read with `TryLookup` and its type checked. Synced lyrics LRCLIB has only for another release of the
+song can be corrected half a second at a time; the correction is kept in that track's cache file
+(`#offset`), written on a pool thread with the newest value winning. A click on a line asks the
+current session to play from it (`TryChangePlaybackPositionAsync`), and the position samples that
+still report the old place in the next moment are ignored, so the highlight does not bounce back.
+
+The position itself is extrapolated (`MediaPosition`): Windows keeps the position an app last
+reported and when, and Spotify reports every four or five seconds.
 
 **Displays.** A layout is a name and the EDID ids of the monitors it leaves on; every other
 connected monitor is switched off (`DisplayLayouts`). They are the user's, saved as `[layout]`
