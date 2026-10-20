@@ -94,7 +94,6 @@ App* App::s_instance = nullptr;
 App::App() = default;
 
 App::~App() {
-    UnregisterAppBar();
     RemoveTrayIcon();
     m_tabs.clear();
     if (m_utilityHwnd && IsWindow(m_utilityHwnd)) {
@@ -185,7 +184,6 @@ bool App::Create(HINSTANCE hInstance) {
     }
     CheckAutostart();
     AddTrayIcon();
-    RegisterAppBar();
     if (!m_startupNotice.empty()) ShowBalloon(m_startupNotice.c_str(), m_startupNoticeWarns);
     return true;
 }
@@ -397,27 +395,10 @@ void App::ApplySettings(const std::vector<TabSettings>& settings) {
     UpdateFullscreenTabs();
 }
 
-void App::RegisterAppBar() {
-    if (m_appBarRegistered || !m_utilityHwnd) return;
-    APPBARDATA bar{};
-    bar.cbSize = sizeof(bar);
-    bar.hWnd = m_utilityHwnd;
-    bar.uCallbackMessage = kAppBarMessage;
-    // ABM_NEW only. Without ABM_SETPOS the bar has no edge and reserves no space: nothing on the
-    // desktop moves, and the notices still come.
-    m_appBarRegistered = SHAppBarMessage(ABM_NEW, &bar) != FALSE;
-    if (!m_appBarRegistered) Diagnostics::Error("Fullscreen: could not register for full-screen notices");
+void App::OnFullscreenNotice() {
+    UpdateFullscreenTabs();
+    if (m_utilityHwnd) SetTimer(m_utilityHwnd, kFullscreenRecheckTimer, kFullscreenRecheckMs, nullptr);
 }
-
-void App::UnregisterAppBar() {
-    if (!m_appBarRegistered) return;
-    APPBARDATA bar{};
-    bar.cbSize = sizeof(bar);
-    bar.hWnd = m_utilityHwnd;
-    SHAppBarMessage(ABM_REMOVE, &bar);
-    m_appBarRegistered = false;
-}
-
 void App::UpdateFullscreenTabs() {
     // The setting that keeps panels from opening over a full-screen app also keeps the tabs off it.
     const bool guard = Config::FullscreenGuard();
@@ -827,13 +808,7 @@ bool App::AskRunningCopyToShowItself() {
 }
 
 LRESULT CALLBACK App::UtilityProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == kAppBarMessage) {
-        if (s_instance && wParam == ABN_FULLSCREENAPP) {
-            s_instance->UpdateFullscreenTabs();
-            SetTimer(hwnd, kFullscreenRecheckTimer, kFullscreenRecheckMs, nullptr);
-        }
-        return 0;
-    }
+
     if (msg == WM_TIMER && wParam == kFullscreenRecheckTimer) {
         KillTimer(hwnd, kFullscreenRecheckTimer); // one look, not a poll
         if (s_instance) s_instance->UpdateFullscreenTabs();

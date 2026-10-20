@@ -224,6 +224,16 @@ private:
     // has no timers at all.
     static constexpr UINT kTickIntervalMs = 500;
 
+    // Full-screen apps. The tab window registers as an app bar that claims no space, for one
+    // thing: the shell then says (ABN_FULLSCREENAPP, on kAppBarMessage) when an app enters or
+    // leaves full screen on the tab's monitor - the notice the taskbar hides on. It is the tab's
+    // own window because the shell tells only the app bars on the monitor concerned: one window
+    // for the whole app, at (0,0), heard about the primary monitor alone. No polling, no hook.
+    void RegisterAppBar();
+    void UnregisterAppBar();
+    bool m_appBarRegistered = false;
+    static constexpr UINT kAppBarMessage = WM_APP + 210; // outside the widget range and the notice
+
     static constexpr int kPinControlId = -2; // distinct from "no hit" (-1) and widget ids (>=0)
     static constexpr int kMoveControlId = -3;
 };

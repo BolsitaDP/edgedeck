@@ -5,6 +5,7 @@
 #include "Tab.h"
 #include "App.h"
 
+#include <shellapi.h>
 #include <shellscalingapi.h>
 #include <windowsx.h>
 
@@ -223,7 +224,29 @@ bool Tab::CreateWindows(HINSTANCE hInstance) {
     // Park the panel just off the edge; it stays hidden until the first hover.
     SetWindowPos(m_panelHwnd, m_tabHwnd, m_panelClosedXPx, m_panelYPx, m_panelWidthPx,
                  m_panelHeightPx, SWP_NOACTIVATE | SWP_HIDEWINDOW);
+    RegisterAppBar();
     return true;
+}
+
+void Tab::RegisterAppBar() {
+    if (m_appBarRegistered || !m_tabHwnd) return;
+    APPBARDATA bar{};
+    bar.cbSize = sizeof(bar);
+    bar.hWnd = m_tabHwnd;
+    bar.uCallbackMessage = kAppBarMessage;
+    // ABM_NEW only. Without ABM_SETPOS the bar has no edge and reserves no space: nothing on the
+    // desktop moves, and the notices still come.
+    m_appBarRegistered = SHAppBarMessage(ABM_NEW, &bar) != FALSE;
+    if (!m_appBarRegistered) Diagnostics::Error("Tab: could not register for full-screen notices");
+}
+
+void Tab::UnregisterAppBar() {
+    if (!m_appBarRegistered) return;
+    APPBARDATA bar{};
+    bar.cbSize = sizeof(bar);
+    bar.hWnd = m_tabHwnd;
+    SHAppBarMessage(ABM_REMOVE, &bar);
+    m_appBarRegistered = false;
 }
 
 void Tab::Relayout() {
@@ -607,7 +630,6 @@ void Tab::MoveWith(int cursorScreenY) {
     if (cursorScreenY <= m_monitorRectPx.top) wanted = m_monitorRectPx.top;
     if (cursorScreenY >= m_monitorRectPx.bottom - 1) wanted = m_monitorRectPx.bottom - tabHeight;
     const int top = Placement::ClampTabTop(wanted, tabHeight, m_monitorRectPx);
-
     if (top == m_tabRectPx.top) return; // pressed against the top or bottom: nothing to do
     OffsetRect(&m_tabRectPx, 0, top - m_tabRectPx.top);
     // The panel stays centred on the tab, as it is placed, and stops at the monitor's edges.
@@ -918,7 +940,11 @@ LRESULT Tab::HandleTabMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ShowNotice(text);
             return 0;
         }
+        case kAppBarMessage:
+            if (wParam == ABN_FULLSCREENAPP && m_owner) m_owner->OnFullscreenNotice();
+            return 0;
         case WM_DESTROY: {
+            UnregisterAppBar();
             KillTimer(hwnd, kTimerAnim);
             KillTimer(hwnd, kTimerLeave);
             KillTimer(hwnd, kTimerTick);

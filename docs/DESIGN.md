@@ -99,11 +99,14 @@ client area is compared with the monitor (a normal maximised window leaves the t
 count; a borderless game does, even with its title bar pushed off screen); only *that* monitor counts;
 the desktop and taskbar are ignored. Keyboard shortcuts always open.
 
-The tabs themselves step aside too, with no polling: EdgeDeck registers as an app bar that claims
-no space (`ABM_NEW` without `ABM_SETPOS`), and the shell sends it `ABN_FULLSCREENAPP` when an
-app enters or leaves full screen - the notice the taskbar hides on. Each one makes every tab ask
-the same question for its monitor, once then and once 400 ms later (the app may not be in front
-at the instant of the notice). A tab hidden this way closes an unpinned panel and comes back when
+The tabs themselves step aside too, with no polling: each tab window registers as an app bar that
+claims no space (`ABM_NEW` without `ABM_SETPOS`), and the shell sends it `ABN_FULLSCREENAPP` when
+an app enters or leaves full screen - the notice the taskbar hides on. It has to be the tab's own
+window: the shell tells only the app bars on the monitor concerned, and one window for the whole
+app, sitting at (0,0), heard about the primary monitor alone (found by `Test-FullscreenGuard`'s
+second-monitor case). A hidden tab still hears the notice that brings it back. Each notice makes
+every tab ask the same question for its monitor, once then and once 400 ms later (the app may not
+be in front at the instant of the notice). A tab hidden this way closes an unpinned panel and comes back when
 the answer changes; a pinned panel stays.
 
 **Monitor and edge.** Monitors are identified by their EDID id (`GSM7768`), not by adapter LUID or

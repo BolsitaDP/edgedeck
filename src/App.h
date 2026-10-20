@@ -51,6 +51,9 @@ public:
     // A tab was moved with its panel's handle: its new place is saved, and an open Settings window
     // shows it.
     void OnTabMoved(const Tab* tab, float oldRatio, float newRatio);
+    // A tab heard from the shell that an app entered or left full screen on its monitor (see
+    // Tab::RegisterAppBar): every tab looks again, now and once more a moment later.
+    void OnFullscreenNotice();
     void RequestExit();
     void OpenSettings();
     // The window where the Quick Actions list is edited. Opened from Settings, from the tray
@@ -176,18 +179,10 @@ private:
     // App's own private message, not a widget's.
     static constexpr UINT kTrayCallbackMessage = WM_APP + 190;
 
-    // Full-screen apps. EdgeDeck registers as an app bar that claims no space, for one thing: the
-    // shell then says (ABN_FULLSCREENAPP, on this message) when an app goes full screen or leaves
-    // it - the notice the taskbar hides itself on. No polling and no hook: the tabs are looked at
-    // only when it comes, plus one look a moment later (kFullscreenRecheckTimer), since the app
-    // may not be in front yet at the instant the notice arrives.
-    static constexpr UINT kAppBarMessage = WM_APP + 210;
+    // Full-screen apps: one look a moment after a tab's notice (see OnFullscreenNotice), since the
+    // app may not be in front yet at the instant the notice arrives.
     static constexpr UINT_PTR kFullscreenRecheckTimer = 1;
     static constexpr UINT kFullscreenRecheckMs = 400;
-    bool m_appBarRegistered = false;
-    void RegisterAppBar();
-    void UnregisterAppBar();
-    // Hides the tabs of each monitor a full-screen app is in front of, and shows the others.
     void UpdateFullscreenTabs();
 
     static App* s_instance;

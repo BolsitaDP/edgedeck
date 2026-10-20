@@ -33,8 +33,9 @@ $failures = 0
 $maximizedClient = [pscustomobject]@{ L = $work.L; T = $work.T + 32; R = $work.R; B = $work.B }
 
 function Open-On-Hover($app) {
-    $tab = (Get-TestTabs $app)[0]
-    if (-not $tab) { return $false } # hidden: there is nothing to hover
+    $tabs = @(Get-TestTabs $app)
+    if ($tabs.Count -eq 0) { return $false } # hidden: there is nothing to hover
+    $tab = $tabs[0]
     Move-Mouse ($primary.R / 2) ($primary.B / 2); Start-Sleep -Milliseconds 500   # make sure the pointer ENTERS
     Move-Mouse (($tab.L + $tab.R) / 2) (($tab.T + $tab.B) / 2); Start-Sleep -Milliseconds 1100
     return [bool](Get-TestPanel $app)
@@ -94,6 +95,51 @@ try {
     Check-Tab 'D. ordinary maximized window, guard on' $true (Tab-Shown $app)
     Check 'D. ordinary maximized window, guard on' $true (Open-On-Hover $app)
 } finally { Move-Mouse ($primary.R / 2) ($primary.B / 2); Stop-TestApp $app; Stop-Process -Name fullscreenwin -Force -ErrorAction SilentlyContinue }
+
+# E: switching away from a full-screen app (Alt+Tab, a click elsewhere) brings the tab back while
+# the app is still open; coming back to it hides the tab again.
+$app = Start-TestApp -Tabs QuickActions
+try {
+    $cover = Start-Cover $primary 16
+    Check-Tab 'E. full-screen app in front                  ' $false (Tab-Shown $app)
+    $small = [pscustomobject]@{ L = $primary.L + 200; T = $primary.T + 200; R = $primary.L + 700; B = $primary.T + 600 }
+    $other = Start-Cover $small 4 # an ordinary window, now in front of the full-screen one
+    Check-Tab 'E. another window in front of it             ' $true (Tab-Shown $app)
+    $other.WaitForExit(6000) | Out-Null
+    Start-Sleep -Milliseconds 300
+    Check-Tab 'E. that window gone, the full-screen one back' $false (Tab-Shown $app)
+} finally { Move-Mouse ($primary.R / 2) ($primary.B / 2); Stop-TestApp $app; Stop-Process -Name fullscreenwin -Force -ErrorAction SilentlyContinue }
+
+# F: a full-screen app on another monitor hides only that monitor's tabs.
+Add-Type -AssemblyName System.Windows.Forms
+$second = [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | Select-Object -First 1
+$secondId = $null
+if ($second) {
+    foreach ($line in (& (Get-Tool dispcfg $ToolsDir) list)) {
+        if ($line -match 'id=(\S+)\s+name=.*?\s+active=1\s.*gdi=(\S+)' -and $Matches[2] -eq $second.DeviceName) { $secondId = $Matches[1] }
+    }
+}
+if (-not $secondId) {
+    'F skipped: no second monitor is on.'
+} else {
+    $b = $second.Bounds
+    $rect = [pscustomobject]@{ L = $b.Left; T = $b.Top; R = $b.Right; B = $b.Bottom }
+    $app = Start-TestApp -Tabs @('QuickActions', 'QuickActions') -TabExtra @('', "monitor=$secondId")
+    try {
+        $both = @(Get-TestTabs $app).Count
+        Check-Tab 'F. both tabs there to begin with             ' $true ($both -eq 2)
+        $cover = Start-Cover $rect 10
+        Start-Sleep -Milliseconds 700
+        $shown = @(Get-TestTabs $app)
+        $onPrimary = [bool]($shown | Where-Object { $_.R -eq $primary.R })
+        $onSecond = [bool]($shown | Where-Object { $_.L -ge $b.Left -and $_.R -le $b.Right })
+        Check-Tab 'F. full-screen on the other monitor: its tab ' $false $onSecond
+        Check-Tab 'F. ...while the primary monitor keeps its tab' $true $onPrimary
+        Stop-Process -Id $cover.Id -Force -ErrorAction SilentlyContinue # as a game that crashed
+        Start-Sleep -Milliseconds 1200
+        Check-Tab 'F. the other monitor''s tab back afterwards   ' $true ((@(Get-TestTabs $app)).Count -eq 2)
+    } finally { Move-Mouse ($primary.R / 2) ($primary.B / 2); Stop-TestApp $app; Stop-Process -Name fullscreenwin -Force -ErrorAction SilentlyContinue }
+}
 
 if ($failures) { Write-Host "$failures case(s) failed."; exit 1 }
 Write-Host 'All cases passed.'
