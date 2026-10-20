@@ -6,7 +6,11 @@ What changes between releases, newest first. The format follows
 
 ## [Unreleased]
 
-The first public version. EdgeDeck so far:
+## [0.9.0] - 2026-10-20
+
+The first public version: a preview before 1.0, to be tried on machines other than the one it was
+built on. Problems found are welcome as issues (*Report a problem...* in the menu fills one in).
+EdgeDeck so far:
 
 ### Tabs
 - Quick Actions: your own list of programs, documents, folders and web addresses, each with its
