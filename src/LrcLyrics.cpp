@@ -1,4 +1,5 @@
 #include "LrcLyrics.h"
+#include "MediaManager.h"
 #include "MediaPosition.h"
 #include "Version.h"
 
@@ -547,7 +548,7 @@ winrt::fire_and_forget FetchAsync(HWND notifyWindow, UINT notifyMessage, std::ui
 
         // Whatever Windows itself currently considers the "now playing" app -
         // same pick MediaWidget uses.
-        Manager manager = co_await Manager::RequestAsync();
+        Manager manager = co_await MediaManager::GetAsync();
         auto session = manager.GetCurrentSession();
         if (!session) {
             result->status = Status::NothingPlaying;

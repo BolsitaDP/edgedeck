@@ -2,6 +2,7 @@
 #include "Diagnostics.h"
 #include "Strings.h"
 #include "MediaControls.h"
+#include "MediaManager.h"
 #include "MediaPosition.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -193,7 +194,7 @@ private:
 
     static winrt::Windows::Foundation::IAsyncAction RegisterOn(std::shared_ptr<State> state) {
         co_await winrt::resume_background();
-        Manager manager = co_await Manager::RequestAsync();
+        Manager manager = co_await MediaManager::GetAsync();
 
         auto weak = std::weak_ptr<State>(state);
         CurrentSessionHandler currentHandler(OnChange(weak));
@@ -284,7 +285,7 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
     list->listGeneration = listGeneration;
     try {
         co_await winrt::resume_background();
-        Manager manager = co_await Manager::RequestAsync();
+        Manager manager = co_await MediaManager::GetAsync();
 
         for (auto const& session : manager.GetSessions()) {
             list->infos.push_back(DescribeSession(session));
@@ -310,7 +311,9 @@ winrt::fire_and_forget RefreshAsync(HWND notifyWindow, UINT notifyMessage, std::
         }
     } catch (...) {
         // Leave `list` with whatever was gathered before the failure
-        // (possibly nothing) - a partial/empty result is fine here.
+        // (possibly nothing) - a partial/empty result is fine here. The shared manager may be
+        // the part that failed (the media service restarted): the next refresh gets a new one.
+        MediaManager::Forget();
     }
     PostOrDelete(notifyWindow, notifyMessage, list);
 }
@@ -361,7 +364,7 @@ winrt::fire_and_forget QueryNowPlayingAsync(HWND notifyWindow, UINT notifyMessag
     now->requestId = requestId;
     try {
         co_await winrt::resume_background();
-        Manager manager = co_await Manager::RequestAsync();
+        Manager manager = co_await MediaManager::GetAsync();
         WinRTSession session = manager.GetCurrentSession();
         if (session) {
             now->hasSession = true;
@@ -379,7 +382,9 @@ winrt::fire_and_forget QueryNowPlayingAsync(HWND notifyWindow, UINT notifyMessag
             }
         }
     } catch (...) {
-        // A failed probe is reported as "no session"; the caller re-queries.
+        // A failed probe is reported as "no session"; the caller re-queries, through a new
+        // manager in case the shared one died with the media service.
+        MediaManager::Forget();
     }
     PostOrDelete(notifyWindow, notifyMessage, now);
 }
@@ -387,7 +392,7 @@ winrt::fire_and_forget QueryNowPlayingAsync(HWND notifyWindow, UINT notifyMessag
 winrt::fire_and_forget SeekCurrentAsync(long long positionMs) {
     try {
         co_await winrt::resume_background();
-        Manager manager = co_await Manager::RequestAsync();
+        Manager manager = co_await MediaManager::GetAsync();
         WinRTSession session = manager.GetCurrentSession();
         if (session && session.GetPlaybackInfo().Controls().IsPlaybackPositionEnabled()) {
             co_await session.TryChangePlaybackPositionAsync(std::max(0LL, positionMs) * 10000);

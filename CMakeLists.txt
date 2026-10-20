@@ -129,6 +129,7 @@ add_executable(EdgeDeck WIN32
     src/AppName.cpp
     src/AppName.h
     src/MediaControls.h
+    src/MediaManager.h
     src/MediaPosition.h
     res/EdgeDeck.rc
 )
