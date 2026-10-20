@@ -406,8 +406,11 @@ bool SetVolume(const std::wstring& id, int percent, bool muted) {
     // the level would leave the slider showing a value the user then has to set
     // again.
     if (FAILED(volume->SetMute(muted ? TRUE : FALSE, nullptr))) return false;
+    // The scalar call, 0.0-1.0 as the slider shows it. SetMasterVolumeLevel - which this used to
+    // call with the same number - takes decibels, and outputs run from about -65 dB up to 0 dB:
+    // every level above 0% was out of range and refused, and 0% was 0 dB, the loudest there is.
     const float level = static_cast<float>(percent) / 100.0f;
-    return SUCCEEDED(volume->SetMasterVolumeLevel(level, nullptr));
+    return SUCCEEDED(volume->SetMasterVolumeLevelScalar(level, nullptr));
 }
 
 } // namespace VolumeControls
