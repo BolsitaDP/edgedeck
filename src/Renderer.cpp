@@ -922,78 +922,80 @@ ID2D1SolidColorBrush* Renderer::DrawTransportButton(D2D1_RECT_F rect, bool hover
     return enabled ? m_primaryTextBrush.Get() : m_secondaryTextBrush.Get();
 }
 
+// The transport glyphs are vectors, not font glyphs: Segoe UI has none for U+23EE/U+23ED, which
+// rendered as a "tofu" box. Everything is measured from the glyph's height, so the triangles keep
+// the proportions of the usual media symbols - nearly as wide as they are tall. (They used to be
+// scaled to a fifth of the button's width and two thirds of its height: slivers three and a half
+// times taller than wide.)
+namespace {
+struct TransportGlyph {
+    float height;   // of the triangle and the bar
+    float triangle; // width of the triangle
+    float bar;      // width of the skip bar
+};
+TransportGlyph SkipGlyph(D2D1_RECT_F rect) {
+    const float h = (rect.bottom - rect.top) * 0.38f;
+    return {h, h * 0.80f, h * 0.22f};
+}
+} // namespace
+
 void Renderer::DrawPrevButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
     if (!m_target) return;
     ID2D1SolidColorBrush* brush = DrawTransportButton(rect, hovered, enabled);
 
+    const TransportGlyph g = SkipGlyph(rect);
     const float cx = (rect.left + rect.right) / 2.0f;
-    const float cy = (rect.top + rect.bottom) / 2.0f;
-    const float h = (rect.bottom - rect.top) * 0.34f; // half-height
-    const float w = (rect.right - rect.left) * 0.20f;
-    const float barWidth = w * 0.55f;
+    const float top = (rect.top + rect.bottom) / 2.0f - g.height / 2.0f;
+    const float left = cx - (g.bar + g.triangle) / 2.0f;
 
-    // Mirrored triangle with its apex pointing left, plus a vertical bar on the
-    // right. Drawn as vectors because Segoe UI has no glyph for U+23EE: as a
-    // font glyph it rendered as a "tofu" box.
-    {
-        const ScopedTransform keep(m_target.Get());
-        keep.Compose(D2D1::Matrix3x2F::Scale(-w, 2.0f * h) *
-                     D2D1::Matrix3x2F::Translation(cx + w * 0.5f, cy - h));
-        ID2D1PathGeometry* triangle = TriangleGeometry();
-        if (triangle) m_target->FillGeometry(triangle, brush);
-    }
-    m_target->FillRectangle(
-        D2D1::RectF(cx + w * 0.4f, cy - h, cx + w * 0.4f + barWidth, cy + h), brush);
+    // The bar on the left, then a triangle whose point touches it: the unit triangle mirrored.
+    m_target->FillRectangle(D2D1::RectF(left, top, left + g.bar, top + g.height), brush);
+    const ScopedTransform keep(m_target.Get());
+    keep.Compose(D2D1::Matrix3x2F::Scale(-g.triangle, g.height) *
+                 D2D1::Matrix3x2F::Translation(left + g.bar + g.triangle, top));
+    if (ID2D1PathGeometry* triangle = TriangleGeometry()) m_target->FillGeometry(triangle, brush);
 }
 
 void Renderer::DrawNextButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
     if (!m_target) return;
     ID2D1SolidColorBrush* brush = DrawTransportButton(rect, hovered, enabled);
 
+    const TransportGlyph g = SkipGlyph(rect);
     const float cx = (rect.left + rect.right) / 2.0f;
-    const float cy = (rect.top + rect.bottom) / 2.0f;
-    const float h = (rect.bottom - rect.top) * 0.34f;
-    const float w = (rect.right - rect.left) * 0.20f;
-    const float barWidth = w * 0.55f;
+    const float top = (rect.top + rect.bottom) / 2.0f - g.height / 2.0f;
+    const float left = cx - (g.bar + g.triangle) / 2.0f;
 
-    {
-        const ScopedTransform keep(m_target.Get());
-        keep.Compose(D2D1::Matrix3x2F::Scale(w, 2.0f * h) *
-                     D2D1::Matrix3x2F::Translation(cx - w * 1.5f, cy - h));
-        ID2D1PathGeometry* triangle = TriangleGeometry();
-        if (triangle) m_target->FillGeometry(triangle, brush);
-    }
-    m_target->FillRectangle(
-        D2D1::RectF(cx - w * 1.5f - barWidth, cy - h, cx - w * 1.5f, cy + h), brush);
+    // A triangle pointing at the bar on its right.
+    m_target->FillRectangle(D2D1::RectF(left + g.triangle, top, left + g.triangle + g.bar, top + g.height), brush);
+    const ScopedTransform keep(m_target.Get());
+    keep.Compose(D2D1::Matrix3x2F::Scale(g.triangle, g.height) * D2D1::Matrix3x2F::Translation(left, top));
+    if (ID2D1PathGeometry* triangle = TriangleGeometry()) m_target->FillGeometry(triangle, brush);
 }
 
 void Renderer::DrawPlayButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
     if (!m_target) return;
     ID2D1SolidColorBrush* brush = DrawTransportButton(rect, hovered, enabled);
 
+    const float h = (rect.bottom - rect.top) * 0.42f;
+    const float w = h * 0.88f;
     const float cx = (rect.left + rect.right) / 2.0f;
     const float cy = (rect.top + rect.bottom) / 2.0f;
-    const float h = (rect.bottom - rect.top) * 0.38f;
-    const float w = (rect.right - rect.left) * 0.22f;
 
     // A right-pointing triangle's visual centre of mass sits a third of the way
     // along its length, so that is what gets aligned to the button centre.
     const ScopedTransform keep(m_target.Get());
-    keep.Compose(D2D1::Matrix3x2F::Scale(w, 2.0f * h) *
-                  D2D1::Matrix3x2F::Translation(cx - w / 3.0f, cy - h));
-    ID2D1PathGeometry* triangle = TriangleGeometry();
-    if (triangle) m_target->FillGeometry(triangle, brush);
+    keep.Compose(D2D1::Matrix3x2F::Scale(w, h) * D2D1::Matrix3x2F::Translation(cx - w / 3.0f, cy - h / 2.0f));
+    if (ID2D1PathGeometry* triangle = TriangleGeometry()) m_target->FillGeometry(triangle, brush);
 }
-
 void Renderer::DrawPauseButton(D2D1_RECT_F rect, bool hovered, bool enabled) {
     if (!m_target) return;
     ID2D1SolidColorBrush* brush = DrawTransportButton(rect, hovered, enabled);
 
     const float cx = (rect.left + rect.right) / 2.0f;
     const float cy = (rect.top + rect.bottom) / 2.0f;
-    const float barWidth = (rect.right - rect.left) * 0.16f;
-    const float barHeight = (rect.bottom - rect.top) * 0.42f;
-    const float gap = barWidth * 0.9f;
+    const float barHeight = (rect.bottom - rect.top) * 0.40f;
+    const float barWidth = barHeight * 0.28f;
+    const float gap = barHeight * 0.26f;
     const float top = cy - barHeight / 2.0f;
     const float bottom = top + barHeight;
 
