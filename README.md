@@ -22,7 +22,10 @@ no .NET - and it is built to be forgotten about:
   Lyrics tab asking [LRCLIB](https://lrclib.net) for the song that is playing, and only if you
   add that tab.
 
-<!-- Screenshots: to be added. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/panels-dark-en.png">
+  <img alt="EdgeDeck's panels: Quick Actions, Media, Volume, Lyrics, Brightness, Recent files and Displays" src="docs/images/panels-light-en.png" width="968">
+</picture>
 
 ## The tabs
 

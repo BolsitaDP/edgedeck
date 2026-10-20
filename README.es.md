@@ -23,7 +23,10 @@ sin .NET— pensada para que te olvides de que está:
   la pestaña Letras, que pregunta a [LRCLIB](https://lrclib.net) por la canción que suena, y solo
   si añades esa pestaña.
 
-<!-- Capturas: pendientes. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/panels-dark-es.png">
+  <img alt="Los paneles de EdgeDeck: Acciones rápidas, Multimedia, Volumen, Letras, Brillo, Archivos recientes y Pantallas" src="docs/images/panels-light-es.png" width="968">
+</picture>
 
 ## Las pestañas
 
