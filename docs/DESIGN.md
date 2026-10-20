@@ -138,6 +138,9 @@ assumed. `DragAcceptFiles` does not do that for child controls.
 **Media and Lyrics** subscribe to `GlobalSystemMediaTransportControlsSessionManager` events
 (`CurrentSessionChanged`, `SessionsChanged`) and each session's (`PlaybackInfoChanged`,
 `MediaPropertiesChanged`), so starting, pausing or skipping updates an open panel at once.
+Every query goes through one shared manager (`MediaManager`): Windows keeps about 4 KB for each
+manager `RequestAsync` hands out, and asking for one per refresh and per position sample made
+memory grow with use.
 
 A session names its app only by an AUMID. Windows' ways of turning one into the Start menu name
 (the shell's AppsFolder, WinRT's `AppInfo`) cost 8-13 MB of working set, so `AppName` reads the id
@@ -282,3 +285,9 @@ Windows, the pointer and the screen are covered by the desktop tools in `tools/`
 not run there, because they move the real cursor and some switch monitors. A test that has not been
 seen failing has not proved anything: the habit here is to break the fix on purpose and watch the
 test fail before trusting it.
+
+Memory over time is measured with `panelsoak`, which opens and closes the real panels hundreds of
+times on a hidden desktop and writes what the process holds after each round - including how much
+of the heap is in use against how much it keeps committed. That is how two different growths were
+told apart: memory a widget kept (the media manager above), and a heap that kept the pages freed
+by drawing; a panel that finishes closing now hands those back (`HeapOptimizeResources`).

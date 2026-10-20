@@ -768,6 +768,13 @@ void Tab::StepAnimation() {
         ShowWindow(m_panelHwnd, SW_HIDE);
         m_state = State::Hidden;
         if (m_widget) m_widget->OnPanelVisibilityChanged(false);
+        // Drawing a panel takes large blocks from the heap and gives them back, and the heap keeps
+        // the freed pages committed: measured, private memory rose in steps of ~400 KB with every
+        // few hundred opens while what was actually in use stayed flat. A panel just closed is the
+        // moment nothing more will be drawn for a while, so the free pages go back to Windows here
+        // (3.5 MB less after 150 rounds of every panel). Once per close, never on a timer.
+        HEAP_OPTIMIZE_RESOURCES_INFORMATION trim{HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION, 0};
+        HeapSetInformation(nullptr, HeapOptimizeResources, &trim, sizeof(trim));
     }
     UpdateTickTimer();
 }
